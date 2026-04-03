@@ -21,10 +21,20 @@ The original bundle notes are preserved in
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-jitter.py`
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-cross-scene-target-swap.py`
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-shuffle-corr.py`
+- `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-full-*.py`
+- `configs/concerto/pretrain-concerto-v1m1-0-arkit-full-*.py`
+- `configs/concerto/semseg-ptv3-base-v1m1-0*-scannet-*-proxy.py`
 - `tools/concerto_projection_shortcut/preflight.py`
 - `tools/concerto_projection_shortcut/run_smoke.sh`
 - `tools/concerto_projection_shortcut/run_mvp.sh`
 - `tools/concerto_projection_shortcut/summarize_logs.py`
+- `tools/concerto_projection_shortcut/summarize_semseg_logs.py`
+- `tools/concerto_projection_shortcut/eval_enc2d_stress.py`
+- `tools/concerto_projection_shortcut/prepare_arkit_full_splits.py`
+- `tools/concerto_projection_shortcut/setup_arkit_full_assets.sh`
+- `tools/concerto_projection_shortcut/run_arkit_full_causal.sh`
+- `tools/concerto_projection_shortcut/setup_downstream_assets.sh`
+- `tools/concerto_projection_shortcut/run_scannet_proxy.sh`
 - `tools/concerto_projection_shortcut/install_extras.sh`
 
 ## Important changes from the original bundle
@@ -34,6 +44,19 @@ The original bundle notes are preserved in
 - `enable_wandb = False` is set to keep the MVP self-contained.
 - Helper scripts default to `python3`, because `python` is not guaranteed to exist.
 - The main sanity check is now `cross-scene target swap`; `shuffle-corr` is kept for manual comparison.
+- The full follow-up adds `global_target_permutation`, `cross_image_target_swap`,
+  and `coord_residual_target`.
+- `prepare_arkit_full_splits.py` generates an absolute-path metadata root for the
+  full ARKitScenes split JSONs so the repo can keep `data/arkitscenes` pointed
+  at the mini subset.
+- `setup_arkit_full_assets.sh` expands the locally cached full ARKitScenes
+  archive and then generates the absolute-path metadata root used by the full
+  causal branch configs.
+- `run_arkit_full_causal.sh` targets full ARKitScenes with 2-GPU execution by default.
+- `setup_downstream_assets.sh` downloads `concerto_base(_origin).pth` and the
+  preprocessed ScanNet dataset from Hugging Face.
+- `run_scannet_proxy.sh` stages official-weight gate runs, ARKit continuation
+  pretraining, and ScanNet proxy linear / fine-tune evaluation.
 
 ## Quick start
 

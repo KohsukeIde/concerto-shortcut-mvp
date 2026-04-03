@@ -290,6 +290,7 @@ class Concerto(PointModel):
             "coord_jitter_clip": None,
             "coord_normalize": True,
             "coord_probe_hidden_channels": 512,
+            "coord_prior_loss_weight": 1.0,
             "shuffle_correspondence": False,
         }
         if shortcut_probe is not None:
@@ -306,9 +307,23 @@ class Concerto(PointModel):
             )
             self.coord_probe.apply(OnlineCluster._init_weights)
 
+        if (
+            self.enc2d_loss_weight > 0
+            and self.shortcut_probe["mode"] == "coord_residual_target"
+        ):
+            self.coord_prior = nn.Sequential(
+                nn.Linear(3, self.shortcut_probe["coord_probe_hidden_channels"]),
+                nn.GELU(),
+                nn.Linear(
+                    self.shortcut_probe["coord_probe_hidden_channels"],
+                    self._num_channels,
+                ),
+            )
+            self.coord_prior.apply(OnlineCluster._init_weights)
+
         if self.shortcut_probe["freeze_student_backbone"]:
             self.student.backbone.requires_grad_(False)
-        self._cross_scene_target_swap_logged = False
+        self._shortcut_probe_logs = set()
 
     def _apply_shortcut_probe_to_inputs(self, data_dict):
         if self.shortcut_probe is None:
@@ -410,46 +425,71 @@ class Concerto(PointModel):
         )
         return rows[sample_index]
 
-    def _apply_cross_scene_target_swap(self, teacher_target, target_batch_index):
-        unique_batch_index = torch.unique(target_batch_index, sorted=True)
-        if unique_batch_index.numel() <= 1:
-            if teacher_target.shape[0] <= 1:
-                raise ValueError(
-                    "cross_scene_target_swap requires at least two teacher target rows."
-                )
-            if not self._cross_scene_target_swap_logged:
-                self._cross_scene_target_swap_logged = True
-                print(
-                    "[shortcut_probe] cross_scene_target_swap "
-                    "fallback=global_target_permutation valid_scenes=1"
-                )
-            perm = self._sample_derangement(teacher_target.shape[0], teacher_target.device)
-            return teacher_target[perm]
+    def _log_shortcut_probe_once(self, tag, message):
+        if tag not in self._shortcut_probe_logs:
+            self._shortcut_probe_logs.add(tag)
+            print(message)
 
-        perm = self._sample_derangement(unique_batch_index.numel(), teacher_target.device)
+    def _apply_global_target_permutation(
+        self, teacher_target, mode_name="global_target_permutation"
+    ):
+        if teacher_target.shape[0] <= 1:
+            raise ValueError(
+                f"{mode_name} requires at least two teacher target rows."
+            )
+        perm = self._sample_derangement(teacher_target.shape[0], teacher_target.device)
+        self._log_shortcut_probe_once(
+            mode_name,
+            f"[shortcut_probe] {mode_name} self_assignments=0 rows={teacher_target.shape[0]}",
+        )
+        return teacher_target[perm]
+
+    def _apply_group_target_swap(self, teacher_target, target_group_index, mode_name):
+        unique_group_index = torch.unique(target_group_index, sorted=True)
+        if unique_group_index.numel() <= 1:
+            self._log_shortcut_probe_once(
+                f"{mode_name}:fallback",
+                f"[shortcut_probe] {mode_name} fallback=global_target_permutation valid_groups=1",
+            )
+            return self._apply_global_target_permutation(
+                teacher_target, mode_name=f"{mode_name}:fallback_permutation"
+            )
+
+        perm = self._sample_derangement(unique_group_index.numel(), teacher_target.device)
         swapped = teacher_target.clone()
         swap_log_parts = []
         for dest_pos, src_pos in enumerate(perm.tolist()):
-            dest_batch = unique_batch_index[dest_pos]
-            src_batch = unique_batch_index[src_pos]
-            dest_mask = target_batch_index == dest_batch
-            src_mask = target_batch_index == src_batch
+            dest_group = unique_group_index[dest_pos]
+            src_group = unique_group_index[src_pos]
+            dest_mask = target_group_index == dest_group
+            source_rows = teacher_target[target_group_index == src_group]
             dest_count = int(dest_mask.sum().item())
-            source_rows = teacher_target[src_mask]
             swapped[dest_mask] = self._resample_rows_with_replacement(
                 source_rows, dest_count
             )
             swap_log_parts.append(
-                f"{int(dest_batch.item())}<-{int(src_batch.item())}:{dest_count}/{int(source_rows.shape[0])}"
+                f"{int(dest_group.item())}<-{int(src_group.item())}:{dest_count}/{int(source_rows.shape[0])}"
             )
 
-        if not self._cross_scene_target_swap_logged:
-            self._cross_scene_target_swap_logged = True
-            print(
-                "[shortcut_probe] cross_scene_target_swap "
-                f"self_assignments=0 mapping={', '.join(swap_log_parts)}"
-            )
+        self._log_shortcut_probe_once(
+            mode_name,
+            f"[shortcut_probe] {mode_name} self_assignments=0 mapping={', '.join(swap_log_parts)}",
+        )
         return swapped
+
+    def _apply_cross_scene_target_swap(self, teacher_target, target_batch_index):
+        return self._apply_group_target_swap(
+            teacher_target,
+            target_batch_index,
+            mode_name="cross_scene_target_swap",
+        )
+
+    def _apply_cross_image_target_swap(self, teacher_target, target_image_index):
+        return self._apply_group_target_swap(
+            teacher_target,
+            target_image_index,
+            mode_name="cross_image_target_swap",
+        )
 
     def load_enc2d(self, model_name, model_weight):
         model = AutoModel.from_pretrained(model_weight, trust_remote_code=True)
@@ -992,6 +1032,7 @@ class Concerto(PointModel):
                 batch_img_num = offset_img_num[batch_index]
 
                 feature3d_mask = feature3d[valid_index[0]]
+                feature_coord_mask = pooled_coord[valid_index[0]]
 
                 feature_index = torch.cat(
                     [
@@ -1018,6 +1059,12 @@ class Concerto(PointModel):
                     dim=0,
                     dim_size=feature_index.shape[0],
                 )
+                feature_coord_mask = torch_scatter.scatter_mean(
+                    feature_coord_mask,
+                    inverse_index,
+                    dim=0,
+                    dim_size=feature_index.shape[0],
+                )
                 feature3d_mask = self.patch_proj(feature3d_mask)
                 feature_batch_index = torch_scatter.scatter_min(
                     batch_index.long(),
@@ -1025,11 +1072,30 @@ class Concerto(PointModel):
                     dim=0,
                     dim_size=feature_index.shape[0],
                 )[0]
+                feature_image_index = torch.div(
+                    feature_index,
+                    self.patch_h * self.patch_w,
+                    rounding_mode="floor",
+                )
                 feature2d_mask = feature2d_mask[feature_index]
                 if self.shortcut_probe["mode"] == "cross_scene_target_swap":
                     feature2d_mask = self._apply_cross_scene_target_swap(
                         feature2d_mask, feature_batch_index
                     )
+                elif self.shortcut_probe["mode"] == "cross_image_target_swap":
+                    feature2d_mask = self._apply_cross_image_target_swap(
+                        feature2d_mask, feature_image_index
+                    )
+                elif self.shortcut_probe["mode"] == "global_target_permutation":
+                    feature2d_mask = self._apply_global_target_permutation(
+                        feature2d_mask
+                    )
+
+                raw_feature2d_mask = feature2d_mask
+                coord_prior_pred = None
+                if self.shortcut_probe["mode"] == "coord_residual_target":
+                    coord_prior_pred = self.coord_prior(feature_coord_mask)
+                    feature2d_mask = raw_feature2d_mask - coord_prior_pred.detach()
 
                 if self.enc2d_cos_shift:
                     feature2d_mask = feature2d_mask - feature2d_mask.mean(
@@ -1038,16 +1104,32 @@ class Concerto(PointModel):
                     feature3d_mask = feature3d_mask - feature3d_mask.mean(
                         dim=-1, keepdim=True
                     )
+                    if coord_prior_pred is not None:
+                        raw_feature2d_mask = raw_feature2d_mask - raw_feature2d_mask.mean(
+                            dim=-1, keepdim=True
+                        )
+                        coord_prior_pred = coord_prior_pred - coord_prior_pred.mean(
+                            dim=-1, keepdim=True
+                        )
                 cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
                 loss = (1 - cos(feature2d_mask, feature3d_mask)).mean() * 10
 
                 result_dict["enc2d_loss"] = loss
                 result_dict["loss"].append(loss * self.enc2d_loss_weight)
+                if coord_prior_pred is not None:
+                    coord_prior_loss = (1 - cos(raw_feature2d_mask, coord_prior_pred)).mean() * 10
+                    result_dict["coord_prior_loss"] = coord_prior_loss
+                    result_dict["loss"].append(
+                        coord_prior_loss * self.shortcut_probe["coord_prior_loss_weight"]
+                    )
                 del (
                     feature2d,
                     feature3d,
                     feature2d_mask,
                     feature3d_mask,
+                    feature_coord_mask,
+                    feature_batch_index,
+                    feature_image_index,
                     correspondence,
                     feature_index,
                 )

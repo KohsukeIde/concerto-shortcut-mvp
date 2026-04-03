@@ -45,7 +45,19 @@ def ensure_repo_layout(repo_root: Path) -> None:
 
 def resolve_asset_path(data_root: Path, raw: str | Path) -> Path:
     path = Path(raw)
-    return path if path.is_absolute() else data_root / path
+    if path.is_absolute() or path.exists():
+        return path
+
+    candidates = [data_root / path]
+    if len(path.parts) >= 1 and path.parts[0] == "data":
+        candidates.append(data_root.joinpath(*path.parts[1:]))
+    if len(path.parts) >= 2 and path.parts[:2] == ("data", "arkitscenes"):
+        candidates.append(data_root.joinpath(*path.parts[2:]))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def load_split_file(split_file: Path) -> dict:
@@ -209,6 +221,8 @@ def main() -> int:
     for config_name in configs:
         cfg = import_config(repo_root, config_name)
         if cfg is not None:
+            if args.data_root is not None and hasattr(cfg.data, "train"):
+                cfg.data.train.data_root = str(data_root)
             cfg_objects.append((config_name, cfg))
 
     if args.check_batch or args.check_forward:

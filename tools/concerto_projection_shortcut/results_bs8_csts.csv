@@ -1,0 +1,4 @@
+run,log,epoch_averages_enc2d_loss,last_completed_epoch
+baseline,exp/concerto/arkit-shortcut-bs8-baseline-csts/train.log,"7.1419, 6.6452, 6.4737, 6.3938, 6.4267",6.4267
+cross-scene-target-swap,exp/concerto/arkit-shortcut-bs8-cross-scene-csts/train.log,"7.1711, 6.6023, 6.5411, 6.4492, 6.4871",6.4871
+coord-mlp,exp/concerto/arkit-shortcut-bs8-coord-mlp-csts/train.log,"8.1180, 6.5423, 6.5280, 6.4004, 6.3899",6.3899

@@ -19,6 +19,7 @@ The original bundle notes are preserved in
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-zero-appearance.py`
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-coord-mlp.py`
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-jitter.py`
+- `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-cross-scene-target-swap.py`
 - `configs/concerto/pretrain-concerto-v1m1-0-probe-enc2d-shuffle-corr.py`
 - `tools/concerto_projection_shortcut/preflight.py`
 - `tools/concerto_projection_shortcut/run_smoke.sh`
@@ -28,10 +29,11 @@ The original bundle notes are preserved in
 
 ## Important changes from the original bundle
 
-- The 5 probe configs now train on `ARKitScenes` only.
+- The 5 default probe configs now train on `ARKitScenes` only.
 - `eval_epoch = 5` is set so Pointcept does not collapse `data.train.loop` to `0`.
 - `enable_wandb = False` is set to keep the MVP self-contained.
 - Helper scripts default to `python3`, because `python` is not guaranteed to exist.
+- The main sanity check is now `cross-scene target swap`; `shuffle-corr` is kept for manual comparison.
 
 ## Quick start
 
@@ -80,3 +82,4 @@ bash tools/concerto_projection_shortcut/run_mvp.sh
 - The smoke script uses `timeout` and is meant to cover only the early part of
   training.
 - The summary script expects logs under `exp/concerto/arkit-shortcut-*/train.log`.
+- `run_mvp.sh` runs `baseline -> zero-appearance -> coord-mlp -> jitter -> cross-scene-target-swap`.

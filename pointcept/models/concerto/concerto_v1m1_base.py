@@ -308,6 +308,7 @@ class Concerto(PointModel):
 
         if self.shortcut_probe["freeze_student_backbone"]:
             self.student.backbone.requires_grad_(False)
+        self._cross_scene_target_swap_logged = False
 
     def _apply_shortcut_probe_to_inputs(self, data_dict):
         if self.shortcut_probe is None:
@@ -384,6 +385,71 @@ class Concerto(PointModel):
             perm = torch.randperm(end - start, device=correspondence.device) + start
             shuffled[start:end] = shuffled[perm]
         return shuffled
+
+    @staticmethod
+    def _sample_derangement(num_items, device):
+        if num_items <= 1:
+            raise ValueError(
+                "cross_scene_target_swap requires at least two scenes with valid teacher targets per batch."
+            )
+        identity = torch.arange(num_items, device=device)
+        for _ in range(32):
+            perm = torch.randperm(num_items, device=device)
+            if not torch.any(perm == identity):
+                return perm
+        return torch.roll(identity, shifts=1, dims=0)
+
+    @staticmethod
+    def _resample_rows_with_replacement(rows, target_length):
+        if rows.shape[0] == 0:
+            raise ValueError("Cannot resample teacher targets from an empty source block.")
+        if rows.shape[0] == target_length:
+            return rows
+        sample_index = torch.randint(
+            rows.shape[0], (target_length,), device=rows.device
+        )
+        return rows[sample_index]
+
+    def _apply_cross_scene_target_swap(self, teacher_target, target_batch_index):
+        unique_batch_index = torch.unique(target_batch_index, sorted=True)
+        if unique_batch_index.numel() <= 1:
+            if teacher_target.shape[0] <= 1:
+                raise ValueError(
+                    "cross_scene_target_swap requires at least two teacher target rows."
+                )
+            if not self._cross_scene_target_swap_logged:
+                self._cross_scene_target_swap_logged = True
+                print(
+                    "[shortcut_probe] cross_scene_target_swap "
+                    "fallback=global_target_permutation valid_scenes=1"
+                )
+            perm = self._sample_derangement(teacher_target.shape[0], teacher_target.device)
+            return teacher_target[perm]
+
+        perm = self._sample_derangement(unique_batch_index.numel(), teacher_target.device)
+        swapped = teacher_target.clone()
+        swap_log_parts = []
+        for dest_pos, src_pos in enumerate(perm.tolist()):
+            dest_batch = unique_batch_index[dest_pos]
+            src_batch = unique_batch_index[src_pos]
+            dest_mask = target_batch_index == dest_batch
+            src_mask = target_batch_index == src_batch
+            dest_count = int(dest_mask.sum().item())
+            source_rows = teacher_target[src_mask]
+            swapped[dest_mask] = self._resample_rows_with_replacement(
+                source_rows, dest_count
+            )
+            swap_log_parts.append(
+                f"{int(dest_batch.item())}<-{int(src_batch.item())}:{dest_count}/{int(source_rows.shape[0])}"
+            )
+
+        if not self._cross_scene_target_swap_logged:
+            self._cross_scene_target_swap_logged = True
+            print(
+                "[shortcut_probe] cross_scene_target_swap "
+                f"self_assignments=0 mapping={', '.join(swap_log_parts)}"
+            )
+        return swapped
 
     def load_enc2d(self, model_name, model_weight):
         model = AutoModel.from_pretrained(model_weight, trust_remote_code=True)
@@ -943,14 +1009,27 @@ class Concerto(PointModel):
                     + feature_index[:, 3]
                 )
 
-                feature_index = feature_index.long()
+                feature_index, inverse_index = torch.unique(
+                    feature_index.long(), sorted=True, return_inverse=True
+                )
                 feature3d_mask = torch_scatter.scatter_mean(
-                    feature3d_mask, feature_index, dim=0, dim_size=feature2d.shape[0]
+                    feature3d_mask,
+                    inverse_index,
+                    dim=0,
+                    dim_size=feature_index.shape[0],
                 )
                 feature3d_mask = self.patch_proj(feature3d_mask)
-                feature_index = torch.unique(feature_index)
+                feature_batch_index = torch_scatter.scatter_min(
+                    batch_index.long(),
+                    inverse_index,
+                    dim=0,
+                    dim_size=feature_index.shape[0],
+                )[0]
                 feature2d_mask = feature2d_mask[feature_index]
-                feature3d_mask = feature3d_mask[feature_index]
+                if self.shortcut_probe["mode"] == "cross_scene_target_swap":
+                    feature2d_mask = self._apply_cross_scene_target_swap(
+                        feature2d_mask, feature_batch_index
+                    )
 
                 if self.enc2d_cos_shift:
                     feature2d_mask = feature2d_mask - feature2d_mask.mean(

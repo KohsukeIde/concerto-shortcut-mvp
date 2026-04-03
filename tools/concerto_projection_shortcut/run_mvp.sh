@@ -48,7 +48,7 @@ run pretrain-concerto-v1m1-0-probe-enc2d-baseline "${EXP_PREFIX}baseline-enc2d"
 run pretrain-concerto-v1m1-0-probe-enc2d-zero-appearance "${EXP_PREFIX}zero-appearance-enc2d"
 run pretrain-concerto-v1m1-0-probe-enc2d-coord-mlp "${EXP_PREFIX}coord-mlp-enc2d"
 run pretrain-concerto-v1m1-0-probe-enc2d-jitter "${EXP_PREFIX}jitter-enc2d"
-run pretrain-concerto-v1m1-0-probe-enc2d-shuffle-corr "${EXP_PREFIX}shuffle-corr-enc2d"
+run pretrain-concerto-v1m1-0-probe-enc2d-cross-scene-target-swap "${EXP_PREFIX}cross-scene-target-swap-enc2d"
 
 "${PYTHON_BIN}" tools/concerto_projection_shortcut/summarize_logs.py \
   "exp/${DATASET_NAME}/${EXP_PREFIX}*/train.log" || true

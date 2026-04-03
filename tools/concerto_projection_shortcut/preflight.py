@@ -12,7 +12,7 @@ from typing import Iterable
 
 DEFAULT_CONFIGS = (
     "pretrain-concerto-v1m1-0-probe-enc2d-baseline",
-    "pretrain-concerto-v1m1-0-probe-enc2d-coord-mlp",
+    "pretrain-concerto-v1m1-0-probe-enc2d-cross-scene-target-swap",
 )
 EXPECTED_BATCH_KEYS = ("images", "global_correspondence", "img_num")
 REQUIRED_SPLITS = ("Training", "Validation")

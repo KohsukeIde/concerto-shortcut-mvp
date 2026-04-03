@@ -5,8 +5,9 @@ crop_h = 518
 crop_w = 518
 patch_size = 14
 # misc custom setting
-# Keep the probe small enough for a single-GPU MVP run.
-batch_size = 2  # bs: total bs in all gpus
+# Use a larger single-GPU batch so cross-scene target swap has multiple scenes
+# with valid teacher targets in most iterations.
+batch_size = 8  # bs: total bs in all gpus
 num_worker = 4
 mix_prob = 0
 clip_grad = 3.0

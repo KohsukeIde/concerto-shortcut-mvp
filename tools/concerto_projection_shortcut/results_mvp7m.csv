@@ -1,0 +1,6 @@
+log,loss_first,loss_last,loss_min,loss_count,enc2d_loss_first,enc2d_loss_last,enc2d_loss_min,enc2d_loss_count,mask_loss_first,mask_loss_last,mask_loss_min,mask_loss_count,unmask_loss_first,unmask_loss_last,unmask_loss_min,unmask_loss_count,roll_mask_loss_first,roll_mask_loss_last,roll_mask_loss_min,roll_mask_loss_count
+exp/concerto/arkit-shortcut-mvp7m-baseline-enc2d/train.log,9.9968,5.5502,0.0,505,9.9968,5.5502,0.0,505,,,,0,,,,0,,,,0
+exp/concerto/arkit-shortcut-mvp7m-coord-mlp-enc2d/train.log,10.1497,5.5692,0.0,505,10.1497,5.5692,0.0,505,,,,0,,,,0,,,,0
+exp/concerto/arkit-shortcut-mvp7m-jitter-enc2d/train.log,10.034,0.0,0.0,362,10.034,0.0,0.0,362,,,,0,,,,0,,,,0
+exp/concerto/arkit-shortcut-mvp7m-shuffle-corr-enc2d/train.log,0.0,5.3146,0.0,505,0.0,5.3146,0.0,505,,,,0,,,,0,,,,0
+exp/concerto/arkit-shortcut-mvp7m-zero-appearance-enc2d/train.log,9.9216,4.8055,0.0,505,9.9216,4.8055,0.0,505,,,,0,,,,0,,,,0

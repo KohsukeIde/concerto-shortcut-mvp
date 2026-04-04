@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 REPO_ROOT="$(pwd)"
 
-PYTHON_BIN="${PYTHON_BIN:-python}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 NUM_GPU="${NUM_GPU:-2}"
 DATASET_NAME="${DATASET_NAME:-concerto}"
 MODE="${1:-all}"
@@ -30,6 +30,11 @@ run_train() {
   local config_name="$1"
   local exp_name="$2"
   local weight_path="$3"
+  local checkpoint="exp/${DATASET_NAME}/${exp_name}/model/model_last.pth"
+  if [ -f "${checkpoint}" ]; then
+    echo "[skip] ${exp_name} already has ${checkpoint}"
+    return 0
+  fi
   bash scripts/train.sh \
     -p "${PYTHON_BIN}" \
     -d "${DATASET_NAME}" \
@@ -42,6 +47,9 @@ run_train() {
 run_official_gate() {
   echo "[gate] official ScanNet linear probe"
   run_train "semseg-ptv3-base-v1m1-0a-scannet-lin-proxy" "scannet-proxy-official-origin-lin" "${OFFICIAL_WEIGHT}"
+}
+
+run_official_ft() {
   echo "[gate] official ScanNet fine-tune"
   run_train "semseg-ptv3-base-v1m1-0c-scannet-ft-proxy" "scannet-proxy-official-origin-ft" "${OFFICIAL_WEIGHT}"
 }
@@ -91,7 +99,7 @@ lines = [
     "| --- | ---: | ---: | ---: | --- | ---: | ---: |",
 ]
 for row in rows:
-    exp_name = Path(row["log"]).parents[1].name
+    exp_name = Path(row["log"]).parent.name
     lines.append(
         f"| {exp_name} | {row['val_miou_last']} | {row['val_macc_last']} | "
         f"{row['val_allacc_last']} | {row['best_metric_name']} | {row['best_metric_value']} | "
@@ -104,6 +112,9 @@ PY
 case "${MODE}" in
   gate)
     run_official_gate
+    ;;
+  gate-ft)
+    run_official_ft
     ;;
   pretrain)
     run_continuations
@@ -118,10 +129,9 @@ case "${MODE}" in
     run_official_gate
     run_continuations
     run_downstream_from_checkpoints "semseg-ptv3-base-v1m1-0a-scannet-lin-proxy" "lin"
-    run_downstream_from_checkpoints "semseg-ptv3-base-v1m1-0c-scannet-ft-proxy" "ft"
     ;;
   *)
-    echo "usage: $0 [gate|pretrain|lin|ft|all]" >&2
+    echo "usage: $0 [gate|gate-ft|pretrain|lin|ft|all]" >&2
     exit 2
     ;;
 esac

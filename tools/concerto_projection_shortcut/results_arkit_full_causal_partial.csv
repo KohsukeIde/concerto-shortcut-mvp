@@ -1,0 +1,3 @@
+log,loss_first,loss_last,loss_min,loss_count,enc2d_loss_first,enc2d_loss_last,enc2d_loss_min,enc2d_loss_count,mask_loss_first,mask_loss_last,mask_loss_min,mask_loss_count,unmask_loss_first,unmask_loss_last,unmask_loss_min,unmask_loss_count,roll_mask_loss_first,roll_mask_loss_last,roll_mask_loss_min,roll_mask_loss_count
+exp/concerto/arkit-full-causal-baseline/train.log,9.9837,6.6417,5.6463,432,9.9837,6.6417,5.6463,432,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-coord-mlp/train.log,10.0974,6.5191,5.5985,602,10.0974,6.5191,5.5985,602,,,,0,,,,0,,,,0

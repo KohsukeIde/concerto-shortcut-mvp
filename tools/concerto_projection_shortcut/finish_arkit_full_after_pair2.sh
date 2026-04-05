@@ -39,6 +39,7 @@ wait_for_exit() {
 GLOBAL_CKPT="exp/${DATASET_NAME}/arkit-full-causal-global-target-permutation/model/model_last.pth"
 CROSS_SCENE_CKPT="exp/${DATASET_NAME}/arkit-full-causal-cross-scene-target-swap/model/model_last.pth"
 COORD_RESIDUAL_CKPT="exp/${DATASET_NAME}/arkit-full-causal-coord-residual-target/model/model_last.pth"
+COORD_RESIDUAL_PATTERN="pretrain-concerto-v1m1-0-probe-enc2d-full-coord-residual-target -n arkit-full-causal-coord-residual-target"
 
 wait_for_exit "pretrain-concerto-v1m1-0-probe-enc2d-full-global-target-permutation -n arkit-full-causal-global-target-permutation"
 wait_for_exit "pretrain-concerto-v1m1-0-probe-enc2d-full-cross-scene-target-swap -n arkit-full-causal-cross-scene-target-swap"
@@ -50,7 +51,9 @@ if [ ! -f "${CROSS_SCENE_CKPT}" ]; then
   echo "[warn] missing ${CROSS_SCENE_CKPT}"
 fi
 
-if [ ! -f "${COORD_RESIDUAL_CKPT}" ]; then
+if pgrep -af "${COORD_RESIDUAL_PATTERN}" >/dev/null 2>&1; then
+  wait_for_exit "${COORD_RESIDUAL_PATTERN}"
+elif [ ! -f "${COORD_RESIDUAL_CKPT}" ]; then
   echo "[run] coord_residual_target on GPU 0"
   CUDA_VISIBLE_DEVICES=0 bash scripts/train.sh \
     -p "${PYTHON_BIN}" \
@@ -128,4 +131,3 @@ PY
 
 date '+%F %T' > "${DONE_STAMP}"
 echo "[done] wrote ${CAUSAL_CSV}, ${CAUSAL_MD}, ${STRESS_CSV}, ${STRESS_MD}, ${DONE_STAMP}"
-

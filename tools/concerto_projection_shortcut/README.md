@@ -74,6 +74,9 @@ The helper scripts are aligned with that order:
 - `resume_arkit_full_after_current.sh` waits for the currently running
   `baseline + coord-mlp` pair to finish, then resumes from the second pair and
   runs stress evaluation at the end.
+- `extract_scannet_after_arkit_full.sh` waits for the ARKit full completion
+  stamp and only then expands the downloaded ScanNet archive, so extraction
+  does not contend with the long ARKit training runs.
 - `run_scannet_proxy.sh all` intentionally stops after ScanNet linear probe.
 - `run_scannet_proxy.sh gate-ft` and `run_scannet_proxy.sh ft` are separate so
   fine-tuning only happens after the linear result looks promising.

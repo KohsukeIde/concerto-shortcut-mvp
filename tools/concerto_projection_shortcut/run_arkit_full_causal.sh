@@ -44,6 +44,9 @@ fi
 
 RESULT_CSV="tools/concerto_projection_shortcut/results_arkit_full_causal.csv"
 RESULT_MD="tools/concerto_projection_shortcut/results_arkit_full_causal.md"
+DONE_STAMP="tools/concerto_projection_shortcut/arkit_full_causal.done"
+
+rm -f "${DONE_STAMP}"
 write_result_summary() {
   "${PYTHON_BIN}" tools/concerto_projection_shortcut/summarize_logs.py \
     "exp/${DATASET_NAME}/${EXP_PREFIX}-*/train.log" > "${RESULT_CSV}"
@@ -193,4 +196,5 @@ PY
 fi
 
 write_result_summary
+date '+%F %T' > "${DONE_STAMP}"
 echo "[done] wrote ${RESULT_CSV} and ${RESULT_MD}"

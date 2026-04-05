@@ -434,9 +434,11 @@ class Concerto(PointModel):
         self, teacher_target, mode_name="global_target_permutation"
     ):
         if teacher_target.shape[0] <= 1:
-            raise ValueError(
-                f"{mode_name} requires at least two teacher target rows."
+            self._log_shortcut_probe_once(
+                f"{mode_name}:skip",
+                f"[shortcut_probe] {mode_name} skip=identity rows={teacher_target.shape[0]}",
             )
+            return teacher_target
         perm = self._sample_derangement(teacher_target.shape[0], teacher_target.device)
         self._log_shortcut_probe_once(
             mode_name,

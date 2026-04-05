@@ -11,6 +11,7 @@ SCANNET_EXTRACT_DIR="${SCANNET_EXTRACT_DIR:-${DATA_ROOT}/scannet}"
 WEIGHT_DIR="${WEIGHT_DIR:-${REPO_ROOT}/weights/concerto}"
 DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS:-1}"
 DOWNLOAD_SCANNET="${DOWNLOAD_SCANNET:-1}"
+EXTRACT_SCANNET="${EXTRACT_SCANNET:-1}"
 
 mkdir -p "${SCANNET_COMPRESSED_DIR}" "${SCANNET_EXTRACT_DIR}" "${WEIGHT_DIR}" "${REPO_ROOT}/data"
 
@@ -43,7 +44,7 @@ if download_scannet:
     )
 PY
 
-if [ "${DOWNLOAD_SCANNET}" = "1" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/splits" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
+if [ "${EXTRACT_SCANNET}" = "1" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/splits" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
   cat "${SCANNET_COMPRESSED_DIR}"/scannet.tar.gz.part_* | tar -xzf - -C "${SCANNET_EXTRACT_DIR}"
 fi
 
@@ -64,6 +65,11 @@ ls -1 "${WEIGHT_DIR}"
 if [ -n "${SCANNET_ROOT}" ]; then
   echo "[ok] scannet root: ${SCANNET_ROOT}"
   echo "[ok] symlink: ${REPO_ROOT}/data/scannet -> $(readlink -f "${REPO_ROOT}/data/scannet")"
+elif [ "${DOWNLOAD_SCANNET}" = "1" ] && [ "${EXTRACT_SCANNET}" = "0" ]; then
+  echo "[ok] ScanNet compressed snapshot downloaded to: ${SCANNET_COMPRESSED_DIR}"
+  echo "[info] Extraction skipped because EXTRACT_SCANNET=0"
+elif [ "${DOWNLOAD_SCANNET}" = "0" ] && [ "${EXTRACT_SCANNET}" = "1" ]; then
+  echo "[info] Extraction requested, but ScanNet root is still not prepared"
 else
   echo "[info] ScanNet dataset not prepared yet"
 fi

@@ -493,6 +493,11 @@ class Concerto(PointModel):
             mode_name="cross_image_target_swap",
         )
 
+    def _apply_prepool_global_feature_index_permutation(self, feature_index):
+        return self._apply_global_target_permutation(
+            feature_index, mode_name="prepool_global_feature_index_permutation"
+        )
+
     def load_enc2d(self, model_name, model_weight):
         model = AutoModel.from_pretrained(model_weight, trust_remote_code=True)
         return model.eval()
@@ -1051,6 +1056,10 @@ class Concerto(PointModel):
                     + feature_index[:, 2] * self.patch_w
                     + feature_index[:, 3]
                 )
+                if self.shortcut_probe["mode"] == "prepool_global_feature_index_permutation":
+                    feature_index = self._apply_prepool_global_feature_index_permutation(
+                        feature_index
+                    )
 
                 feature_index, inverse_index = torch.unique(
                     feature_index.long(), sorted=True, return_inverse=True

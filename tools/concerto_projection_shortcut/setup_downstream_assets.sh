@@ -45,7 +45,7 @@ if download_scannet:
 PY
 
 if [ "${EXTRACT_SCANNET}" = "1" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/splits" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
-  cat "${SCANNET_COMPRESSED_DIR}"/scannet.tar.gz.part_* | tar -xzf - -C "${SCANNET_EXTRACT_DIR}"
+  cat "${SCANNET_COMPRESSED_DIR}"/scannet.tar.gz.part_* | tar --skip-old-files -xzf - -C "${SCANNET_EXTRACT_DIR}"
 fi
 
 if [ -d "${SCANNET_EXTRACT_DIR}/splits" ]; then

@@ -129,5 +129,9 @@ for row in rows:
 md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
+"${PYTHON_BIN}" tools/concerto_projection_shortcut/prune_checkpoints.py \
+  --exp-root "exp/${DATASET_NAME}" \
+  --delete-stale-dirs
+
 date '+%F %T' > "${DONE_STAMP}"
 echo "[done] wrote ${CAUSAL_CSV}, ${CAUSAL_MD}, ${STRESS_CSV}, ${STRESS_MD}, ${DONE_STAMP}"

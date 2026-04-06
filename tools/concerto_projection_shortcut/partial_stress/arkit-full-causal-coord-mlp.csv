@@ -1,0 +1,7 @@
+[info] load_weight missing=0 unexpected=4
+stress,batches,enc2d_loss_mean
+clean,20,4.704746
+local_surface_destroy,20,4.149471
+z_flip,20,4.930355
+xy_swap,20,4.538779
+roll_90_x,20,4.570289

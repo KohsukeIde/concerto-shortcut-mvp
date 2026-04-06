@@ -1,0 +1,9 @@
+log,loss_first,loss_last,loss_min,loss_count,enc2d_loss_first,enc2d_loss_last,enc2d_loss_min,enc2d_loss_count,mask_loss_first,mask_loss_last,mask_loss_min,mask_loss_count,unmask_loss_first,unmask_loss_last,unmask_loss_min,unmask_loss_count,roll_mask_loss_first,roll_mask_loss_last,roll_mask_loss_min,roll_mask_loss_count
+exp/concerto/arkit-full-causal-baseline/train.log,9.9837,5.947,0.0,14050,9.9837,5.947,0.0,14050,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-coord-mlp/train.log,10.0974,6.4204,0.0,14050,10.0974,6.4204,0.0,14050,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-coord-residual-target/train.log,19.9995,13.7288,0.0,14050,9.9929,7.2936,0.0,14050,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-cross-image-target-swap/train.log,9.9975,6.4873,0.0,14050,9.9975,6.4873,0.0,14050,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-cross-image-target-swap-stale-20260404-213008/train.log,9.9998,8.0836,8.0836,5,9.9998,8.0836,8.0836,5,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-cross-scene-target-swap/train.log,9.9656,6.4526,0.0,14050,9.9656,6.4526,0.0,14050,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-global-target-permutation/train.log,9.9086,6.4563,0.0,14050,9.9086,6.4563,0.0,14050,,,,0,,,,0,,,,0
+exp/concerto/arkit-full-causal-global-target-permutation-stale-20260404-213008/train.log,9.9729,9.1861,9.1861,2,9.9729,9.1861,9.1861,2,,,,0,,,,0,,,,0

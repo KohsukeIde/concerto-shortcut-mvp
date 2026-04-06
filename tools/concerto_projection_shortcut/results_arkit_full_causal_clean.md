@@ -1,0 +1,12 @@
+# ARKit Full Causal Branch Clean
+
+This table excludes stale crash-restart runs and keeps only the completed full runs.
+
+| experiment | enc2d first | enc2d last |
+| --- | ---: | ---: |
+| arkit-full-causal-baseline | 9.9837 | 5.9470 |
+| arkit-full-causal-coord-mlp | 10.0974 | 6.4204 |
+| arkit-full-causal-coord-residual-target | 9.9929 | 7.2936 |
+| arkit-full-causal-cross-image-target-swap | 9.9975 | 6.4873 |
+| arkit-full-causal-cross-scene-target-swap | 9.9656 | 6.4526 |
+| arkit-full-causal-global-target-permutation | 9.9086 | 6.4563 |

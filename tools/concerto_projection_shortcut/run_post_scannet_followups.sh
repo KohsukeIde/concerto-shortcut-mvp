@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
-REPO_ROOT="$(pwd)"
+REPO_ROOT="$(pwd -P)"
 
 CONDA_ROOT="${CONDA_ROOT:-/home/cvrt/miniconda3}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-pointcept-cu128}"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
-REPO_ROOT="$(pwd)"
+REPO_ROOT="$(pwd -P)"
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
 DATA_ROOT="${DATA_ROOT:-/home/cvrt/datasets}"

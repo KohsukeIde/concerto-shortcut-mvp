@@ -8,6 +8,12 @@ start with:
 
 - `tools/concerto_projection_shortcut/CURRENT_STATUS.md`
 
+Update rule in this repo:
+
+- `CURRENT_STATUS.md` is the living top-level status page.
+- stage-specific finished results should live in `results_*.md` / `results_*.csv`
+  and be linked back from `CURRENT_STATUS.md`.
+
 Key choices in this version:
 
 - target repo: `Pointcept v1.6.1`

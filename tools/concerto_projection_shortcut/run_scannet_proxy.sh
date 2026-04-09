@@ -20,9 +20,9 @@ PARALLEL_SINGLE_GPU="${PARALLEL_SINGLE_GPU:-1}"
 GPU_IDS_CSV="${GPU_IDS_CSV:-0,1}"
 
 CONTINUE_CONFIGS=(
-  "pretrain-concerto-v1m1-0-arkit-full-continue"
-  "pretrain-concerto-v1m1-0-arkit-full-no-enc2d-continue"
-  "pretrain-concerto-v1m1-0-arkit-full-coord-mlp-continue"
+  "pretrain-concerto-v1m1-0-arkit-full-continue-safe"
+  "pretrain-concerto-v1m1-0-arkit-full-no-enc2d-continue-safe"
+  "pretrain-concerto-v1m1-0-arkit-full-coord-mlp-continue-safe"
 )
 CONTINUE_NAMES=(
   "arkit-full-continue-concerto"
@@ -47,7 +47,7 @@ run_train() {
     return 0
   fi
   if [ -n "${gpu_id}" ]; then
-    CUDA_VISIBLE_DEVICES="${gpu_id}" bash scripts/train.sh \
+    CUDA_VISIBLE_DEVICES="${gpu_id}" PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" bash scripts/train.sh \
       -p "${PYTHON_BIN}" \
       -d "${DATASET_NAME}" \
       -g "${gpu_count}" \
@@ -73,41 +73,53 @@ run_parallel_specs() {
   IFS=',' read -r -a gpu_ids <<< "${GPU_IDS_CSV}"
 
   if [ "${PARALLEL_SINGLE_GPU}" = "1" ] && [ "${gpu_count}" = "1" ] && [ "${#gpu_ids[@]}" -ge 2 ]; then
-    local idx=0
-    while [ "${idx}" -lt "${#specs[@]}" ]; do
-      local -a pids=()
-      local jobs_started=0
-      local offset=0
-      local gpu_id=""
-      for gpu_id in "${gpu_ids[@]}"; do
-        local spec_idx=$((idx + offset))
-        if [ "${spec_idx}" -ge "${#specs[@]}" ]; then
-          break
+    local next_idx=0
+    local -a slot_pid=()
+    local -a slot_label=()
+    local active=0
+    while [ "${next_idx}" -lt "${#specs[@]}" ] || [ "${active}" -gt 0 ]; do
+      local slot=""
+      for slot in "${!gpu_ids[@]}"; do
+        local pid="${slot_pid[$slot]:-}"
+        if [ -n "${pid}" ] && ! kill -0 "${pid}" 2>/dev/null; then
+          if ! wait "${pid}"; then
+            echo "[warn] ${slot_label[$slot]} exited non-zero"
+          fi
+          slot_pid[$slot]=""
+          slot_label[$slot]=""
         fi
-        local config_name=""
-        local exp_name=""
-        local weight_path=""
-        IFS='|' read -r config_name exp_name weight_path <<< "${specs[$spec_idx]}"
-        local checkpoint="exp/${DATASET_NAME}/${exp_name}/model/model_last.pth"
-        if [ -f "${checkpoint}" ]; then
-          echo "[skip] ${exp_name} already has ${checkpoint}"
-        else
-          echo "[launch] gpu=${gpu_id} ${config_name} -> ${exp_name}"
-          (
-            run_train "${config_name}" "${exp_name}" "${weight_path}" 1 "${gpu_id}"
-          ) &
-          pids+=("$!")
-          jobs_started=$((jobs_started + 1))
+        if [ -z "${slot_pid[$slot]:-}" ]; then
+          while [ "${next_idx}" -lt "${#specs[@]}" ]; do
+            local config_name=""
+            local exp_name=""
+            local weight_path=""
+            IFS='|' read -r config_name exp_name weight_path <<< "${specs[$next_idx]}"
+            next_idx=$((next_idx + 1))
+            local checkpoint="exp/${DATASET_NAME}/${exp_name}/model/model_last.pth"
+            if [ -f "${checkpoint}" ]; then
+              echo "[skip] ${exp_name} already has ${checkpoint}"
+              continue
+            fi
+            local gpu_id="${gpu_ids[$slot]}"
+            echo "[launch] gpu=${gpu_id} ${config_name} -> ${exp_name}"
+            (
+              run_train "${config_name}" "${exp_name}" "${weight_path}" 1 "${gpu_id}"
+            ) &
+            slot_pid[$slot]="$!"
+            slot_label[$slot]="${exp_name}"
+            break
+          done
         fi
-        offset=$((offset + 1))
       done
-      if [ "${jobs_started}" -gt 0 ]; then
-        local pid=""
-        for pid in "${pids[@]}"; do
-          wait "${pid}"
-        done
+      active=0
+      for slot in "${!gpu_ids[@]}"; do
+        if [ -n "${slot_pid[$slot]:-}" ]; then
+          active=$((active + 1))
+        fi
+      done
+      if [ "${active}" -gt 0 ]; then
+        sleep 10
       fi
-      idx=$((idx + ${#gpu_ids[@]}))
     done
   else
     local default_gpu=""

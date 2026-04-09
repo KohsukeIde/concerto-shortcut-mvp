@@ -6,7 +6,14 @@ REPO_ROOT="$(pwd -P)"
 
 CONDA_ROOT="${CONDA_ROOT:-/home/cvrt/miniconda3}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-pointcept-cu128}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+DEFAULT_ENV_PYTHON="${CONDA_ROOT}/envs/${CONDA_ENV_NAME}/bin/python3.10"
+if [ -z "${PYTHON_BIN:-}" ]; then
+  if [ -x "${DEFAULT_ENV_PYTHON}" ]; then
+    PYTHON_BIN="${DEFAULT_ENV_PYTHON}"
+  else
+    PYTHON_BIN="python3"
+  fi
+fi
 NUM_GPU="${NUM_GPU:-2}"
 GATE_NUM_GPU="${GATE_NUM_GPU:-1}"
 PRETRAIN_NUM_GPU="${PRETRAIN_NUM_GPU:-1}"

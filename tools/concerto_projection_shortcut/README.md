@@ -3,6 +3,11 @@
 This directory contains the runnable Pointcept-side setup for the Concerto
 `enc2d` shortcut probe.
 
+For the current experiment status and the shortest path to the latest results,
+start with:
+
+- `tools/concerto_projection_shortcut/CURRENT_STATUS.md`
+
 Key choices in this version:
 
 - target repo: `Pointcept v1.6.1`

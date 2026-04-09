@@ -9,9 +9,11 @@ CONDA_ENV_NAME="${CONDA_ENV_NAME:-pointcept-cu128}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 NUM_GPU="${NUM_GPU:-2}"
 GATE_NUM_GPU="${GATE_NUM_GPU:-1}"
-PRETRAIN_NUM_GPU="${PRETRAIN_NUM_GPU:-${NUM_GPU}}"
+PRETRAIN_NUM_GPU="${PRETRAIN_NUM_GPU:-1}"
 LIN_NUM_GPU="${LIN_NUM_GPU:-1}"
 FT_NUM_GPU="${FT_NUM_GPU:-1}"
+PARALLEL_SINGLE_GPU="${PARALLEL_SINGLE_GPU:-1}"
+GPU_IDS_CSV="${GPU_IDS_CSV:-0,1}"
 DATASET_NAME="${DATASET_NAME:-concerto}"
 DATA_ROOT="${DATA_ROOT:-/home/cvrt/datasets}"
 SCANNET_COMPRESSED_DIR="${SCANNET_COMPRESSED_DIR:-${DATA_ROOT}/concerto_scannet_compressed}"
@@ -176,7 +178,7 @@ while true; do
       stash_incomplete_exp "${OFFICIAL_GATE_EXP}"
       start_bg \
         "scannet_gate" \
-        "PYTHON_BIN='${PYTHON_BIN}' GATE_NUM_GPU='${GATE_NUM_GPU}' GATE_CONFIG='${GATE_CONFIG}' bash tools/concerto_projection_shortcut/run_scannet_proxy.sh gate"
+        "PYTHON_BIN='${PYTHON_BIN}' GATE_NUM_GPU='${GATE_NUM_GPU}' GATE_CONFIG='${GATE_CONFIG}' PARALLEL_SINGLE_GPU='${PARALLEL_SINGLE_GPU}' GPU_IDS_CSV='${GPU_IDS_CSV}' bash tools/concerto_projection_shortcut/run_scannet_proxy.sh gate"
     fi
     write_status "${stage}"
     sleep "${POLL_SECONDS}"
@@ -194,7 +196,7 @@ while true; do
       done
       start_bg \
         "scannet_pretrain" \
-        "PYTHON_BIN='${PYTHON_BIN}' PRETRAIN_NUM_GPU='${PRETRAIN_NUM_GPU}' bash tools/concerto_projection_shortcut/run_scannet_proxy.sh pretrain"
+        "PYTHON_BIN='${PYTHON_BIN}' PRETRAIN_NUM_GPU='${PRETRAIN_NUM_GPU}' PARALLEL_SINGLE_GPU='${PARALLEL_SINGLE_GPU}' GPU_IDS_CSV='${GPU_IDS_CSV}' bash tools/concerto_projection_shortcut/run_scannet_proxy.sh pretrain"
     fi
     write_status "${stage}"
     sleep "${POLL_SECONDS}"
@@ -212,7 +214,7 @@ while true; do
       done
       start_bg \
         "scannet_lin" \
-        "PYTHON_BIN='${PYTHON_BIN}' LIN_NUM_GPU='${LIN_NUM_GPU}' LIN_CONFIG='${LIN_CONFIG}' bash tools/concerto_projection_shortcut/run_scannet_proxy.sh lin"
+        "PYTHON_BIN='${PYTHON_BIN}' LIN_NUM_GPU='${LIN_NUM_GPU}' LIN_CONFIG='${LIN_CONFIG}' PARALLEL_SINGLE_GPU='${PARALLEL_SINGLE_GPU}' GPU_IDS_CSV='${GPU_IDS_CSV}' bash tools/concerto_projection_shortcut/run_scannet_proxy.sh lin"
     fi
     write_status "${stage}"
     sleep "${POLL_SECONDS}"

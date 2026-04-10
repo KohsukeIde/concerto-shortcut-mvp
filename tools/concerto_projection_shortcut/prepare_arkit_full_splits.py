@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 
@@ -18,18 +19,34 @@ def rewrite_path(source_root: Path, raw_path):
 
 
 def main() -> int:
+    pointcept_data_root = Path(
+        os.environ.get(
+            "POINTCEPT_DATA_ROOT",
+            "/mnt/urashima/users/minesawa/pointcept_data",
+        )
+    )
     parser = argparse.ArgumentParser(
         description="Rewrite ARKit full split JSONs to absolute asset paths."
     )
     parser.add_argument(
         "--source-root",
         type=Path,
-        default=Path("/home/cvrt/datasets/arkitscenes/arkitscenes"),
+        default=Path(
+            os.environ.get(
+                "ARKIT_FULL_SOURCE_ROOT",
+                str(pointcept_data_root / "arkitscenes" / "arkitscenes"),
+            )
+        ),
     )
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("/home/cvrt/datasets/arkitscenes/arkitscenes_absmeta"),
+        default=Path(
+            os.environ.get(
+                "ARKIT_FULL_META_ROOT",
+                str(pointcept_data_root / "arkitscenes" / "arkitscenes_absmeta"),
+            )
+        ),
     )
     args = parser.parse_args()
 

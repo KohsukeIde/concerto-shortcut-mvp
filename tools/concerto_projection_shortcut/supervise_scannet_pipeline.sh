@@ -3,17 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
 REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
-CONDA_ROOT="${CONDA_ROOT:-/home/cvrt/miniconda3}"
-CONDA_ENV_NAME="${CONDA_ENV_NAME:-pointcept-cu128}"
-DEFAULT_ENV_PYTHON="${CONDA_ROOT}/envs/${CONDA_ENV_NAME}/bin/python3.10"
-if [ -z "${PYTHON_BIN:-}" ]; then
-  if [ -x "${DEFAULT_ENV_PYTHON}" ]; then
-    PYTHON_BIN="${DEFAULT_ENV_PYTHON}"
-  else
-    PYTHON_BIN="python3"
-  fi
-fi
 NUM_GPU="${NUM_GPU:-2}"
 GATE_NUM_GPU="${GATE_NUM_GPU:-1}"
 PRETRAIN_NUM_GPU="${PRETRAIN_NUM_GPU:-1}"
@@ -22,9 +14,6 @@ FT_NUM_GPU="${FT_NUM_GPU:-1}"
 PARALLEL_SINGLE_GPU="${PARALLEL_SINGLE_GPU:-1}"
 GPU_IDS_CSV="${GPU_IDS_CSV:-0,1}"
 DATASET_NAME="${DATASET_NAME:-concerto}"
-DATA_ROOT="${DATA_ROOT:-/home/cvrt/datasets}"
-SCANNET_COMPRESSED_DIR="${SCANNET_COMPRESSED_DIR:-${DATA_ROOT}/concerto_scannet_compressed}"
-SCANNET_EXTRACT_DIR="${SCANNET_EXTRACT_DIR:-${DATA_ROOT}/scannet}"
 POLL_SECONDS="${POLL_SECONDS:-300}"
 LOG_DIR="${REPO_ROOT}/tools/concerto_projection_shortcut/logs"
 STATUS_PATH="${REPO_ROOT}/tools/concerto_projection_shortcut/scannet_pipeline_status.md"
@@ -57,17 +46,7 @@ if ! flock -n 9; then
   exit 0
 fi
 
-if ! command -v conda >/dev/null 2>&1; then
-  set +u
-  # shellcheck disable=SC1091
-  source "${CONDA_ROOT}/etc/profile.d/conda.sh"
-  set -u
-fi
-if [ "${CONDA_DEFAULT_ENV:-}" != "${CONDA_ENV_NAME}" ]; then
-  set +u
-  conda activate "${CONDA_ENV_NAME}"
-  set -u
-fi
+ensure_conda_active
 
 log() {
   printf '[%(%F %T)T] %s\n' -1 "$*" | tee -a "${SUP_LOG}"
@@ -167,7 +146,7 @@ while true; do
 
   if ! scannet_ready; then
     stage="extract_scannet"
-    if ! process_running 'setup_downstream_assets.sh' && ! process_running 'tar --skip-old-files -xzf - -C /home/cvrt/datasets/scannet'; then
+    if ! process_running 'setup_downstream_assets.sh' && ! process_running "tar --skip-old-files -xzf - -C ${SCANNET_EXTRACT_DIR}"; then
       start_bg \
         "setup_downstream_assets" \
         "DOWNLOAD_WEIGHTS=0 DOWNLOAD_SCANNET=0 EXTRACT_SCANNET=1 PYTHON_BIN='${PYTHON_BIN}' ionice -c3 nice -n 19 bash tools/concerto_projection_shortcut/setup_downstream_assets.sh"

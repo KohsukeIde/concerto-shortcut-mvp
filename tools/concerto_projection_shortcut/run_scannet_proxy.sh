@@ -3,15 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
 REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
-DEFAULT_ENV_PYTHON="/home/cvrt/miniconda3/envs/pointcept-cu128/bin/python3.10"
-if [ -z "${PYTHON_BIN:-}" ]; then
-  if [ -x "${DEFAULT_ENV_PYTHON}" ]; then
-    PYTHON_BIN="${DEFAULT_ENV_PYTHON}"
-  else
-    PYTHON_BIN="python3"
-  fi
-fi
 NUM_GPU="${NUM_GPU:-2}"
 DATASET_NAME="${DATASET_NAME:-concerto}"
 MODE="${1:-all}"

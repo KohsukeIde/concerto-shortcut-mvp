@@ -3,8 +3,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
 REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
-ENV_PYTHON="${PYTHON_BIN:-/home/cvrt/miniconda3/envs/pointcept-cu128/bin/python3.10}"
+ENV_PYTHON="${PYTHON_BIN}"
 LOG_DIR="${REPO_ROOT}/tools/concerto_projection_shortcut/logs"
 CHAIN_LOG="${LOG_DIR}/safe_followup_chain.log"
 

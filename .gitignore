@@ -9,6 +9,7 @@ weights
 data
 *log*
 !tools/concerto_projection_shortcut/summarize_logs.py
+!tools/concerto_projection_shortcut/summarize_semseg_logs.py
 outputs/
 .vscode
 .idea

@@ -122,7 +122,9 @@ scheduler = dict(
 
 IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
-arkit_full_data_root = "/home/cvrt/datasets/arkitscenes/arkitscenes_absmeta"
+arkit_full_data_root = __import__("os").environ.get(
+    "ARKIT_FULL_META_ROOT", "data/arkitscenes_absmeta"
+)
 
 transform = [
     dict(

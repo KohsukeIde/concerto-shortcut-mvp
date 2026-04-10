@@ -94,14 +94,25 @@ The helper scripts are aligned with that order:
 
 ## Quick start
 
-1. Install the base Pointcept environment.
+1. Create the device-local Pointcept environment:
+
+```bash
+bash tools/concerto_projection_shortcut/create_env.sh
+```
+
 2. Install Concerto-specific extras:
 
 ```bash
 bash tools/concerto_projection_shortcut/install_extras.sh
 ```
 
-3. Preprocess ARKitScenes and place it at `data/arkitscenes`.
+3. Prepare ARKitScenes under `/mnt/urashima/users/minesawa/pointcept_data`
+and link it into the repo:
+
+```bash
+bash tools/concerto_projection_shortcut/setup_arkit_full_assets.sh
+```
+
 4. Validate repo paths, dataset layout, and config import:
 
 ```bash
@@ -135,8 +146,8 @@ bash tools/concerto_projection_shortcut/run_mvp.sh
 9. For the ARKit full follow-up on 2 GPUs:
 
 ```bash
-source /home/cvrt/miniconda3/etc/profile.d/conda.sh
-conda activate pointcept-cu128
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate pointcept-concerto-cu121
 bash tools/concerto_projection_shortcut/run_arkit_full_causal.sh
 ```
 
@@ -144,8 +155,8 @@ bash tools/concerto_projection_shortcut/run_arkit_full_causal.sh
 ScanNet linear proxy:
 
 ```bash
-source /home/cvrt/miniconda3/etc/profile.d/conda.sh
-conda activate pointcept-cu128
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate pointcept-concerto-cu121
 DOWNLOAD_WEIGHTS=0 DOWNLOAD_SCANNET=1 bash tools/concerto_projection_shortcut/setup_downstream_assets.sh
 bash tools/concerto_projection_shortcut/run_scannet_proxy.sh all
 ```

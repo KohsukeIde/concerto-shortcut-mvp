@@ -2,28 +2,17 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
-REPO_ROOT="$(pwd)"
+REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
 POLL_SECONDS="${POLL_SECONDS:-300}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
 DATASET_NAME="${DATASET_NAME:-concerto}"
 EXP_PREFIX="${EXP_PREFIX:-arkit-full-causal}"
-CONDA_ROOT="${CONDA_ROOT:-/home/cvrt/miniconda3}"
-CONDA_ENV_NAME="${CONDA_ENV_NAME:-pointcept-cu128}"
 BASELINE_PATTERN="pretrain-concerto-v1m1-0-probe-enc2d-full-baseline -n ${EXP_PREFIX}-baseline"
 COORD_MLP_PATTERN="pretrain-concerto-v1m1-0-probe-enc2d-full-coord-mlp -n ${EXP_PREFIX}-coord-mlp"
 
-if ! command -v conda >/dev/null 2>&1; then
-  set +u
-  # shellcheck disable=SC1091
-  source "${CONDA_ROOT}/etc/profile.d/conda.sh"
-  set -u
-fi
-if [ "${CONDA_DEFAULT_ENV:-}" != "${CONDA_ENV_NAME}" ]; then
-  set +u
-  conda activate "${CONDA_ENV_NAME}"
-  set -u
-fi
+ensure_conda_active
 
 archive_stale_run() {
   local exp_name="$1"

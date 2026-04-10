@@ -2,9 +2,10 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
-REPO_ROOT="$(pwd)"
+REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
 NUM_GPU="${NUM_GPU:-2}"
 DATASET_NAME="${DATASET_NAME:-concerto}"
 EXP_PREFIX="${EXP_PREFIX:-arkit-full-causal}"
@@ -14,8 +15,6 @@ MAX_STRESS_BATCHES="${MAX_STRESS_BATCHES:-20}"
 PARALLEL_SINGLE_GPU="${PARALLEL_SINGLE_GPU:-1}"
 GPU_IDS_CSV="${GPU_IDS_CSV:-0,1}"
 START_AT_INDEX="${START_AT_INDEX:-0}"
-ARKIT_FULL_SOURCE_ROOT="${ARKIT_FULL_SOURCE_ROOT:-/home/cvrt/datasets/arkitscenes/arkitscenes}"
-ARKIT_FULL_META_ROOT="${ARKIT_FULL_META_ROOT:-/home/cvrt/datasets/arkitscenes/arkitscenes_absmeta}"
 
 "${PYTHON_BIN}" tools/concerto_projection_shortcut/prepare_arkit_full_splits.py \
   --source-root "${ARKIT_FULL_SOURCE_ROOT}" \

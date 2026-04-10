@@ -3,17 +3,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.." || exit 1
 REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
-PYTHON_BIN="${PYTHON_BIN:-python}"
-DATA_ROOT="${DATA_ROOT:-/home/cvrt/datasets}"
-SCANNET_COMPRESSED_DIR="${SCANNET_COMPRESSED_DIR:-${DATA_ROOT}/concerto_scannet_compressed}"
-SCANNET_EXTRACT_DIR="${SCANNET_EXTRACT_DIR:-${DATA_ROOT}/scannet}"
-WEIGHT_DIR="${WEIGHT_DIR:-${REPO_ROOT}/weights/concerto}"
 DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS:-1}"
 DOWNLOAD_SCANNET="${DOWNLOAD_SCANNET:-1}"
 EXTRACT_SCANNET="${EXTRACT_SCANNET:-1}"
 
-mkdir -p "${SCANNET_COMPRESSED_DIR}" "${SCANNET_EXTRACT_DIR}" "${WEIGHT_DIR}" "${REPO_ROOT}/data"
+mkdir -p "${SCANNET_COMPRESSED_DIR}" "${SCANNET_EXTRACT_DIR}" "${WEIGHT_DIR}" "${REPO_ROOT}/data" "${HF_HOME}" "${TORCH_HOME}"
 
 "${PYTHON_BIN}" - "${SCANNET_COMPRESSED_DIR}" "${WEIGHT_DIR}" "${DOWNLOAD_WEIGHTS}" "${DOWNLOAD_SCANNET}" <<'PY'
 import sys
@@ -57,7 +54,7 @@ else
 fi
 
 if [ -n "${SCANNET_ROOT}" ]; then
-  ln -sfn "${SCANNET_ROOT}" "${REPO_ROOT}/data/scannet"
+  link_repo_data "${SCANNET_ROOT}" "scannet"
 fi
 
 echo "[ok] weights:"

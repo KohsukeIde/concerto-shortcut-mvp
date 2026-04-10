@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PYTHON_BIN=${PYTHON_BIN:-python3}
+cd "$(dirname "$0")/../.." || exit 1
+REPO_ROOT="$(pwd -P)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
 if ! "${PYTHON_BIN}" -c "import torch" >/dev/null 2>&1; then
   cat >&2 <<'EOF'
 torch is not available in this interpreter yet.
 Install the base Pointcept environment first, then rerun this helper.
-The repo ships /home/cvrt/Desktop/Pointcept/environment.yml for the full setup.
+Use tools/concerto_projection_shortcut/create_env.sh for this device.
 EOF
 fi
 

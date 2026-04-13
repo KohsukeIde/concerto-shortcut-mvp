@@ -1,4 +1,4 @@
 log,status,val_miou_last,val_macc_last,val_allacc_last,best_metric_name,best_metric_value,val_eval_count
 exp/concerto/scannet-proxy-concerto-continue-lin/train.log,finished,0.4794,0.6114,0.7718,mIoU,0.4552,11
 exp/concerto/scannet-proxy-coord-mlp-continue-lin/train.log,finished,0.4064,0.5503,0.7422,mIoU,0.3829,11
-exp/concerto/scannet-proxy-no-enc2d-continue-lin/train.log,running_interim,0.3577,0.5154,0.7135,mIoU,0.3581,6
+exp/concerto/scannet-proxy-no-enc2d-continue-lin/train.log,running_interim,0.3762,0.5368,0.7236,mIoU,0.3765,10

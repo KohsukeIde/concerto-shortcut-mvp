@@ -9,13 +9,14 @@ investigation.
   - The released Concerto `enc2d` objective admits a strong coordinate shortcut.
 - Scope of that claim:
   - Objective-level evidence on `ARKitScenes`.
-  - Not yet a downstream-level claim about full Concerto.
-- Current blocker:
-  - The ScanNet downstream replacement test is still in progress.
-  - The original 2-GPU ScanNet gate crashed in the `mp.spawn` path, so the
-    current path is a safe single-GPU proxy.
-  - The official ScanNet linear gate now completes, but the continuation trio
-    and downstream linear trio are not all finished yet.
+  - The ScanNet continuation proxy shows measurable but limited downstream
+    relevance.
+  - It does not support the stronger claim that most of Concerto downstream gain
+    is explained by the coordinate shortcut.
+- Current action:
+  - Move from critique to a minimal fix: coordinate projection residualization.
+  - The local `projres_v1` chain was stopped during prior cache extraction.
+  - Resume on the H200 server from the handoff document.
 
 ## Documentation Policy
 
@@ -31,11 +32,13 @@ investigation.
    - [results_arkit_full_causal.md](./results_arkit_full_causal.md)
 2. Geometry-vs-coordinate stress result:
    - [results_arkit_full_stress_corrected.md](./results_arkit_full_stress_corrected.md)
-3. ScanNet gate status:
-   - [results_scannet_gate_2026-04-09.md](./results_scannet_gate_2026-04-09.md)
-4. Short narrative summary:
+3. ScanNet continuation proxy:
+   - [results_scannet_proxy_lin.md](./results_scannet_proxy_lin.md)
+4. Coordinate projection residual handoff:
+   - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
+5. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-5. Reproduction / runner overview:
+6. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## ARKit Full Causal Branch
@@ -83,48 +86,57 @@ Interpretation:
 ## ScanNet Downstream Status
 
 Status:
-- In progress.
+- The original / coord_mlp / no-enc2d / no-enc2d-renorm continuation proxy is
+  finished enough for the current decision.
+- The safest readout is "downstream effect is real but limited."
+- The next gate is not another critique arm; it is whether the projection
+  residual fix can match or beat original Concerto on ScanNet linear.
 
 What was confirmed:
 - The dataset path and weights are usable.
 - A single-GPU safe smoke run reaches actual training:
-  - [exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log](../../exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log)
+  - historical path: `exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log`
 - The official ScanNet linear gate now completes on the safe single-GPU path:
-  - [exp/concerto/scannet-proxy-official-origin-lin/train.log](../../exp/concerto/scannet-proxy-official-origin-lin/train.log)
+  - historical path: `exp/concerto/scannet-proxy-official-origin-lin/train.log`
   - final `Val result: mIoU/mAcc/allAcc = 0.1752 / 0.2467 / 0.6167`
   - checkpoints:
-    - [exp/concerto/scannet-proxy-official-origin-lin/model/model_best.pth](../../exp/concerto/scannet-proxy-official-origin-lin/model/model_best.pth)
-    - [exp/concerto/scannet-proxy-official-origin-lin/model/model_last.pth](../../exp/concerto/scannet-proxy-official-origin-lin/model/model_last.pth)
+    - `exp/concerto/scannet-proxy-official-origin-lin/model/model_best.pth`
+    - `exp/concerto/scannet-proxy-official-origin-lin/model/model_last.pth`
 
-What failed:
+Previous failure mode:
 - The original 2-GPU official gate crashed repeatedly in the distributed spawn path:
-  - [logs/scannet_gate.launch.log](./logs/scannet_gate.launch.log)
+  - historical path: `tools/concerto_projection_shortcut/logs/scannet_gate.launch.log`
+- The previous `no-enc2d-renorm` full post-train test aborted while writing
+  `.npy` outputs because of local disk pressure. Validation metrics are still
+  usable.
 
 Current interpretation:
 - The blocker is not the basic dataset path.
-- The blocker is the multi-GPU `mp.spawn` path.
-- The current downstream go/no-go is still pending because the replacement
-  comparison has not finished yet.
+- The old blocker was the multi-GPU `mp.spawn` path on this machine.
+- For current work, use the validation-only ScanNet linear config to avoid the
+  full-test disk failure path.
+- On the H200 server, run the `projres_v1` fix chain described in
+  [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- `no-enc2d` continuation:
-  - [exp/concerto/arkit-full-continue-no-enc2d/train.log](../../exp/concerto/arkit-full-continue-no-enc2d/train.log)
-- `coord_mlp` continuation:
-  - [exp/concerto/arkit-full-continue-coord-mlp-debug2/train.log](../../exp/concerto/arkit-full-continue-coord-mlp-debug2/train.log)
+- No `projres_v1` job is currently running on this machine.
 
-Follow-up orchestration:
-- safe follow-up chain service:
-  - `systemctl --user status concerto-safe-followup --no-pager -l`
-- follow-up chain log:
-  - [logs/safe_followup_chain.log](./logs/safe_followup_chain.log)
+Stopped job:
+- The local `projres_v1` chain was stopped during Stage 1 prior cache
+  extraction.
+- Log:
+  - `/mnt/urashima/users/minesawa/concerto_shortcut_runs/projres_v1/logs/run_projres_v1_chain_20260415_131727_setsid.log`
+- It produced logs only. No selected prior, smoke checkpoint, continuation
+  checkpoint, stress csv, or ScanNet linear result was produced.
 
-Expected next stages:
-1. Finish `no-enc2d` and `coord_mlp` continuations.
-2. Promote `coord_mlp-debug2` checkpoint to the canonical `coord_mlp` path.
-3. Launch `concerto_continue` if it is still missing.
-4. Launch the ScanNet linear trio after the three continuation checkpoints exist.
+Expected next stage:
+1. Move to the H200 server.
+2. Run setup checks and chain dry-run.
+3. Launch `run_projres_v1_chain.sh` with `GPU_IDS_CSV=0,1,2,3,4,5,6,7`.
+4. Report the selected prior, selected alpha, stress result, and ScanNet linear
+   gate result.
 
 ## Useful Logs And Artifacts
 
@@ -137,20 +149,24 @@ Expected next stages:
 - Interim write-up:
   - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
 - ScanNet gate crash log:
-  - [logs/scannet_gate.launch.log](./logs/scannet_gate.launch.log)
+  - historical path: `tools/concerto_projection_shortcut/logs/scannet_gate.launch.log`
 - ScanNet gate success log:
-  - [exp/concerto/scannet-proxy-official-origin-lin/train.log](../../exp/concerto/scannet-proxy-official-origin-lin/train.log)
+  - historical path: `exp/concerto/scannet-proxy-official-origin-lin/train.log`
 - ScanNet gate result note:
   - [results_scannet_gate_2026-04-09.md](./results_scannet_gate_2026-04-09.md)
 - ScanNet safe smoke log:
-  - [exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log](../../exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log)
+  - historical path: `exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log`
 - Pipeline status:
   - [scannet_pipeline_status.md](./scannet_pipeline_status.md)
-- Active follow-up chain:
-  - [logs/safe_followup_chain.log](./logs/safe_followup_chain.log)
+- Projection residual handoff:
+  - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
 
 ## Immediate Next Step
 
-1. Finish the continuation trio under the safe single-GPU path.
-2. Run the ScanNet linear trio from those continuation checkpoints.
-3. Decide downstream go/no-go from the replacement comparison.
+1. Copy or mount repo, dataset, and weights on the H200 server.
+2. Run:
+   - `bash tools/concerto_projection_shortcut/check_setup_status.sh`
+   - `python tools/concerto_projection_shortcut/preflight.py --check-data --check-batch --check-forward --config pretrain-concerto-v1m1-0-arkit-full-continue`
+3. Dry-run:
+   - `EXP_MIRROR_ROOT=/mnt/urashima/users/minesawa/concerto_shortcut_runs/projres_v1 GPU_IDS_CSV=0,1,2,3,4,5,6,7 DRY_RUN=1 bash tools/concerto_projection_shortcut/run_projres_v1_chain.sh`
+4. Launch the H200 chain using [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).

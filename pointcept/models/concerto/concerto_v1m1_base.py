@@ -8,6 +8,7 @@ Please cite our work if the code is helpful to you.
 from itertools import chain
 from packaging import version
 from functools import partial
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -496,6 +497,35 @@ class Concerto(PointModel):
             self._shortcut_probe_logs.add(tag)
             print(message)
 
+    @staticmethod
+    def _trace_rank():
+        if dist.is_available() and dist.is_initialized():
+            return dist.get_rank()
+        return 0
+
+    @staticmethod
+    def _trace_shape(value):
+        if torch.is_tensor(value):
+            return f"{tuple(value.shape)}:{value.dtype}"
+        return str(value)
+
+    def _trace_forward_enabled(self):
+        return os.environ.get("POINTCEPT_TRACE_FORWARD", "0") == "1"
+
+    def _trace_forward(self, tag, sync=False, **payload):
+        if not self._trace_forward_enabled():
+            return
+        detail = " ".join(f"{key}={value}" for key, value in payload.items())
+        prefix = f"[concerto-trace] rank={self._trace_rank()} {tag}"
+        if detail:
+            prefix = f"{prefix} {detail}"
+        if sync and torch.cuda.is_available():
+            print(f"{prefix} before_sync", flush=True)
+            torch.cuda.synchronize()
+            print(f"{prefix} after_sync", flush=True)
+        else:
+            print(prefix, flush=True)
+
     def _apply_global_target_permutation(
         self, teacher_target, mode_name="global_target_permutation"
     ):
@@ -590,11 +620,15 @@ class Concerto(PointModel):
 
     @torch.no_grad()
     def ENC2D_forward(self, x):
+        self._trace_forward("enc2d_forward_start", images=self._trace_shape(x))
         # RADIO
         if "radio" in self.image_weight_name:
             summary, features = self.enc2d_model(x)
             features = features.reshape(
                 -1, self.patch_h * self.patch_w, self._num_channels
+            )
+            self._trace_forward(
+                "enc2d_forward_end", sync=True, features=self._trace_shape(features)
             )
             return features
         # SigLIPv2
@@ -605,6 +639,9 @@ class Concerto(PointModel):
         else:
             outputs = self.enc2d_model(x)
             features = outputs.last_hidden_state[:, -self.patch_h * self.patch_w :, :]
+        self._trace_forward(
+            "enc2d_forward_end", sync=True, features=self._trace_shape(features)
+        )
         return features
 
     @torch.no_grad()
@@ -835,28 +872,72 @@ class Concerto(PointModel):
 
     @staticmethod
     def sinkhorn_knopp(feat, temp, num_iter=3):
+        trace = os.environ.get("POINTCEPT_TRACE_FORWARD", "0") == "1"
+        rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+        if trace:
+            print(
+                "[concerto-trace] "
+                f"rank={rank} sinkhorn_start feat={tuple(feat.shape)} temp={temp}",
+                flush=True,
+            )
         feat = feat.float()
         q = torch.exp(feat / temp).t()
+        if trace:
+            print(
+                "[concerto-trace] "
+                f"rank={rank} sinkhorn_before_all_gather cols={q.shape[1]}",
+                flush=True,
+            )
         n = sum(all_gather(q.shape[1]))  # number of samples to assign
+        if trace:
+            print(
+                "[concerto-trace] rank="
+                f"{rank} sinkhorn_after_all_gather n={n}",
+                flush=True,
+            )
         k = q.shape[0]  # number of prototypes
 
         # make the matrix sums to 1
         sum_q = q.sum()
         if get_world_size() > 1:
+            if trace:
+                print(
+                    f"[concerto-trace] rank={rank} sinkhorn_before_sum_all_reduce",
+                    flush=True,
+                )
             dist.all_reduce(sum_q)
+            if trace:
+                print(
+                    f"[concerto-trace] rank={rank} sinkhorn_after_sum_all_reduce",
+                    flush=True,
+                )
         q = q / sum_q
 
         for i in range(num_iter):
             # normalize each row: total weight per prototype must be 1/k
             q_row_sum = q.sum(dim=1, keepdim=True)
             if get_world_size() > 1:
+                if trace:
+                    print(
+                        "[concerto-trace] "
+                        f"rank={rank} sinkhorn_iter={i} before_row_all_reduce",
+                        flush=True,
+                    )
                 dist.all_reduce(q_row_sum)
+                if trace:
+                    print(
+                        "[concerto-trace] "
+                        f"rank={rank} sinkhorn_iter={i} after_row_all_reduce",
+                        flush=True,
+                    )
             q = q / q_row_sum / k
 
             # normalize each column: total weight per sample must be 1/n
             q = q / q.sum(dim=0, keepdim=True) / n
 
         q *= n  # the columns must sum to 1 so that Q is an assignment
+        if trace:
+            print(f"[concerto-trace] rank={rank} sinkhorn_end", flush=True)
         return q.t()
 
     def generate_mask(self, coord, offset):
@@ -979,13 +1060,23 @@ class Concerto(PointModel):
 
     def forward(self, data_dict, return_point=False):
         data_dict = self._apply_shortcut_probe_to_inputs(data_dict)
+        self._trace_forward(
+            "forward_start",
+            images=self._trace_shape(data_dict.get("images")),
+            img_num=self._trace_shape(data_dict.get("img_num")),
+            global_feat=self._trace_shape(data_dict.get("global_feat")),
+            local_feat=self._trace_shape(data_dict.get("local_feat")),
+            global_corr=self._trace_shape(data_dict.get("global_correspondence")),
+        )
         enc2d_only = (
             self.enc2d_loss_weight > 0
             and self.mask_loss_weight + self.roll_mask_loss_weight + self.unmask_loss_weight
             == 0
         )
         if return_point:
+            self._trace_forward("return_point_teacher_backbone_start")
             point = self.teacher.backbone(data_dict)
+            self._trace_forward("return_point_teacher_backbone_end", sync=True)
             for _ in range(self.up_cast_level):
                 assert "pooling_parent" in point.keys()
                 assert "pooling_inverse" in point.keys()
@@ -997,6 +1088,7 @@ class Concerto(PointModel):
 
         # prepare global_point, mask_global_point, local_point
         with torch.no_grad():
+            self._trace_forward("prepare_points_start")
             # global_point & masking
             global_point = Point(
                 feat=data_dict["global_feat"],
@@ -1008,6 +1100,11 @@ class Concerto(PointModel):
 
             global_mask, global_cluster = self.generate_mask(
                 global_point.coord, global_point.offset
+            )
+            self._trace_forward(
+                "generate_mask_end",
+                sync=True,
+                mask=self._trace_shape(global_mask),
             )
             mask_global_coord = global_point.coord.clone().detach()
             if self.mask_jitter is not None:
@@ -1041,33 +1138,83 @@ class Concerto(PointModel):
                 )
 
                 # teacher forward
+                self._trace_forward("teacher_backbone_start")
                 global_point_ = self.teacher.backbone(global_point)
+                self._trace_forward(
+                    "teacher_backbone_end",
+                    sync=True,
+                    feat=self._trace_shape(global_point_.feat),
+                )
                 global_point_ = self.up_cast(global_point_)
+                self._trace_forward(
+                    "teacher_upcast_end",
+                    sync=True,
+                    feat=self._trace_shape(global_point_.feat),
+                )
                 # only use one shared head for both mask and unmask
                 # priority: mask (global) > unmask (local)
                 if self.mask_loss_weight > 0 or self.roll_mask_loss_weight > 0:
+                    self._trace_forward("teacher_mask_head_start")
                     global_point_.feat = self.teacher.mask_head(global_point_.feat)
+                    self._trace_forward(
+                        "teacher_mask_head_end",
+                        sync=True,
+                        feat=self._trace_shape(global_point_.feat),
+                    )
                 else:
+                    self._trace_forward("teacher_unmask_head_start")
                     global_point_.feat = self.teacher.unmask_head(global_point_.feat)
+                    self._trace_forward(
+                        "teacher_unmask_head_end",
+                        sync=True,
+                        feat=self._trace_shape(global_point_.feat),
+                    )
 
         if self.mask_loss_weight > 0 or self.roll_mask_loss_weight > 0:
             # student forward
+            self._trace_forward("mask_student_backbone_start")
             mask_global_point_ = self.student.backbone(mask_global_point)
+            self._trace_forward(
+                "mask_student_backbone_end",
+                sync=True,
+                feat=self._trace_shape(mask_global_point_.feat),
+            )
             mask_global_point_ = self.up_cast(mask_global_point_)
+            self._trace_forward(
+                "mask_student_upcast_end",
+                sync=True,
+                feat=self._trace_shape(mask_global_point_.feat),
+            )
+            self._trace_forward("mask_head_start")
             mask_pred_sim = self.student.mask_head(mask_global_point_.feat)
+            self._trace_forward(
+                "mask_head_end", sync=True, pred=self._trace_shape(mask_pred_sim)
+            )
 
             if self.mask_loss_weight > 0:
                 with torch.no_grad():
+                    self._trace_forward("mask_match_start")
                     match_index = self.match_neighbour(
                         mask_global_point_.origin_coord,
                         mask_global_point_.offset,
                         global_point_.origin_coord,
                         global_point_.offset,
                     )
+                    self._trace_forward(
+                        "mask_match_end",
+                        sync=True,
+                        match=self._trace_shape(match_index),
+                    )
                     # teacher forward
+                    self._trace_forward("mask_sinkhorn_start")
                     mask_target_sim = self.sinkhorn_knopp(
                         global_point_.feat[match_index[:, 1]],
                         self.teacher_temp,
+                    )
+                    self._trace_forward(
+                        "mask_sinkhorn_end",
+                        sync=True,
+                        target=self._trace_shape(mask_target_sim),
                     )
 
                 # loss
@@ -1091,16 +1238,28 @@ class Concerto(PointModel):
                 roll_global_point_ = self.roll_point(global_point_)
                 with torch.no_grad():
                     # match index for pred and roll target
+                    self._trace_forward("roll_mask_match_start")
                     match_index = self.match_neighbour(
                         mask_global_point_.origin_coord,
                         mask_global_point_.offset,
                         roll_global_point_.origin_coord,
                         roll_global_point_.offset,
                     )
+                    self._trace_forward(
+                        "roll_mask_match_end",
+                        sync=True,
+                        match=self._trace_shape(match_index),
+                    )
                     # teacher forward
+                    self._trace_forward("roll_mask_sinkhorn_start")
                     roll_mask_target_sim = self.sinkhorn_knopp(
                         roll_global_point_.feat[match_index[:, 1]],
                         self.teacher_temp,
+                    )
+                    self._trace_forward(
+                        "roll_mask_sinkhorn_end",
+                        sync=True,
+                        target=self._trace_shape(roll_mask_target_sim),
                     )
 
                 roll_mask_loss = -torch.sum(
@@ -1119,24 +1278,51 @@ class Concerto(PointModel):
                 result_dict["loss"].append(roll_mask_loss * self.roll_mask_loss_weight)
         if self.unmask_loss_weight > 0:
             # student forward
+            self._trace_forward("local_student_backbone_start")
             local_point_ = self.student.backbone(local_point)
+            self._trace_forward(
+                "local_student_backbone_end",
+                sync=True,
+                feat=self._trace_shape(local_point_.feat),
+            )
             local_point_ = self.up_cast(local_point_)
+            self._trace_forward(
+                "local_student_upcast_end",
+                sync=True,
+                feat=self._trace_shape(local_point_.feat),
+            )
+            self._trace_forward("unmask_head_start")
             unmask_pred_sim = self.student.unmask_head(local_point_.feat)
+            self._trace_forward(
+                "unmask_head_end", sync=True, pred=self._trace_shape(unmask_pred_sim)
+            )
             with torch.no_grad():
                 principal_view_mask = global_point_.batch % self.num_global_view == 0
                 principal_view_batch = (
                     global_point_.batch[principal_view_mask] // self.num_global_view
                 )
+                self._trace_forward("unmask_match_start")
                 match_index = self.match_neighbour(
                     local_point_.origin_coord,
                     local_point_.offset[self.num_local_view - 1 :: self.num_local_view],
                     global_point_.origin_coord[principal_view_mask],
                     batch2offset(principal_view_batch),
                 )
+                self._trace_forward(
+                    "unmask_match_end",
+                    sync=True,
+                    match=self._trace_shape(match_index),
+                )
                 # teacher forward
+                self._trace_forward("unmask_sinkhorn_start")
                 unmask_target_sim = self.sinkhorn_knopp(
                     global_point_.feat[principal_view_mask][match_index[:, 1]],
                     self.teacher_temp,
+                )
+                self._trace_forward(
+                    "unmask_sinkhorn_end",
+                    sync=True,
+                    target=self._trace_shape(unmask_target_sim),
                 )
             # loss
             unmask_loss = -torch.sum(
@@ -1154,18 +1340,57 @@ class Concerto(PointModel):
             result_dict["unmask_loss"] = unmask_loss
             result_dict["loss"].append(unmask_loss * self.unmask_loss_weight)
         if self.enc2d_loss_weight > 0:
+            self._trace_forward("enc2d_branch_start")
             if enc2d_only:
+                self._trace_forward("enc2d_student_backbone_start", reason="enc2d_only")
                 mask_global_point_ = self.student.backbone(mask_global_point)
+                self._trace_forward(
+                    "enc2d_student_backbone_end",
+                    sync=True,
+                    feat=self._trace_shape(mask_global_point_.feat),
+                )
                 mask_global_point_ = self.up_cast(mask_global_point_)
+                self._trace_forward(
+                    "enc2d_student_upcast_end",
+                    sync=True,
+                    feat=self._trace_shape(mask_global_point_.feat),
+                )
             elif self.mask_loss_weight == 0 or self.roll_mask_loss_weight == 0:
+                self._trace_forward("enc2d_student_backbone_start", reason="missing_mask_or_roll")
                 mask_global_point_ = self.student.backbone(mask_global_point)
+                self._trace_forward(
+                    "enc2d_student_backbone_end",
+                    sync=True,
+                    feat=self._trace_shape(mask_global_point_.feat),
+                )
                 mask_global_point_ = self.up_cast(mask_global_point_)
+                self._trace_forward(
+                    "enc2d_student_upcast_end",
+                    sync=True,
+                    feat=self._trace_shape(mask_global_point_.feat),
+                )
+            self._trace_forward("enc2d_upcast_start")
             mask_global_point_enc2d = self.up_cast(
                 mask_global_point_,
                 upcast_level=self.enc2d_upcast_level - self.up_cast_level,
             )
+            self._trace_forward(
+                "enc2d_upcast_end",
+                sync=True,
+                feat=self._trace_shape(mask_global_point_enc2d.feat),
+            )
+            self._trace_forward(
+                "pool_corr_start",
+                corr=self._trace_shape(major_view_correspondence),
+            )
             to_feature = self.pool_corr(
                 mask_global_point_enc2d, major_view_correspondence
+            )
+            self._trace_forward(
+                "pool_corr_end",
+                sync=True,
+                feat=self._trace_shape(to_feature["feat"]),
+                corr=self._trace_shape(to_feature["correspondence"]),
             )
             data_dict_global_offset = torch.cat(
                 [torch.tensor([0]).cuda(), to_feature["offset"]], dim=0
@@ -1208,6 +1433,13 @@ class Concerto(PointModel):
             mask = torch.any(correspondence != torch.tensor([-1, -1]).cuda(), dim=2)
             enc2d_global_mask = enc2d_global_mask.unsqueeze(1).expand(-1, v0)
             valid_index = torch.where(mask)  # 0: 3d points index, 1: view index
+            self._trace_forward(
+                "enc2d_valid_index",
+                sync=True,
+                valid_rows=valid_index[0].numel(),
+                points=self._trace_shape(pooled_coord),
+                corr_views=v0,
+            )
 
             bincount_img_num = data_dict["img_num"]
             offset_img_num = bincount2offset(bincount_img_num)
@@ -1216,9 +1448,19 @@ class Concerto(PointModel):
             if total_img_num > 0:
                 # expand
                 with torch.no_grad():
+                    self._trace_forward(
+                        "enc2d_image_branch_start",
+                        images=self._trace_shape(imgs),
+                        total_img_num=int(total_img_num.detach().cpu().item()),
+                    )
                     feature2d = self.ENC2D_forward(imgs)
                     feature2d = feature2d.contiguous().view(-1, feature2d.shape[-1])
                     feature2d_mask = feature2d
+                    self._trace_forward(
+                        "enc2d_image_branch_end",
+                        sync=True,
+                        feature2d=self._trace_shape(feature2d),
+                    )
 
                 offset_img_num = torch.cat([torch.tensor([0]).cuda(), offset_img_num])[
                     :-1
@@ -1244,14 +1486,26 @@ class Concerto(PointModel):
                     + feature_index[:, 2] * self.patch_w
                     + feature_index[:, 3]
                 )
+                self._trace_forward(
+                    "enc2d_feature_index_built",
+                    sync=True,
+                    feature_index=self._trace_shape(feature_index),
+                )
                 if self.shortcut_probe["mode"] == "prepool_global_feature_index_permutation":
                     feature_index = self._apply_prepool_global_feature_index_permutation(
                         feature_index
                     )
 
+                self._trace_forward("enc2d_unique_start")
                 feature_index, inverse_index = torch.unique(
                     feature_index.long(), sorted=True, return_inverse=True
                 )
+                self._trace_forward(
+                    "enc2d_unique_end",
+                    sync=True,
+                    unique_rows=feature_index.shape[0],
+                )
+                self._trace_forward("enc2d_scatter_start")
                 feature3d_mask = torch_scatter.scatter_mean(
                     feature3d_mask,
                     inverse_index,
@@ -1264,7 +1518,16 @@ class Concerto(PointModel):
                     dim=0,
                     dim_size=feature_index.shape[0],
                 )
+                self._trace_forward(
+                    "enc2d_scatter_end",
+                    sync=True,
+                    feature3d=self._trace_shape(feature3d_mask),
+                )
+                self._trace_forward("patch_proj_start")
                 feature3d_mask = self.patch_proj(feature3d_mask)
+                self._trace_forward(
+                    "patch_proj_end", sync=True, feature3d=self._trace_shape(feature3d_mask)
+                )
                 feature_batch_index = torch_scatter.scatter_min(
                     batch_index.long(),
                     inverse_index,
@@ -1298,11 +1561,18 @@ class Concerto(PointModel):
                     feature2d_mask = raw_feature2d_mask - coord_prior_pred.detach()
                 elif self.shortcut_probe["mode"] == "coord_projection_residual":
                     with torch.no_grad():
+                        self._trace_forward("coord_projection_prior_start")
                         coord_projection_pred = self.coord_projection_prior(
                             feature_coord_mask
                         )
+                        self._trace_forward(
+                            "coord_projection_prior_end",
+                            sync=True,
+                            pred=self._trace_shape(coord_projection_pred),
+                        )
 
                 if self.enc2d_cos_shift:
+                    self._trace_forward("enc2d_cos_shift_start")
                     feature2d_mask = feature2d_mask - feature2d_mask.mean(
                         dim=-1, keepdim=True
                     )
@@ -1321,9 +1591,11 @@ class Concerto(PointModel):
                             coord_projection_pred
                             - coord_projection_pred.mean(dim=-1, keepdim=True)
                         )
+                    self._trace_forward("enc2d_cos_shift_end", sync=True)
                 cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
                 coord_alignment_loss = None
                 if coord_projection_pred is not None:
+                    self._trace_forward("coord_projection_loss_start")
                     eps = 1e-6
                     coord_direction = F.normalize(
                         coord_projection_pred.detach(), dim=1, eps=eps
@@ -1355,9 +1627,12 @@ class Concerto(PointModel):
                         feature2d_mask.norm(dim=1)
                         / feature2d_for_metrics.norm(dim=1).clamp_min(eps)
                     ).mean()
+                    self._trace_forward("coord_projection_loss_end", sync=True)
+                self._trace_forward("enc2d_alignment_loss_start")
                 enc2d_alignment_loss = (
                     1 - cos(feature2d_mask, feature3d_mask)
                 ).mean() * 10
+                self._trace_forward("enc2d_alignment_loss_end", sync=True)
                 loss = enc2d_alignment_loss
                 if coord_alignment_loss is not None:
                     loss = (
@@ -1410,8 +1685,12 @@ class Concerto(PointModel):
                 result_dict["enc2d_loss"] = zero_loss
                 result_dict["loss"].append(zero_loss)
         result_dict["loss"] = sum(result_dict["loss"])
+        self._trace_forward("forward_loss_sum_end", sync=True)
 
         if get_world_size() > 1:
             for loss_id, loss in result_dict.items():
+                self._trace_forward("final_all_reduce_start", loss_id=loss_id)
                 dist.all_reduce(loss, op=dist.ReduceOp.AVG)
+                self._trace_forward("final_all_reduce_end", sync=True, loss_id=loss_id)
+        self._trace_forward("forward_end", sync=True)
         return result_dict

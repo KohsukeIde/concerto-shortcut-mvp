@@ -7,7 +7,7 @@ REPO_ROOT="$(pwd -P)"
 source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
 DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS:-1}"
-DOWNLOAD_SCANNET="${DOWNLOAD_SCANNET:-1}"
+DOWNLOAD_SCANNET="${DOWNLOAD_SCANNET:-0}"
 EXTRACT_SCANNET="${EXTRACT_SCANNET:-1}"
 
 mkdir -p "${SCANNET_COMPRESSED_DIR}" "${SCANNET_EXTRACT_DIR}" "${WEIGHT_DIR}" "${REPO_ROOT}/data" "${HF_HOME}" "${TORCH_HOME}"
@@ -41,11 +41,17 @@ if download_scannet:
     )
 PY
 
-if [ "${EXTRACT_SCANNET}" = "1" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/splits" ] && [ ! -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
+if [ "${EXTRACT_SCANNET}" = "1" ] \
+  && [ ! -d "${SCANNET_EXTRACT_DIR}/train" ] \
+  && [ ! -d "${SCANNET_EXTRACT_DIR}/splits" ] \
+  && [ ! -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ] \
+  && compgen -G "${SCANNET_COMPRESSED_DIR}/scannet.tar.gz.part_*" >/dev/null; then
   cat "${SCANNET_COMPRESSED_DIR}"/scannet.tar.gz.part_* | tar --skip-old-files -xzf - -C "${SCANNET_EXTRACT_DIR}"
 fi
 
-if [ -d "${SCANNET_EXTRACT_DIR}/splits" ]; then
+if [ -d "${SCANNET_EXTRACT_DIR}/train" ] && [ -d "${SCANNET_EXTRACT_DIR}/val" ]; then
+  SCANNET_ROOT="${SCANNET_EXTRACT_DIR}"
+elif [ -d "${SCANNET_EXTRACT_DIR}/splits" ]; then
   SCANNET_ROOT="${SCANNET_EXTRACT_DIR}"
 elif [ -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
   SCANNET_ROOT="${SCANNET_EXTRACT_DIR}/scannet"

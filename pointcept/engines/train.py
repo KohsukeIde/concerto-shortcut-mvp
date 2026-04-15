@@ -7,6 +7,7 @@ Please cite our work if the code is helpful to you.
 
 import os
 import sys
+import time
 import weakref
 import wandb
 import torch
@@ -83,6 +84,15 @@ class TrainerBase:
                     self.run_step()
                     # => after_step
                     self.after_step()
+                    max_train_iter = getattr(
+                        self.cfg, "max_train_iter_per_epoch", None
+                    )
+                    if max_train_iter and self.comm_info["iter"] + 1 >= max_train_iter:
+                        self.logger.info(
+                            "Stop epoch early at "
+                            f"max_train_iter_per_epoch={max_train_iter}"
+                        )
+                        break
                 # => after epoch
                 self.after_epoch()
             # => after train
@@ -155,6 +165,7 @@ class Trainer(TrainerBase):
 
     def train(self):
         with EventStorage() as self.storage, ExceptionWriter():
+            trace_steps = os.environ.get("POINTCEPT_TRACE_STEPS", "0") == "1"
             # => before train
             self.before_train()
             self.logger.info(">>>>>>>>>>>>>>>> Start Training >>>>>>>>>>>>>>>>")
@@ -166,22 +177,78 @@ class Trainer(TrainerBase):
                 self.data_iterator = enumerate(self.train_loader)
                 self.before_epoch()
                 # => run_epoch
-                for (
-                    self.comm_info["iter"],
-                    self.comm_info["input_dict"],
-                ) in self.data_iterator:
+                while True:
+                    if trace_steps:
+                        print(
+                            "[train-trace] "
+                            f"rank={comm.get_rank()} epoch={self.epoch} "
+                            "before_next",
+                            flush=True,
+                        )
+                    iter_start = time.monotonic()
+                    try:
+                        (
+                            self.comm_info["iter"],
+                            self.comm_info["input_dict"],
+                        ) = next(self.data_iterator)
+                    except StopIteration:
+                        break
+                    if trace_steps:
+                        print(
+                            "[train-trace] "
+                            f"rank={comm.get_rank()} epoch={self.epoch} "
+                            f"iter={self.comm_info['iter']} after_next "
+                            f"dt={time.monotonic() - iter_start:.3f}s",
+                            flush=True,
+                        )
                     # => before_step
                     self.before_step()
+                    if trace_steps:
+                        print(
+                            "[train-trace] "
+                            f"rank={comm.get_rank()} epoch={self.epoch} "
+                            f"iter={self.comm_info['iter']} before_run_step",
+                            flush=True,
+                        )
                     # => run_step
                     self.run_step()
+                    if trace_steps:
+                        print(
+                            "[train-trace] "
+                            f"rank={comm.get_rank()} epoch={self.epoch} "
+                            f"iter={self.comm_info['iter']} after_run_step",
+                            flush=True,
+                        )
                     # => after_step
                     self.after_step()
+                    if trace_steps:
+                        print(
+                            "[train-trace] "
+                            f"rank={comm.get_rank()} epoch={self.epoch} "
+                            f"iter={self.comm_info['iter']} after_step",
+                            flush=True,
+                        )
+                    max_train_iter = getattr(
+                        self.cfg, "max_train_iter_per_epoch", None
+                    )
+                    if max_train_iter and self.comm_info["iter"] + 1 >= max_train_iter:
+                        self.logger.info(
+                            "Stop epoch early at "
+                            f"max_train_iter_per_epoch={max_train_iter}"
+                        )
+                        break
                 # => after epoch
                 self.after_epoch()
             # => after train
             self.after_train()
 
     def run_step(self):
+        trace_steps = os.environ.get("POINTCEPT_TRACE_STEPS", "0") == "1"
+        trace_prefix = (
+            "[train-trace] "
+            f"rank={comm.get_rank()} epoch={self.epoch} "
+            f"iter={self.comm_info.get('iter', -1)}"
+        )
         if version.parse(torch.__version__) >= version.parse("2.4"):
             auto_cast = partial(torch.amp.autocast, device_type="cuda")
         else:
@@ -189,15 +256,22 @@ class Trainer(TrainerBase):
             auto_cast = torch.cuda.amp.autocast
 
         input_dict = self.comm_info["input_dict"]
+        if trace_steps:
+            print(f"{trace_prefix} run_step_before_cuda", flush=True)
         for key in input_dict.keys():
             if isinstance(input_dict[key], torch.Tensor):
                 input_dict[key] = input_dict[key].cuda(non_blocking=True)
+        if trace_steps:
+            torch.cuda.synchronize()
+            print(f"{trace_prefix} run_step_after_cuda", flush=True)
 
         # Only clear gradients on first accumulation step
         if self._gradient_accumulation_counter == 0:
             self.optimizer.zero_grad()
 
         # Forward pass
+        if trace_steps:
+            print(f"{trace_prefix} run_step_before_forward", flush=True)
         with auto_cast(
             enabled=self.cfg.enable_amp, dtype=AMP_DTYPE[self.cfg.amp_dtype]
         ):
@@ -205,16 +279,26 @@ class Trainer(TrainerBase):
             loss = (
                 output_dict["loss"] / self.cfg.gradient_accumulation_steps
             )  # scale loss
+        if trace_steps:
+            torch.cuda.synchronize()
+            print(f"{trace_prefix} run_step_after_forward", flush=True)
 
         # Backward pass
+        if trace_steps:
+            print(f"{trace_prefix} run_step_before_backward", flush=True)
         if self.cfg.enable_amp:
             self.scaler.scale(loss).backward()
         else:
             loss.backward()
+        if trace_steps:
+            torch.cuda.synchronize()
+            print(f"{trace_prefix} run_step_after_backward", flush=True)
         self._gradient_accumulation_counter += 1
 
         # Perform optimizer step only when enough gradients have accumulated
         if self._gradient_accumulation_counter >= self.cfg.gradient_accumulation_steps:
+            if trace_steps:
+                print(f"{trace_prefix} run_step_before_optimizer", flush=True)
             if self.cfg.enable_amp:
                 self.scaler.unscale_(self.optimizer)
                 if self.cfg.clip_grad is not None:
@@ -239,6 +323,9 @@ class Trainer(TrainerBase):
 
             # Reset grad accumulation counter
             self._gradient_accumulation_counter = 0
+            if trace_steps:
+                torch.cuda.synchronize()
+                print(f"{trace_prefix} run_step_after_optimizer", flush=True)
 
         if self.cfg.empty_cache:
             torch.cuda.empty_cache()

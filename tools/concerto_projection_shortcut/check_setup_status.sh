@@ -23,7 +23,10 @@ count_incomplete() {
   find "${root}" -type f -name '*.incomplete' 2>/dev/null | wc -l
 }
 
-echo "[env] conda env: ${CONDA_ENV_NAME}"
+echo "[env] venv: ${VENV_DIR}"
+echo "[env] python: ${PYTHON_BIN}"
+echo "[env] python module: ${PYTHON_MODULE}"
+echo "[env] cuda module: ${CUDA_MODULE}"
 echo "[env] HF_HOME: ${HF_HOME}"
 echo "[env] HF_HUB_CACHE: ${HF_HUB_CACHE}"
 echo "[env] HF_XET_CACHE: ${HF_XET_CACHE}"
@@ -48,11 +51,13 @@ else
   echo "[info] ARKitScenes is not fully prepared yet"
 fi
 
-if [ -d "${SCANNET_EXTRACT_DIR}/splits" ] || [ -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
+if [ -d "${SCANNET_EXTRACT_DIR}/train" ] && [ -d "${SCANNET_EXTRACT_DIR}/val" ]; then
+  echo "[ready] ScanNet appears prepared"
+elif [ -d "${SCANNET_EXTRACT_DIR}/splits" ] || [ -d "${SCANNET_EXTRACT_DIR}/scannet/splits" ]; then
   echo "[ready] ScanNet appears prepared"
 else
   echo "[info] ScanNet is not fully prepared yet"
 fi
 
 echo "[proc] active setup processes:"
-pgrep -af 'setup_arkit_full_assets.sh|setup_downstream_assets.sh|tar --skip-old-files -xzf' || true
+pgrep -af 'setup_arkit_full_assets.sh|setup_downstream_assets.sh|create_venv_abciq.sh|tar --skip-old-files -xzf' || true

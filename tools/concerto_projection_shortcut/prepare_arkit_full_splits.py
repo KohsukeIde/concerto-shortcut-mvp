@@ -22,7 +22,7 @@ def main() -> int:
     pointcept_data_root = Path(
         os.environ.get(
             "POINTCEPT_DATA_ROOT",
-            "/mnt/urashima/users/minesawa/pointcept_data",
+            str(Path(__file__).resolve().parents[2] / "data"),
         )
     )
     parser = argparse.ArgumentParser(
@@ -34,7 +34,7 @@ def main() -> int:
         default=Path(
             os.environ.get(
                 "ARKIT_FULL_SOURCE_ROOT",
-                str(pointcept_data_root / "arkitscenes" / "arkitscenes"),
+                str(pointcept_data_root / "arkitscenes"),
             )
         ),
     )
@@ -44,7 +44,7 @@ def main() -> int:
         default=Path(
             os.environ.get(
                 "ARKIT_FULL_META_ROOT",
-                str(pointcept_data_root / "arkitscenes" / "arkitscenes_absmeta"),
+                str(pointcept_data_root / "arkitscenes_absmeta"),
             )
         ),
     )

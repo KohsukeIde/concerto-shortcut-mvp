@@ -9,6 +9,7 @@ Please cite our work if you use any part of the code.
 """
 
 import functools
+import os
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -41,13 +42,14 @@ def get_local_rank() -> int:
     Returns:
         The rank of the current process within the local (per-machine) process group.
     """
+    if "LOCAL_RANK" in os.environ:
+        return int(os.environ["LOCAL_RANK"])
     if not dist.is_available():
         return 0
     if not dist.is_initialized():
         return 0
-    assert (
-        _LOCAL_PROCESS_GROUP is not None
-    ), "Local process group is not created! Please use launch() to spawn processes!"
+    if _LOCAL_PROCESS_GROUP is None:
+        return torch.cuda.current_device() if torch.cuda.is_available() else 0
     return dist.get_rank(group=_LOCAL_PROCESS_GROUP)
 
 
@@ -61,6 +63,10 @@ def get_local_size() -> int:
         return 1
     if not dist.is_initialized():
         return 1
+    if "LOCAL_WORLD_SIZE" in os.environ:
+        return int(os.environ["LOCAL_WORLD_SIZE"])
+    if _LOCAL_PROCESS_GROUP is None:
+        return torch.cuda.device_count() if torch.cuda.is_available() else 1
     return dist.get_world_size(group=_LOCAL_PROCESS_GROUP)
 
 
@@ -196,3 +202,8 @@ def reduce_dict(input_dict, average=True):
             values /= world_size
         reduced_dict = {k: v for k, v in zip(names, values)}
     return reduced_dict
+
+
+def set_local_process_group(group):
+    global _LOCAL_PROCESS_GROUP
+    _LOCAL_PROCESS_GROUP = group

@@ -8,6 +8,7 @@ exp
 weights
 data
 *log*
+!pointcept/utils/logger.py
 !tools/concerto_projection_shortcut/summarize_logs.py
 !tools/concerto_projection_shortcut/summarize_semseg_logs.py
 outputs/
@@ -15,4 +16,6 @@ outputs/
 .idea
 */.DS_Store
 **/*.out
+*.o[0-9]*
+*.e[0-9]*
 Dockerfile

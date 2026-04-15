@@ -264,7 +264,7 @@ def main() -> int:
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("/mnt/urashima/users/minesawa/concerto_shortcut_runs/projres_v1/priors"),
+        default=None,
     )
     parser.add_argument("--max-train-batches", type=int, default=4096)
     parser.add_argument("--max-val-batches", type=int, default=512)
@@ -284,6 +284,8 @@ def main() -> int:
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     repo_root = args.repo_root.resolve()
+    if args.output_root is None:
+        args.output_root = repo_root / "data" / "runs" / "projres_v1" / "priors"
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
@@ -293,7 +295,7 @@ def main() -> int:
     model = build_model(cfg.model).cuda()
     weight_path = args.weight
     if weight_path is None:
-        default_weight = repo_root / "weights" / "concerto" / "concerto_base_origin.pth"
+        default_weight = repo_root / "data" / "weights" / "concerto" / "concerto_base_origin.pth"
         weight_path = default_weight if default_weight.exists() else None
     if weight_path is not None:
         load_weight(model, weight_path.resolve())

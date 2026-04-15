@@ -15,8 +15,9 @@ investigation.
     is explained by the coordinate shortcut.
 - Current action:
   - Move from critique to a minimal fix: coordinate projection residualization.
-  - The local `projres_v1` chain was stopped during prior cache extraction.
-  - Resume on the H200 server from the handoff document.
+  - Prepare and run the `projres_v1` chain on ABCI-Q with `venv`, not conda.
+  - Data and run outputs should live under repo-local `data/`.
+  - Existing ScanNet is used through a symlink, not copied.
 
 ## Documentation Policy
 
@@ -115,13 +116,94 @@ Current interpretation:
 - The old blocker was the multi-GPU `mp.spawn` path on this machine.
 - For current work, use the validation-only ScanNet linear config to avoid the
   full-test disk failure path.
-- On the H200 server, run the `projres_v1` fix chain described in
+- On ABCI-Q, run the `projres_v1` fix chain described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- No `projres_v1` job is currently running on this machine.
+- No `projres_v1` job is currently running.
+
+Latest ABCI-Q launcher status, 2026-04-15 JST:
+- The useful hint from
+  `/groups/qgah50055/ide/3d-sans-3dscans/Pointcept/configs/*.sh` is that
+  ABCI-Q Pointcept jobs use `python -m torch.distributed.run` with
+  `tools/ddp_train.py`, not the original Pointcept `mp.spawn` launcher.
+- This checkout now has the same launcher option:
+  - [tools/ddp_train.py](../../tools/ddp_train.py)
+  - [scripts/train.sh](../../scripts/train.sh) with
+    `POINTCEPT_TRAIN_LAUNCHER=torchrun`
+- A lightweight batch-only diagnostic was added for the current blocker:
+  - [debug_arkit_ddp_batches.py](./debug_arkit_ddp_batches.py)
+  - [submit_debug_arkit_ddp_batches_abciq_qf.sh](./submit_debug_arkit_ddp_batches_abciq_qf.sh)
+- Batch-only diagnostic job `132175.qjcm` completed successfully:
+  - walltime: `00:01:12`
+  - result: `Exit_status = 0`
+  - log: `data/logs/abciq/debug_arkit_ddp_batches_132175.qjcm.log`
+  - result: all ranks completed 16 batches through DataLoader, CUDA copy, and
+    all-reduce. The current stall is therefore not reproduced by DataLoader
+    alone.
+- `POINTCEPT_TRACE_STEPS=1` now prints per-rank full-training step trace around
+  `next(DataLoader)`, `run_step`, `forward`, `backward`, and `after_step`.
+- Full-training trace results:
+  - `132176.qjcm`: 8-step `alpha=0.05` run completed with `Exit_status = 0`
+    in `00:02:09`.
+  - `132177.qjcm`: 16-step run was stopped at `00:03:48`; all ranks fetched
+    the 9th batch (`iter=8`) and reached `before_run_step`, but no rank reached
+    `after_run_step`.
+  - `132178.qjcm`: run-step trace was stopped at `00:02:54`; all ranks reached
+    `run_step_before_forward` on the first iteration, rank 2 reached
+    `run_step_after_forward` / `run_step_before_backward`, and ranks 0/1/3 did
+    not return from forward. Treat the current blocker as a model-forward rank
+    divergence/hang, not a pure DataLoader issue.
+- On ABCI-Q H100, the current stable single-node setting is:
+  - `POINTCEPT_TRAIN_LAUNCHER=torchrun`
+  - `NCCL_STABLE_MODE=1`
+  - `NCCL_P2P_DISABLE=1`
+  - `NCCL_NET_GDR_LEVEL=0`
+  - `CONCERTO_NUM_WORKER=1`
+- A 4-GPU torchrun smoke with this stable NCCL mode completed:
+  - job: `132168.qjcm`
+  - walltime: `00:01:44`
+  - result: `Exit_status = 0`
+  - log: `data/logs/abciq/projres_v1_smoke_qf1_132168.qjcm.log`
+  - output:
+    `data/runs/projres_v1/summaries/h10016-qf4gtorchstable/selected_smoke.json`
+- Longer ARKit smoke is still unstable and must be fixed before launching full
+  continuation:
+  - `132169.qjcm`: 64-step attempt stalled after partial progress.
+  - `132170.qjcm`: 64-step attempt stalled before the first train batch.
+  - `132172.qjcm`: 64-step attempt stalled after 8 train steps.
+  - `132173.qjcm`: 8-step two-alpha attempt completed `alpha=0.05`, then
+    `alpha=0.10` stalled before the first train batch and the job was stopped
+    at short walltime.
+- Current smoke-only selected alpha artifact:
+  - `data/runs/projres_v1/summaries/h10016-qf1/selected_smoke.json`
+  - selected `alpha=0.05`
+  - This is only an 8-step smoke artifact; it is not a go signal for the
+    5-epoch continuation.
+- Do not launch the 4-node / 16-GPU continuation yet. First isolate the ARKit
+  model-forward rank divergence on single-node 4-GPU.
+
+Completed setup jobs:
+- ABCI-Q env setup job `132080.qjcm` completed with `Exit_status = 0`.
+  - log: `data/logs/abciq/env_setup_132080.qjcm.log`
+  - result: created `data/venv/pointcept-concerto-py311-cu124` and validated
+    `torch`, `torch_scatter`, `spconv`, `pointops`, `transformers`, and
+    `pointcept` imports on an `rt_QF=1` GPU allocation.
+- ABCI-Q dry-run job `132093.qjcm` completed successfully.
+  - log: `data/logs/abciq/projres_v1_132093.qjcm.log`
+  - result: GPU preflight passed and `DRY_RUN=1` printed only repo-local
+    `data/...` paths.
+
+Prepared data:
+- `data/scannet` is a symlink to
+  `/groups/qgah50055/ide/3d-sans-3dscans/scannet`.
+- ARKit compressed snapshot exists under `data/concerto_arkitscenes_compressed`.
+- ARKit extracted data exists under `data/arkitscenes`.
+- ARKit absolute metadata exists under `data/arkitscenes_absmeta`.
+- DINOv2 cache exists under `data/hf-home`.
+- Concerto official weights exist under `data/weights/concerto`.
 
 Stopped job:
 - The local `projres_v1` chain was stopped during Stage 1 prior cache
@@ -132,11 +214,12 @@ Stopped job:
   checkpoint, stress csv, or ScanNet linear result was produced.
 
 Expected next stage:
-1. Move to the H200 server.
-2. Run setup checks and chain dry-run.
-3. Launch `run_projres_v1_chain.sh` with `GPU_IDS_CSV=0,1,2,3,4,5,6,7`.
-4. Report the selected prior, selected alpha, stress result, and ScanNet linear
-   gate result.
+1. Treat the prior stage as complete and resume from
+   `data/runs/projres_v1/priors/selected_prior.json`.
+2. Diagnose the model-forward rank divergence inside the Concerto forward path.
+3. Keep `torchrun` and stable NCCL mode enabled for ABCI-Q jobs.
+4. Run the 5-epoch continuation only after a longer 4-GPU smoke is repeatable.
+5. Report the selected alpha, stress result, and ScanNet linear gate result.
 
 ## Useful Logs And Artifacts
 
@@ -163,10 +246,11 @@ Expected next stage:
 
 ## Immediate Next Step
 
-1. Copy or mount repo, dataset, and weights on the H200 server.
-2. Run:
-   - `bash tools/concerto_projection_shortcut/check_setup_status.sh`
-   - `python tools/concerto_projection_shortcut/preflight.py --check-data --check-batch --check-forward --config pretrain-concerto-v1m1-0-arkit-full-continue`
-3. Dry-run:
-   - `EXP_MIRROR_ROOT=/mnt/urashima/users/minesawa/concerto_shortcut_runs/projres_v1 GPU_IDS_CSV=0,1,2,3,4,5,6,7 DRY_RUN=1 bash tools/concerto_projection_shortcut/run_projres_v1_chain.sh`
-4. Launch the H200 chain using [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
+1. Add a narrower forward trace around Concerto student/teacher forward,
+   DINO/image branches, and projection residual loss.
+2. Keep monitoring through ABCI-compatible `qstat`:
+   - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
+3. Watch for:
+   - `data/runs/projres_v1/priors/selected_prior.json`
+   - `data/runs/projres_v1/summaries/selected_smoke.json`
+   - stress CSV and ScanNet linear gate JSON under `data/runs/projres_v1/summaries`

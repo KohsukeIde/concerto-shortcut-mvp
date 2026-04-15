@@ -7,9 +7,9 @@ REPO_ROOT="$(pwd -P)"
 source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 
 DATASET_NAME="${DATASET_NAME:-concerto}"
-OFFICIAL_WEIGHT="${OFFICIAL_WEIGHT:-${REPO_ROOT}/weights/concerto/concerto_base_origin.pth}"
-EXP_MIRROR_ROOT="${EXP_MIRROR_ROOT:-/mnt/urashima/users/minesawa/concerto_shortcut_runs/projres_v1}"
-GPU_IDS_CSV="${GPU_IDS_CSV:-2,3}"
+OFFICIAL_WEIGHT="${OFFICIAL_WEIGHT:-${WEIGHT_DIR}/concerto_base_origin.pth}"
+EXP_MIRROR_ROOT="${EXP_MIRROR_ROOT:-${POINTCEPT_DATA_ROOT}/runs/projres_v1}"
+GPU_IDS_CSV="${GPU_IDS_CSV:-0,1,2,3}"
 DRY_RUN="${DRY_RUN:-0}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 
@@ -23,6 +23,19 @@ PRIOR_ROOT="${PRIOR_ROOT:-${EXP_MIRROR_ROOT}/priors}"
 SUMMARY_ROOT="${SUMMARY_ROOT:-${EXP_MIRROR_ROOT}/summaries}"
 LOG_DIR="${LOG_DIR:-${EXP_MIRROR_ROOT}/logs}"
 ALPHAS_CSV="${ALPHAS_CSV:-0.05,0.10}"
+EXP_TAG="${EXP_TAG:-}"
+MULTINODE_TRAIN="${MULTINODE_TRAIN:-0}"
+MULTINODE_TRAIN_LAUNCHER="${MULTINODE_TRAIN_LAUNCHER:-${REPO_ROOT}/tools/concerto_projection_shortcut/run_pointcept_train_multinode_pbsdsh.sh}"
+SMOKE_GPU_IDS_CSV="${SMOKE_GPU_IDS_CSV:-${GPU_IDS_CSV}}"
+SMOKE_ALL_GPUS="${SMOKE_ALL_GPUS:-0}"
+STOP_AFTER_SMOKE="${STOP_AFTER_SMOKE:-0}"
+if [ -z "${SMOKE_PARALLEL+x}" ]; then
+  if [ "${MULTINODE_TRAIN}" = "1" ]; then
+    SMOKE_PARALLEL=0
+  else
+    SMOKE_PARALLEL=1
+  fi
+fi
 
 MAX_TRAIN_BATCHES="${MAX_TRAIN_BATCHES:-4096}"
 MAX_VAL_BATCHES="${MAX_VAL_BATCHES:-512}"
@@ -78,6 +91,7 @@ run_train() {
   local weight_path="$3"
   local devices="$4"
   local alpha="${5:-0.05}"
+  local local_only="${6:-0}"
   local gpu_count
   gpu_count="$(device_count "${devices}")"
   ensure_mirror_exp "${exp_name}"
@@ -87,6 +101,18 @@ run_train() {
   fi
   echo "[$(timestamp)] train: gpus=${devices} alpha=${alpha} config=${config_name} exp=${exp_name}"
   if [ "${DRY_RUN}" = "1" ]; then
+    return 0
+  fi
+  if [ "${MULTINODE_TRAIN}" = "1" ] && [ "${local_only}" != "1" ]; then
+    DATASET_NAME="${DATASET_NAME}" \
+      CONFIG_NAME="${config_name}" \
+      EXP_NAME="${exp_name}" \
+      WEIGHT_PATH="${weight_path}" \
+      TRAIN_GPU_IDS_CSV="${devices}" \
+      COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
+      COORD_PROJECTION_ALPHA="${alpha}" \
+      LOG_DIR="${LOG_DIR}" \
+      bash "${MULTINODE_TRAIN_LAUNCHER}"
     return 0
   fi
   CUDA_VISIBLE_DEVICES="${devices}" \
@@ -107,12 +133,44 @@ alpha_tag() {
   printf '%s' "${alpha}" | tr -d '.'
 }
 
+arkit_exp_name() {
+  local tag="$1"
+  local phase="$2"
+  printf 'arkit-full-projres-v1a-alpha%s%s-%s\n' "${tag}" "${EXP_TAG}" "${phase}"
+}
+
+scannet_exp_name() {
+  local tag="$1"
+  local phase="$2"
+  printf 'scannet-proxy-projres-v1a-alpha%s%s-%s\n' "${tag}" "${EXP_TAG}" "${phase}"
+}
+
 first_gpu() {
   awk -F',' '{print $1}' <<< "${GPU_IDS_CSV}"
 }
 
 second_gpu() {
   awk -F',' '{print ($2 == "" ? $1 : $2)}' <<< "${GPU_IDS_CSV}"
+}
+
+smoke_devices_for_idx() {
+  local idx="$1"
+  if [ "${MULTINODE_TRAIN}" = "1" ] || [ "${SMOKE_ALL_GPUS}" = "1" ]; then
+    printf '%s\n' "${SMOKE_GPU_IDS_CSV}"
+  else
+    printf '%s\n' "${GPU_IDS[$((idx % ${#GPU_IDS[@]}))]}"
+  fi
+}
+
+run_smoke_one() {
+  local idx="$1"
+  local alpha="$2"
+  local exp_name="$3"
+  local smoke_json="$4"
+  local devices
+  devices="$(smoke_devices_for_idx "${idx}")"
+  run_train "${SMOKE_CONFIG}" "${exp_name}" "${OFFICIAL_WEIGHT}" "${devices}" "${alpha}"
+  write_smoke_summary "${exp_name}" "${alpha}" "${smoke_json}"
 }
 
 write_smoke_summary() {
@@ -270,7 +328,10 @@ print(json.dumps(payload, sort_keys=True))
 PY
 }
 
-ensure_conda_active
+if [ "${SKIP_VENV_ACTIVATE:-0}" != "1" ]; then
+  ensure_venv_active
+  PYTHON_BIN="${PYTHON_BIN:-$(command -v python)}"
+fi
 mkdir -p "${PRIOR_ROOT}" "${SUMMARY_ROOT}" "${LOG_DIR}"
 
 if [ ! -f "${OFFICIAL_WEIGHT}" ]; then
@@ -288,6 +349,9 @@ fi
 echo "[$(timestamp)] start projres v1 chain"
 echo "exp_mirror_root=${EXP_MIRROR_ROOT}"
 echo "gpu_ids=${GPU_IDS_CSV}"
+echo "exp_tag=${EXP_TAG}"
+echo "multinode_train=${MULTINODE_TRAIN}"
+echo "smoke_parallel=${SMOKE_PARALLEL}"
 
 if [ "${RUN_PREFLIGHT}" = "1" ]; then
   run_cmd env CUDA_VISIBLE_DEVICES="$(first_gpu)" "${PYTHON_BIN}" \
@@ -333,15 +397,15 @@ if [ "${DRY_RUN}" = "1" ]; then
   for idx in "${!ALPHAS[@]}"; do
     alpha="${ALPHAS[$idx]}"
     tag="$(alpha_tag "${alpha}")"
-    exp_name="arkit-full-projres-v1a-alpha${tag}-smoke"
-    gpu="${GPU_IDS[$((idx % ${#GPU_IDS[@]}))]}"
-    run_train "${SMOKE_CONFIG}" "${exp_name}" "${OFFICIAL_WEIGHT}" "${gpu}" "${alpha}"
+    exp_name="$(arkit_exp_name "${tag}" smoke)"
+    run_train "${SMOKE_CONFIG}" "${exp_name}" "${OFFICIAL_WEIGHT}" "$(smoke_devices_for_idx "${idx}")" "${alpha}"
   done
   first_alpha="${ALPHAS[0]}"
   first_tag="$(alpha_tag "${first_alpha}")"
-  run_train "${CONTINUE_CONFIG}" "arkit-full-projres-v1a-alpha${first_tag}-continue" "${OFFICIAL_WEIGHT}" "${GPU_IDS_CSV}" "${first_alpha}"
-  echo "[dry-run] would run stress for arkit-full-projres-v1a-alpha${first_tag}-continue"
-  run_train "${LINEAR_CONFIG}" "scannet-proxy-projres-v1a-alpha${first_tag}-lin" "${EXP_MIRROR_ROOT}/exp/arkit-full-projres-v1a-alpha${first_tag}-continue/model/model_last.pth" "$(first_gpu)" "${first_alpha}"
+  continue_exp="$(arkit_exp_name "${first_tag}" continue)"
+  run_train "${CONTINUE_CONFIG}" "${continue_exp}" "${OFFICIAL_WEIGHT}" "${GPU_IDS_CSV}" "${first_alpha}"
+  echo "[dry-run] would run stress for ${continue_exp}"
+  run_train "${LINEAR_CONFIG}" "$(scannet_exp_name "${first_tag}" lin)" "${EXP_MIRROR_ROOT}/exp/${continue_exp}/model/model_last.pth" "$(first_gpu)" "${first_alpha}" 1
   echo "[dry-run] would run fine-tune only if linear gate is strong_go"
   echo "[$(timestamp)] dry-run complete"
   exit 0
@@ -361,19 +425,22 @@ PIDS=()
 for idx in "${!ALPHAS[@]}"; do
   alpha="${ALPHAS[$idx]}"
   tag="$(alpha_tag "${alpha}")"
-  exp_name="arkit-full-projres-v1a-alpha${tag}-smoke"
+  exp_name="$(arkit_exp_name "${tag}" smoke)"
   smoke_json="${SUMMARY_ROOT}/${exp_name}.json"
   SMOKE_JSONS+=("${smoke_json}")
-  gpu="${GPU_IDS[$((idx % ${#GPU_IDS[@]}))]}"
   if [ -f "${smoke_json}" ]; then
     echo "[$(timestamp)] skip smoke summary: ${smoke_json}"
     continue
   fi
-  (
-    run_train "${SMOKE_CONFIG}" "${exp_name}" "${OFFICIAL_WEIGHT}" "${gpu}" "${alpha}"
-    write_smoke_summary "${exp_name}" "${alpha}" "${smoke_json}"
-  ) > "${LOG_DIR}/${exp_name}.launch.log" 2>&1 &
-  PIDS+=("$!")
+  if [ "${SMOKE_PARALLEL}" = "1" ]; then
+    (
+      run_smoke_one "${idx}" "${alpha}" "${exp_name}" "${smoke_json}"
+    ) > "${LOG_DIR}/${exp_name}.launch.log" 2>&1 &
+    PIDS+=("$!")
+  else
+    run_smoke_one "${idx}" "${alpha}" "${exp_name}" "${smoke_json}" \
+      > "${LOG_DIR}/${exp_name}.launch.log" 2>&1
+  fi
 done
 if [ "${#PIDS[@]}" -gt 0 ]; then
   for pid in "${PIDS[@]}"; do
@@ -383,6 +450,10 @@ fi
 
 SELECTED_SMOKE_JSON="${SUMMARY_ROOT}/selected_smoke.json"
 select_smoke "${SELECTED_SMOKE_JSON}" "${SMOKE_JSONS[@]}"
+if [ "${STOP_AFTER_SMOKE}" = "1" ]; then
+  echo "[$(timestamp)] stop after smoke: ${SELECTED_SMOKE_JSON}"
+  exit 0
+fi
 SELECTED_ALPHA="$("${PYTHON_BIN}" - "${SELECTED_SMOKE_JSON}" <<'PY'
 import json
 import sys
@@ -394,7 +465,7 @@ PY
 SELECTED_TAG="$(alpha_tag "${SELECTED_ALPHA}")"
 echo "selected_alpha=${SELECTED_ALPHA}"
 
-CONTINUE_EXP="arkit-full-projres-v1a-alpha${SELECTED_TAG}-continue"
+CONTINUE_EXP="$(arkit_exp_name "${SELECTED_TAG}" continue)"
 run_train "${CONTINUE_CONFIG}" "${CONTINUE_EXP}" "${OFFICIAL_WEIGHT}" "${GPU_IDS_CSV}" "${SELECTED_ALPHA}"
 CONTINUE_CKPT="$(checkpoint_path "${CONTINUE_EXP}")"
 
@@ -414,8 +485,8 @@ else
   echo "[$(timestamp)] skip stress: ${STRESS_CSV}"
 fi
 
-LINEAR_EXP="scannet-proxy-projres-v1a-alpha${SELECTED_TAG}-lin"
-run_train "${LINEAR_CONFIG}" "${LINEAR_EXP}" "${CONTINUE_CKPT}" "$(first_gpu)" "${SELECTED_ALPHA}"
+LINEAR_EXP="$(scannet_exp_name "${SELECTED_TAG}" lin)"
+run_train "${LINEAR_CONFIG}" "${LINEAR_EXP}" "${CONTINUE_CKPT}" "$(first_gpu)" "${SELECTED_ALPHA}" 1
 LINEAR_GATE_JSON="${SUMMARY_ROOT}/${LINEAR_EXP}_gate.json"
 write_linear_gate "${LINEAR_EXP}" "${LINEAR_GATE_JSON}"
 
@@ -426,8 +497,8 @@ from pathlib import Path
 raise SystemExit(0 if json.loads(Path(sys.argv[1]).read_text())["strong_go"] else 1)
 PY
 then
-  FT_EXP="scannet-proxy-projres-v1a-alpha${SELECTED_TAG}-ft"
-  run_train "${FT_CONFIG}" "${FT_EXP}" "${CONTINUE_CKPT}" "$(first_gpu)" "${SELECTED_ALPHA}"
+  FT_EXP="$(scannet_exp_name "${SELECTED_TAG}" ft)"
+  run_train "${FT_CONFIG}" "${FT_EXP}" "${CONTINUE_CKPT}" "$(first_gpu)" "${SELECTED_ALPHA}" 1
 else
   echo "[$(timestamp)] stop before fine-tune: linear gate is not strong_go"
 fi

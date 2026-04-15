@@ -1,6 +1,6 @@
 # ScanNet Linear Proxy Results
 
-Updated: 2026-04-14 16:10 JST
+Updated: 2026-04-16 01:05 JST
 
 ## Runs
 
@@ -10,6 +10,7 @@ Updated: 2026-04-14 16:10 JST
 | scannet-proxy-coord-mlp-continue-lin | finished | 0.4064 | 0.5503 | 0.7422 | 0.3829 | 11 |
 | scannet-proxy-no-enc2d-continue-lin | finished | 0.4010 | 0.5440 | 0.7391 | 0.3765 | 11 |
 | scannet-proxy-no-enc2d-renorm-continue-lin | finished validation / full test aborted (disk) | 0.3794 | 0.5510 | 0.7282 | 0.3802 | 10 |
+| scannet-proxy-projres-v1a-alpha005-h10032-qf32-lin | finished no-go | 0.3627 | 0.5083 | 0.7247 | 0.3627 | 10 |
 
 ## Readout
 
@@ -23,3 +24,7 @@ Updated: 2026-04-14 16:10 JST
 - Relative to `no-enc2d-renorm`, `coord_mlp` is +0.0270 final/last-eval mIoU and +0.0027 training-side best mIoU.
 - Relative to `no-enc2d-renorm`, `coord_mlp` recovers 27.0% of the gap to original by final/last eval mIoU, but only 3.6% by training-side best mIoU.
 - Current interpretation: downstream shortcut relevance remains measurable, but the renormalized control further weakens the stronger "mostly coordinate shortcut" claim in this continuation proxy. The objective-level shortcut claim is unchanged.
+- ProjRes v1a with `alpha=0.05` did not clear the replacement gate:
+  - final/last eval mIoU is 0.1167 below original continuation.
+  - training-side best mIoU is 0.0925 below original continuation.
+  - it is also 0.0167 / 0.0175 below `no-enc2d-renorm` on last / best mIoU.

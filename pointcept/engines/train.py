@@ -272,12 +272,17 @@ class Trainer(TrainerBase):
         # Forward pass
         if trace_steps:
             print(f"{trace_prefix} run_step_before_forward", flush=True)
+        os.environ["POINTCEPT_CURRENT_TRAIN_ITER"] = str(
+            self.comm_info.get("iter", -1)
+        )
+        os.environ["POINTCEPT_CURRENT_TRAIN_EPOCH"] = str(self.epoch)
         with auto_cast(
             enabled=self.cfg.enable_amp, dtype=AMP_DTYPE[self.cfg.amp_dtype]
         ):
             output_dict = self.model(input_dict)
+            loss_for_backward = output_dict.pop("loss_for_backward", output_dict["loss"])
             loss = (
-                output_dict["loss"] / self.cfg.gradient_accumulation_steps
+                loss_for_backward / self.cfg.gradient_accumulation_steps
             )  # scale loss
         if trace_steps:
             torch.cuda.synchronize()

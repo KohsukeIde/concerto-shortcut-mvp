@@ -509,14 +509,28 @@ class Concerto(PointModel):
             return f"{tuple(value.shape)}:{value.dtype}"
         return str(value)
 
+    @staticmethod
+    def _trace_forward_env_enabled():
+        if os.environ.get("POINTCEPT_TRACE_FORWARD", "0") != "1":
+            return False
+        trace_iter = os.environ.get("POINTCEPT_TRACE_FORWARD_ITER")
+        current_iter = os.environ.get("POINTCEPT_CURRENT_TRAIN_ITER")
+        if trace_iter is not None and current_iter != trace_iter:
+            return False
+        return True
+
     def _trace_forward_enabled(self):
-        return os.environ.get("POINTCEPT_TRACE_FORWARD", "0") == "1"
+        return self._trace_forward_env_enabled()
 
     def _trace_forward(self, tag, sync=False, **payload):
         if not self._trace_forward_enabled():
             return
         detail = " ".join(f"{key}={value}" for key, value in payload.items())
-        prefix = f"[concerto-trace] rank={self._trace_rank()} {tag}"
+        prefix = f"[concerto-trace] rank={self._trace_rank()}"
+        current_iter = os.environ.get("POINTCEPT_CURRENT_TRAIN_ITER")
+        if current_iter is not None:
+            prefix = f"{prefix} iter={current_iter}"
+        prefix = f"{prefix} {tag}"
         if detail:
             prefix = f"{prefix} {detail}"
         if sync and torch.cuda.is_available():
@@ -525,6 +539,35 @@ class Concerto(PointModel):
             print(f"{prefix} after_sync", flush=True)
         else:
             print(prefix, flush=True)
+
+    def _distributed_result_key_order(self, result_dict):
+        key_order = ["loss"]
+        if self.mask_loss_weight > 0:
+            key_order.append("mask_loss")
+        if self.roll_mask_loss_weight > 0:
+            key_order.append("roll_mask_loss")
+        if self.unmask_loss_weight > 0:
+            key_order.append("unmask_loss")
+        if self.enc2d_loss_weight > 0:
+            key_order.append("enc2d_loss")
+            if self.shortcut_probe["mode"] == "coord_projection_residual":
+                key_order.extend(
+                    [
+                        "coord_residual_enc2d_loss",
+                        "coord_alignment_loss",
+                        "coord_target_energy",
+                        "coord_pred_energy",
+                        "coord_residual_norm",
+                    ]
+                )
+            if self.shortcut_probe["mode"] == "coord_residual_target":
+                key_order.append("coord_prior_loss")
+
+        extras = [key for key in result_dict.keys() if key not in key_order]
+        return key_order + extras
+
+    def _zero_result_scalar(self, result_dict):
+        return result_dict["loss"].detach().new_zeros(())
 
     def _apply_global_target_permutation(
         self, teacher_target, mode_name="global_target_permutation"
@@ -872,12 +915,14 @@ class Concerto(PointModel):
 
     @staticmethod
     def sinkhorn_knopp(feat, temp, num_iter=3):
-        trace = os.environ.get("POINTCEPT_TRACE_FORWARD", "0") == "1"
+        trace = Concerto._trace_forward_env_enabled()
         rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+        trace_iter = os.environ.get("POINTCEPT_CURRENT_TRAIN_ITER")
         if trace:
             print(
                 "[concerto-trace] "
-                f"rank={rank} sinkhorn_start feat={tuple(feat.shape)} temp={temp}",
+                f"rank={rank} iter={trace_iter} sinkhorn_start "
+                f"feat={tuple(feat.shape)} temp={temp}",
                 flush=True,
             )
         feat = feat.float()
@@ -885,14 +930,15 @@ class Concerto(PointModel):
         if trace:
             print(
                 "[concerto-trace] "
-                f"rank={rank} sinkhorn_before_all_gather cols={q.shape[1]}",
+                f"rank={rank} iter={trace_iter} "
+                f"sinkhorn_before_all_gather cols={q.shape[1]}",
                 flush=True,
             )
         n = sum(all_gather(q.shape[1]))  # number of samples to assign
         if trace:
             print(
-                "[concerto-trace] rank="
-                f"{rank} sinkhorn_after_all_gather n={n}",
+                "[concerto-trace] "
+                f"rank={rank} iter={trace_iter} sinkhorn_after_all_gather n={n}",
                 flush=True,
             )
         k = q.shape[0]  # number of prototypes
@@ -902,13 +948,15 @@ class Concerto(PointModel):
         if get_world_size() > 1:
             if trace:
                 print(
-                    f"[concerto-trace] rank={rank} sinkhorn_before_sum_all_reduce",
+                    "[concerto-trace] "
+                    f"rank={rank} iter={trace_iter} sinkhorn_before_sum_all_reduce",
                     flush=True,
                 )
             dist.all_reduce(sum_q)
             if trace:
                 print(
-                    f"[concerto-trace] rank={rank} sinkhorn_after_sum_all_reduce",
+                    "[concerto-trace] "
+                    f"rank={rank} iter={trace_iter} sinkhorn_after_sum_all_reduce",
                     flush=True,
                 )
         q = q / sum_q
@@ -920,14 +968,16 @@ class Concerto(PointModel):
                 if trace:
                     print(
                         "[concerto-trace] "
-                        f"rank={rank} sinkhorn_iter={i} before_row_all_reduce",
+                        f"rank={rank} iter={trace_iter} "
+                        f"sinkhorn_iter={i} before_row_all_reduce",
                         flush=True,
                     )
                 dist.all_reduce(q_row_sum)
                 if trace:
                     print(
                         "[concerto-trace] "
-                        f"rank={rank} sinkhorn_iter={i} after_row_all_reduce",
+                        f"rank={rank} iter={trace_iter} "
+                        f"sinkhorn_iter={i} after_row_all_reduce",
                         flush=True,
                     )
             q = q / q_row_sum / k
@@ -937,7 +987,10 @@ class Concerto(PointModel):
 
         q *= n  # the columns must sum to 1 so that Q is an assignment
         if trace:
-            print(f"[concerto-trace] rank={rank} sinkhorn_end", flush=True)
+            print(
+                f"[concerto-trace] rank={rank} iter={trace_iter} sinkhorn_end",
+                flush=True,
+            )
         return q.t()
 
     def generate_mask(self, coord, offset):
@@ -1685,12 +1738,20 @@ class Concerto(PointModel):
                 result_dict["enc2d_loss"] = zero_loss
                 result_dict["loss"].append(zero_loss)
         result_dict["loss"] = sum(result_dict["loss"])
+        loss_for_backward = result_dict["loss"]
         self._trace_forward("forward_loss_sum_end", sync=True)
 
         if get_world_size() > 1:
-            for loss_id, loss in result_dict.items():
+            for loss_id in self._distributed_result_key_order(result_dict):
+                if loss_id not in result_dict:
+                    result_dict[loss_id] = self._zero_result_scalar(result_dict)
+                    self._trace_forward("final_all_reduce_missing", loss_id=loss_id)
+                loss = result_dict[loss_id]
                 self._trace_forward("final_all_reduce_start", loss_id=loss_id)
-                dist.all_reduce(loss, op=dist.ReduceOp.AVG)
+                reduced_loss = loss.detach().clone()
+                dist.all_reduce(reduced_loss, op=dist.ReduceOp.AVG)
+                result_dict[loss_id] = reduced_loss
                 self._trace_forward("final_all_reduce_end", sync=True, loss_id=loss_id)
+            result_dict["loss_for_backward"] = loss_for_backward
         self._trace_forward("forward_end", sync=True)
         return result_dict

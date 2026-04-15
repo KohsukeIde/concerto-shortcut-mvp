@@ -14,10 +14,11 @@ investigation.
   - It does not support the stronger claim that most of Concerto downstream gain
     is explained by the coordinate shortcut.
 - Current action:
-  - Move from critique to a minimal fix: coordinate projection residualization.
-  - Prepare and run the `projres_v1` chain on ABCI-Q with `venv`, not conda.
+  - The minimal fix attempt, `projres_v1a`, has completed its ABCI-Q gate.
+  - Result: no-go on ScanNet linear.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
+  - Do not run the optional fine-tune for this arm without a new hypothesis.
 
 ## Documentation Policy
 
@@ -35,11 +36,13 @@ investigation.
    - [results_arkit_full_stress_corrected.md](./results_arkit_full_stress_corrected.md)
 3. ScanNet continuation proxy:
    - [results_scannet_proxy_lin.md](./results_scannet_proxy_lin.md)
-4. Coordinate projection residual handoff:
+4. ProjRes v1 gate:
+   - [results_projres_v1.md](./results_projres_v1.md)
+5. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-5. Short narrative summary:
+6. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-6. Reproduction / runner overview:
+7. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## ARKit Full Causal Branch
@@ -122,9 +125,54 @@ Current interpretation:
 ## Active Downstream Jobs
 
 Running now:
-- No `projres_v1` job is currently running.
+- No `projres_v1` ABCI-Q job is currently running.
 
-Latest ABCI-Q launcher status, 2026-04-15 JST:
+Recently completed:
+- `132196.qjcm`: ProjRes v1 5-epoch continuation on ABCI-Q `rt_QF=8`
+  (8 nodes / 32 H100 GPUs), `Exit_status=0`, walltime `00:39:37`.
+  - experiment:
+    `arkit-full-projres-v1a-alpha005-h10032-qf32-continue`
+  - checkpoint:
+    `exp/concerto/arkit-full-projres-v1a-alpha005-h10032-qf32-continue/model/model_last.pth`
+  - main log:
+    `data/logs/abciq/projres_v1_continue_qf16_132196.qjcm.log`
+  - rank logs:
+    `data/runs/projres_v1/logs/multinode/132196.qjcm_arkit-full-projres-v1a-alpha005-h10032-qf32-continue_20260415_233258/logs/`
+- `132198.qjcm`: ProjRes v1 follow-up on ABCI-Q `rt_QF=1`,
+  `Exit_status=0`, walltime `00:50:06`.
+  - script:
+    `tools/concerto_projection_shortcut/submit_projres_v1_followup_abciq_qf.sh`
+  - log:
+    `data/logs/abciq/projres_v1_followup_132198.qjcm.log`
+  - outputs:
+    `data/runs/projres_v1/summaries/h10032-qf32/arkit-full-projres-v1a-alpha005-h10032-qf32-continue_stress.csv`
+    and
+    `data/runs/projres_v1/summaries/h10032-qf32/scannet-proxy-projres-v1a-alpha005-h10032-qf32-lin_gate.json`
+
+ProjRes v1 gate result:
+- selected alpha: `0.05`
+- final continuation metrics:
+  - `loss=8.0899`, `enc2d_loss=8.0655`,
+    `coord_residual_enc2d_loss=6.3309`,
+    `coord_alignment_loss=0.0200`,
+    `coord_pred_energy=0.0020`, `coord_residual_norm=0.7308`
+- ARKit stress, enc2d loss mean over 20 batches:
+  - clean `8.022868`
+  - local surface destroy `9.115467`
+  - z flip `8.941781`
+  - xy swap `8.022733`
+  - roll 90 x `9.353544`
+- ScanNet linear gate:
+  - ProjRes v1a last/best mIoU: `0.3627` / `0.3627`
+  - original continuation last/best mIoU: `0.4794` / `0.4552`
+  - no-enc2d-renorm last/best mIoU: `0.3794` / `0.3802`
+  - deltas vs original: `-0.1167` last, `-0.0925` best
+  - deltas vs no-enc2d-renorm: `-0.0167` last, `-0.0175` best
+  - decision: `strong_go=false`, `linear_gate_not_strong_go`
+- Summary:
+  - [results_projres_v1.md](./results_projres_v1.md)
+
+Latest ABCI-Q launcher status, 2026-04-16 JST:
 - The useful hint from
   `/groups/qgah50055/ide/3d-sans-3dscans/Pointcept/configs/*.sh` is that
   ABCI-Q Pointcept jobs use `python -m torch.distributed.run` with
@@ -133,7 +181,7 @@ Latest ABCI-Q launcher status, 2026-04-15 JST:
   - [tools/ddp_train.py](../../tools/ddp_train.py)
   - [scripts/train.sh](../../scripts/train.sh) with
     `POINTCEPT_TRAIN_LAUNCHER=torchrun`
-- A lightweight batch-only diagnostic was added for the current blocker:
+- A lightweight batch-only diagnostic was added for ARKit DDP checks:
   - [debug_arkit_ddp_batches.py](./debug_arkit_ddp_batches.py)
   - [submit_debug_arkit_ddp_batches_abciq_qf.sh](./submit_debug_arkit_ddp_batches_abciq_qf.sh)
 - Batch-only diagnostic job `132175.qjcm` completed successfully:
@@ -154,8 +202,8 @@ Latest ABCI-Q launcher status, 2026-04-15 JST:
   - `132178.qjcm`: run-step trace was stopped at `00:02:54`; all ranks reached
     `run_step_before_forward` on the first iteration, rank 2 reached
     `run_step_after_forward` / `run_step_before_backward`, and ranks 0/1/3 did
-    not return from forward. Treat the current blocker as a model-forward rank
-    divergence/hang, not a pure DataLoader issue.
+    not return from forward. This established the pre-fix failure as a
+    model-forward rank divergence/hang, not a pure DataLoader issue.
 - On ABCI-Q H100, the current stable single-node setting is:
   - `POINTCEPT_TRAIN_LAUNCHER=torchrun`
   - `NCCL_STABLE_MODE=1`
@@ -169,21 +217,35 @@ Latest ABCI-Q launcher status, 2026-04-15 JST:
   - log: `data/logs/abciq/projres_v1_smoke_qf1_132168.qjcm.log`
   - output:
     `data/runs/projres_v1/summaries/h10016-qf4gtorchstable/selected_smoke.json`
-- Longer ARKit smoke is still unstable and must be fixed before launching full
-  continuation:
-  - `132169.qjcm`: 64-step attempt stalled after partial progress.
-  - `132170.qjcm`: 64-step attempt stalled before the first train batch.
-  - `132172.qjcm`: 64-step attempt stalled after 8 train steps.
-  - `132173.qjcm`: 8-step two-alpha attempt completed `alpha=0.05`, then
-    `alpha=0.10` stalled before the first train batch and the job was stopped
-    at short walltime.
+- The earlier longer-smoke stalls were isolated to the distributed metric
+  reduction at the end of `Concerto.forward`, not to DataLoader, optimizer, or
+  H100 memory pressure:
+  - pre-fix stopped/stalled jobs: `132169`, `132170`, `132172`, `132173`,
+    `132184`, `132185`, `132187`, `132189`
+  - symptom: one rank returned from forward while other ranks were still inside
+    forward-side collectives.
+  - fix: use a fixed distributed result key order, fill missing coord metric
+    scalars with zero, reduce detached metric copies, and keep
+    `loss_for_backward` separate from reduced logging metrics.
+  - this also removes the PyTorch `c10d::allreduce_` autograd warning.
+- Post-fix 4-GPU H100 smoke results:
+  - `132190.qjcm`: 16 steps, flash on, `Exit_status = 0`, walltime `00:02:27`.
+  - `132191.qjcm`: 64 steps, flash on, `Exit_status = 0`, walltime `00:04:57`.
+  - `132192.qjcm`: 16 steps after detached metric reduction, `Exit_status = 0`,
+    walltime `00:02:24`, no `c10d::allreduce_` autograd warning.
+- Multi-node continuation validation:
+  - `132194.qjcm`: 4 nodes / 16 H100 GPUs, short continuation validation,
+    `Exit_status = 0`, walltime `00:03:58`.
+  - `132195.qjcm`: 8 nodes / 32 H100 GPUs, 1 epoch x 16-step continuation
+    validation, `Exit_status = 0`, walltime `00:02:08`.
+  - The H100 continuation config now accepts `CONCERTO_EPOCH` for bounded
+    validation jobs, and the `pbsdsh` launcher explicitly forwards
+    `CONCERTO_*` env values to every node.
 - Current smoke-only selected alpha artifact:
-  - `data/runs/projres_v1/summaries/h10016-qf1/selected_smoke.json`
+  - `data/runs/projres_v1/summaries/h10016-qf1fixed64/selected_smoke.json`
   - selected `alpha=0.05`
-  - This is only an 8-step smoke artifact; it is not a go signal for the
-    5-epoch continuation.
-- Do not launch the 4-node / 16-GPU continuation yet. First isolate the ARKit
-  model-forward rank divergence on single-node 4-GPU.
+  - This is a 64-step single-node smoke artifact. It has now been validated by
+    short 4-node and 8-node continuation runs.
 
 Completed setup jobs:
 - ABCI-Q env setup job `132080.qjcm` completed with `Exit_status = 0`.
@@ -214,12 +276,13 @@ Stopped job:
   checkpoint, stress csv, or ScanNet linear result was produced.
 
 Expected next stage:
-1. Treat the prior stage as complete and resume from
-   `data/runs/projres_v1/priors/selected_prior.json`.
-2. Diagnose the model-forward rank divergence inside the Concerto forward path.
-3. Keep `torchrun` and stable NCCL mode enabled for ABCI-Q jobs.
-4. Run the 5-epoch continuation only after a longer 4-GPU smoke is repeatable.
-5. Report the selected alpha, stress result, and ScanNet linear gate result.
+1. Treat the `projres_v1a` alpha `0.05` gate as complete and no-go.
+2. Do not launch the optional fine-tune from this arm under the current gate.
+3. If continuing this direction, analyze why the residual target preserved
+   `coord_residual_norm` but underperformed on ScanNet linear, then design a
+   new arm before spending more ABCI-Q points.
+4. Keep the fixed DDP metric reduction and ABCI-Q `torchrun` path; those
+   infrastructure changes are validated.
 
 ## Useful Logs And Artifacts
 
@@ -235,6 +298,8 @@ Expected next stage:
   - historical path: `tools/concerto_projection_shortcut/logs/scannet_gate.launch.log`
 - ScanNet gate success log:
   - historical path: `exp/concerto/scannet-proxy-official-origin-lin/train.log`
+- ProjRes v1 result:
+  - [results_projres_v1.md](./results_projres_v1.md)
 - ScanNet gate result note:
   - [results_scannet_gate_2026-04-09.md](./results_scannet_gate_2026-04-09.md)
 - ScanNet safe smoke log:

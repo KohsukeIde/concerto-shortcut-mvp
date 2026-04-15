@@ -49,7 +49,7 @@ GPU_IDS_CSV="${GPU_IDS_CSV:-0,1,2,3}"
 EXP_MIRROR_ROOT="${EXP_MIRROR_ROOT:-${POINTCEPT_DATA_ROOT}/runs/projres_v1}"
 LOG_DIR="${LOG_DIR:-${EXP_MIRROR_ROOT}/logs}"
 EXP_TAG="${EXP_TAG:--h10016-qf16}"
-SMOKE_SUMMARY_ROOT="${SMOKE_SUMMARY_ROOT:-${EXP_MIRROR_ROOT}/summaries/h10016-qf1}"
+SMOKE_SUMMARY_ROOT="${SMOKE_SUMMARY_ROOT:-${EXP_MIRROR_ROOT}/summaries/h10016-qf1fixed64}"
 SELECTED_SMOKE_JSON="${SELECTED_SMOKE_JSON:-${SMOKE_SUMMARY_ROOT}/selected_smoke.json}"
 SELECTED_PRIOR_JSON="${SELECTED_PRIOR_JSON:-${EXP_MIRROR_ROOT}/priors/selected_prior.json}"
 CONTINUE_CONFIG="${CONTINUE_CONFIG:-pretrain-concerto-v1m1-0-arkit-full-projres-v1a-continue-h10016}"
@@ -57,7 +57,11 @@ OFFICIAL_WEIGHT="${OFFICIAL_WEIGHT:-${WEIGHT_DIR}/concerto_base_origin.pth}"
 CONCERTO_GLOBAL_BATCH_SIZE="${CONCERTO_GLOBAL_BATCH_SIZE:-32}"
 CONCERTO_GRAD_ACCUM="${CONCERTO_GRAD_ACCUM:-3}"
 CONCERTO_NUM_WORKER="${CONCERTO_NUM_WORKER:-64}"
-unset CONCERTO_MAX_TRAIN_ITER
+CONCERTO_MAX_TRAIN_ITER="${CONCERTO_MAX_TRAIN_ITER:-0}"
+CONCERTO_EPOCH="${CONCERTO_EPOCH:-0}"
+CONCERTO_ENABLE_FLASH="${CONCERTO_ENABLE_FLASH:-1}"
+PREFLIGHT_CONCERTO_GLOBAL_BATCH_SIZE="${PREFLIGHT_CONCERTO_GLOBAL_BATCH_SIZE:-1}"
+PREFLIGHT_CONCERTO_NUM_WORKER="${PREFLIGHT_CONCERTO_NUM_WORKER:-0}"
 
 if [ ! -f "${SELECTED_SMOKE_JSON}" ]; then
   echo "[error] missing selected smoke: ${SELECTED_SMOKE_JSON}" >&2
@@ -94,9 +98,10 @@ CONTINUE_EXP="${CONTINUE_EXP:-arkit-full-projres-v1a-alpha${SELECTED_TAG}${EXP_T
 
 export DATASET_NAME GPU_IDS_CSV EXP_MIRROR_ROOT LOG_DIR CONTINUE_CONFIG OFFICIAL_WEIGHT
 export CONCERTO_GLOBAL_BATCH_SIZE CONCERTO_GRAD_ACCUM CONCERTO_NUM_WORKER
+export CONCERTO_MAX_TRAIN_ITER CONCERTO_EPOCH CONCERTO_ENABLE_FLASH
 export COORD_PRIOR_PATH COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}"
 
-echo "=== ABCI-Q ProjRes v1 H100x16 continuation ==="
+echo "=== ABCI-Q ProjRes v1 H100 multi-node continuation ==="
 echo "date=$(date -Is)"
 echo "host=$(hostname)"
 echo "pbs_jobid=${PBS_JOBID:-}"
@@ -114,6 +119,11 @@ echo "continue_exp=${CONTINUE_EXP}"
 echo "concerto_global_batch_size=${CONCERTO_GLOBAL_BATCH_SIZE}"
 echo "concerto_grad_accum=${CONCERTO_GRAD_ACCUM}"
 echo "concerto_num_worker=${CONCERTO_NUM_WORKER}"
+echo "concerto_max_train_iter=${CONCERTO_MAX_TRAIN_ITER}"
+echo "concerto_epoch=${CONCERTO_EPOCH}"
+echo "concerto_enable_flash=${CONCERTO_ENABLE_FLASH}"
+echo "preflight_concerto_global_batch_size=${PREFLIGHT_CONCERTO_GLOBAL_BATCH_SIZE}"
+echo "preflight_concerto_num_worker=${PREFLIGHT_CONCERTO_NUM_WORKER}"
 echo "pointcept_train_launcher=${POINTCEPT_TRAIN_LAUNCHER}"
 echo "nccl_stable_mode=${NCCL_STABLE_MODE}"
 echo "nccl_p2p_disable=${NCCL_P2P_DISABLE:-}"
@@ -138,6 +148,8 @@ if [ -f "${EXP_LINK}/model/model_last.pth" ]; then
 fi
 
 env CUDA_VISIBLE_DEVICES="$(awk -F',' '{print $1}' <<< "${GPU_IDS_CSV}")" \
+  CONCERTO_GLOBAL_BATCH_SIZE="${PREFLIGHT_CONCERTO_GLOBAL_BATCH_SIZE}" \
+  CONCERTO_NUM_WORKER="${PREFLIGHT_CONCERTO_NUM_WORKER}" \
   COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
   COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" \
   "${PYTHON_BIN}" tools/concerto_projection_shortcut/preflight.py \
@@ -154,5 +166,5 @@ COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" \
 LOG_DIR="${LOG_DIR}" \
 bash tools/concerto_projection_shortcut/run_pointcept_train_multinode_pbsdsh.sh
 
-echo "[done] projres v1 H100x16 continuation completed"
+echo "[done] projres v1 H100 multi-node continuation completed"
 echo "[log] ${LOG_PATH}"

@@ -78,6 +78,24 @@ class OnlineCluster(nn.Module):
         return similarity
 
 
+class CoordPrior(nn.Module):
+    def __init__(self, arch, target_dim, hidden_channels=512):
+        super().__init__()
+        if arch == "linear":
+            self.net = nn.Linear(3, target_dim)
+        elif arch == "mlp":
+            self.net = nn.Sequential(
+                nn.Linear(3, hidden_channels),
+                nn.GELU(),
+                nn.Linear(hidden_channels, target_dim),
+            )
+        else:
+            raise ValueError(f"Unsupported coord prior arch: {arch}")
+
+    def forward(self, coord):
+        return self.net(coord)
+
+
 @MODELS.register_module("Concerto-v1m1")
 class Concerto(PointModel):
     def __init__(
@@ -291,6 +309,8 @@ class Concerto(PointModel):
             "coord_normalize": True,
             "coord_probe_hidden_channels": 512,
             "coord_prior_loss_weight": 1.0,
+            "coord_prior_path": None,
+            "coord_projection_alpha": 0.05,
             "shuffle_correspondence": False,
         }
         if shortcut_probe is not None:
@@ -321,9 +341,55 @@ class Concerto(PointModel):
             )
             self.coord_prior.apply(OnlineCluster._init_weights)
 
+        if (
+            self.enc2d_loss_weight > 0
+            and self.shortcut_probe["mode"] == "coord_projection_residual"
+        ):
+            self.coord_projection_prior = self._load_coord_projection_prior(
+                self.shortcut_probe["coord_prior_path"]
+            )
+
         if self.shortcut_probe["freeze_student_backbone"]:
             self.student.backbone.requires_grad_(False)
         self._shortcut_probe_logs = set()
+
+    def _load_coord_projection_prior(self, prior_path):
+        if not prior_path:
+            raise ValueError(
+                "shortcut_probe.coord_prior_path is required for "
+                "mode='coord_projection_residual'."
+            )
+        checkpoint = torch.load(prior_path, map_location="cpu", weights_only=False)
+        metadata = checkpoint.get("metadata", {})
+        arch = checkpoint.get("arch", metadata.get("arch", "linear"))
+        target_dim = int(
+            checkpoint.get("target_dim", metadata.get("target_dim", self._num_channels))
+        )
+        if target_dim != self._num_channels:
+            raise ValueError(
+                f"Coord prior target_dim={target_dim} does not match "
+                f"enc2d target dim={self._num_channels}."
+            )
+        hidden_channels = int(
+            checkpoint.get(
+                "hidden_channels",
+                metadata.get(
+                    "hidden_channels",
+                    self.shortcut_probe["coord_probe_hidden_channels"],
+                ),
+            )
+        )
+        model = CoordPrior(arch, target_dim, hidden_channels=hidden_channels)
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        cleaned = {}
+        for key, value in state_dict.items():
+            if key.startswith("module."):
+                key = key[7:]
+            cleaned[key] = value
+        model.load_state_dict(cleaned, strict=True)
+        model.eval()
+        model.requires_grad_(False)
+        return model
 
     def _apply_shortcut_probe_to_inputs(self, data_dict):
         if self.shortcut_probe is None:
@@ -540,6 +606,128 @@ class Concerto(PointModel):
             outputs = self.enc2d_model(x)
             features = outputs.last_hidden_state[:, -self.patch_h * self.patch_w :, :]
         return features
+
+    @torch.no_grad()
+    def extract_enc2d_coord_target(self, data_dict, max_rows=None):
+        global_point = Point(
+            feat=data_dict["global_feat"],
+            coord=data_dict["global_coord"],
+            origin_coord=data_dict["global_origin_coord"],
+            offset=data_dict["global_offset"],
+            grid_size=data_dict["grid_size"][0],
+        )
+        global_mask, _ = self.generate_mask(global_point.coord, global_point.offset)
+        mask_global_coord = global_point.coord.clone().detach()
+        if self.mask_jitter is not None:
+            mask_global_coord[global_mask] += torch.clip(
+                torch.randn_like(mask_global_coord[global_mask]).mul(
+                    self.mask_jitter
+                ),
+                max=self.mask_jitter * 2,
+            )
+        mask_global_point = Point(
+            feat=data_dict["global_feat"],
+            coord=mask_global_coord,
+            origin_coord=data_dict["global_origin_coord"],
+            mask=global_mask,
+            offset=data_dict["global_offset"],
+            grid_size=data_dict["grid_size"][0],
+        )
+        mask_global_point_ = self.student.backbone(mask_global_point)
+        mask_global_point_ = self.up_cast(mask_global_point_)
+        mask_global_point_enc2d = self.up_cast(
+            mask_global_point_,
+            upcast_level=self.enc2d_upcast_level - self.up_cast_level,
+        )
+        to_feature = self.pool_corr(
+            mask_global_point_enc2d, data_dict["global_correspondence"]
+        )
+        data_dict_global_offset = torch.cat(
+            [torch.tensor([0]).cuda(), to_feature["offset"]], dim=0
+        )
+        enc2d_count = (
+            data_dict_global_offset[
+                1 : len(data_dict_global_offset) : self.num_global_view
+            ]
+            - data_dict_global_offset[
+                0 : len(data_dict_global_offset) - 1 : self.num_global_view
+            ]
+        )
+        enc2d_offset = torch.cat(
+            [torch.tensor([0]).cuda(), torch.cumsum(enc2d_count, dim=0)]
+        )
+        enc2d_mask = torch.cat(
+            [
+                torch.arange(0, c, device=enc2d_count.device)
+                + data_dict_global_offset[i * self.num_global_view]
+                for i, c in enumerate(enc2d_count)
+            ],
+            dim=0,
+        )
+        batch_points_3d = offset2batch(enc2d_offset[1:])
+        pooled_coord = to_feature["coord"][enc2d_mask]
+        if self.shortcut_probe["coord_normalize"]:
+            pooled_coord = self._scene_normalize_coord(pooled_coord, enc2d_offset[1:])
+        correspondence = to_feature["correspondence"][enc2d_mask]
+        v0 = correspondence.shape[1]
+        mask = torch.any(correspondence != torch.tensor([-1, -1]).cuda(), dim=2)
+        valid_index = torch.where(mask)
+        if valid_index[0].numel() == 0:
+            return dict(
+                coord=pooled_coord.new_zeros((0, 3)),
+                target=pooled_coord.new_zeros((0, self._num_channels)),
+            )
+
+        bincount_img_num = data_dict["img_num"]
+        offset_img_num = bincount2offset(bincount_img_num)
+        total_img_num = offset_img_num[-1]
+        if total_img_num <= 0:
+            return dict(
+                coord=pooled_coord.new_zeros((0, 3)),
+                target=pooled_coord.new_zeros((0, self._num_channels)),
+            )
+
+        feature2d = self.ENC2D_forward(data_dict["images"])
+        feature2d = feature2d.contiguous().view(-1, feature2d.shape[-1])
+        offset_img_num = torch.cat([torch.tensor([0]).cuda(), offset_img_num])[:-1]
+        batch_index = batch_points_3d[valid_index[0]]
+        batch_img_num = offset_img_num[batch_index]
+        feature_coord_mask = pooled_coord[valid_index[0]]
+        feature_index = torch.cat(
+            [
+                batch_img_num.unsqueeze(-1),
+                valid_index[1].unsqueeze(-1),
+                correspondence[valid_index],
+            ],
+            dim=-1,
+        ).long()
+        feature_index = (
+            feature_index[:, 0] * self.patch_h * self.patch_w
+            + feature_index[:, 1] * self.patch_h * self.patch_w
+            + feature_index[:, 2] * self.patch_w
+            + feature_index[:, 3]
+        )
+        feature_index, inverse_index = torch.unique(
+            feature_index.long(), sorted=True, return_inverse=True
+        )
+        feature_coord_mask = torch_scatter.scatter_mean(
+            feature_coord_mask,
+            inverse_index,
+            dim=0,
+            dim_size=feature_index.shape[0],
+        )
+        feature2d_mask = feature2d[feature_index]
+        if self.enc2d_cos_shift:
+            feature2d_mask = feature2d_mask - feature2d_mask.mean(
+                dim=-1, keepdim=True
+            )
+        if max_rows is not None and feature2d_mask.shape[0] > max_rows:
+            choice = torch.randperm(feature2d_mask.shape[0], device=feature2d_mask.device)[
+                :max_rows
+            ]
+            feature_coord_mask = feature_coord_mask[choice]
+            feature2d_mask = feature2d_mask[choice]
+        return dict(coord=feature_coord_mask, target=feature2d_mask)
 
     def before_train(self):
         # make ModelHook after CheckPointLoader
@@ -1104,9 +1292,15 @@ class Concerto(PointModel):
 
                 raw_feature2d_mask = feature2d_mask
                 coord_prior_pred = None
+                coord_projection_pred = None
                 if self.shortcut_probe["mode"] == "coord_residual_target":
                     coord_prior_pred = self.coord_prior(feature_coord_mask)
                     feature2d_mask = raw_feature2d_mask - coord_prior_pred.detach()
+                elif self.shortcut_probe["mode"] == "coord_projection_residual":
+                    with torch.no_grad():
+                        coord_projection_pred = self.coord_projection_prior(
+                            feature_coord_mask
+                        )
 
                 if self.enc2d_cos_shift:
                     feature2d_mask = feature2d_mask - feature2d_mask.mean(
@@ -1122,11 +1316,64 @@ class Concerto(PointModel):
                         coord_prior_pred = coord_prior_pred - coord_prior_pred.mean(
                             dim=-1, keepdim=True
                         )
+                    if coord_projection_pred is not None:
+                        coord_projection_pred = (
+                            coord_projection_pred
+                            - coord_projection_pred.mean(dim=-1, keepdim=True)
+                        )
                 cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
-                loss = (1 - cos(feature2d_mask, feature3d_mask)).mean() * 10
+                coord_alignment_loss = None
+                if coord_projection_pred is not None:
+                    eps = 1e-6
+                    coord_direction = F.normalize(
+                        coord_projection_pred.detach(), dim=1, eps=eps
+                    )
+                    feature2d_for_metrics = feature2d_mask
+                    target_projection = (
+                        (feature2d_for_metrics * coord_direction).sum(
+                            dim=1, keepdim=True
+                        )
+                        * coord_direction
+                    )
+                    pred_projection = (
+                        (feature3d_mask * coord_direction).sum(dim=1, keepdim=True)
+                        * coord_direction
+                    )
+                    feature2d_mask = feature2d_for_metrics - target_projection
+                    coord_alignment_loss = (
+                        cos(feature3d_mask, coord_direction).pow(2).mean() * 10
+                    )
+                    coord_target_energy = (
+                        target_projection.pow(2).sum(dim=1)
+                        / feature2d_for_metrics.pow(2).sum(dim=1).clamp_min(eps)
+                    ).mean()
+                    coord_pred_energy = (
+                        pred_projection.pow(2).sum(dim=1)
+                        / feature3d_mask.pow(2).sum(dim=1).clamp_min(eps)
+                    ).mean()
+                    coord_residual_norm = (
+                        feature2d_mask.norm(dim=1)
+                        / feature2d_for_metrics.norm(dim=1).clamp_min(eps)
+                    ).mean()
+                enc2d_alignment_loss = (
+                    1 - cos(feature2d_mask, feature3d_mask)
+                ).mean() * 10
+                loss = enc2d_alignment_loss
+                if coord_alignment_loss is not None:
+                    loss = (
+                        loss
+                        + self.shortcut_probe["coord_projection_alpha"]
+                        * coord_alignment_loss
+                    )
 
                 result_dict["enc2d_loss"] = loss
                 result_dict["loss"].append(loss * self.enc2d_loss_weight)
+                if coord_projection_pred is not None:
+                    result_dict["coord_residual_enc2d_loss"] = enc2d_alignment_loss
+                    result_dict["coord_alignment_loss"] = coord_alignment_loss
+                    result_dict["coord_target_energy"] = coord_target_energy.detach()
+                    result_dict["coord_pred_energy"] = coord_pred_energy.detach()
+                    result_dict["coord_residual_norm"] = coord_residual_norm.detach()
                 if coord_prior_pred is not None:
                     coord_prior_loss = (1 - cos(raw_feature2d_mask, coord_prior_pred)).mean() * 10
                     result_dict["coord_prior_loss"] = coord_prior_loss
@@ -1141,6 +1388,7 @@ class Concerto(PointModel):
                     feature_coord_mask,
                     feature_batch_index,
                     feature_image_index,
+                    coord_projection_pred,
                     correspondence,
                     feature_index,
                 )

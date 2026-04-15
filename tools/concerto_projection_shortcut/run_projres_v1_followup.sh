@@ -132,6 +132,7 @@ run_stress() {
   env CUDA_VISIBLE_DEVICES="${STRESS_GPU}" \
       COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
       COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" \
+      COORD_PROJECTION_BETA="${SELECTED_BETA}" \
       "${PYTHON_BIN}" tools/concerto_projection_shortcut/eval_enc2d_stress.py \
       --config "${CONTINUE_CONFIG}" \
       --weight "${CONTINUE_CKPT}" \
@@ -198,6 +199,17 @@ mkdir -p "${SUMMARY_ROOT}" "${LOG_DIR}"
 if [ -z "${SELECTED_ALPHA:-}" ]; then
   SELECTED_ALPHA="$(selected_alpha_from_json "${SELECTED_SMOKE_JSON}")"
 fi
+if [ -z "${SELECTED_BETA:-}" ]; then
+  SELECTED_BETA="$("${PYTHON_BIN}" - "${SELECTED_SMOKE_JSON}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+print(payload["selected"].get("beta", "1.0"))
+PY
+)"
+fi
 SELECTED_TAG="${SELECTED_TAG:-$(alpha_tag "${SELECTED_ALPHA}")}"
 CONTINUE_EXP="${CONTINUE_EXP:-arkit-full-projres-v1a-alpha${SELECTED_TAG}${EXP_TAG}-continue}"
 LINEAR_EXP="${LINEAR_EXP:-scannet-proxy-projres-v1a-alpha${SELECTED_TAG}${EXP_TAG}-lin}"
@@ -206,13 +218,14 @@ COORD_PRIOR_PATH="${COORD_PRIOR_PATH:-$(selected_prior_path_from_json "${SELECTE
 STRESS_CSV="${STRESS_CSV:-${SUMMARY_ROOT}/${CONTINUE_EXP}_stress.csv}"
 LINEAR_GATE_JSON="${LINEAR_GATE_JSON:-${SUMMARY_ROOT}/${LINEAR_EXP}_gate.json}"
 
-export COORD_PRIOR_PATH SELECTED_ALPHA
+export COORD_PRIOR_PATH SELECTED_ALPHA SELECTED_BETA COORD_PROJECTION_BETA="${SELECTED_BETA}"
 
 echo "[$(timestamp)] start projres v1 follow-up"
 echo "exp_mirror_root=${EXP_MIRROR_ROOT}"
 echo "summary_root=${SUMMARY_ROOT}"
 echo "log_dir=${LOG_DIR}"
 echo "selected_alpha=${SELECTED_ALPHA}"
+echo "selected_beta=${SELECTED_BETA}"
 echo "coord_prior_path=${COORD_PRIOR_PATH}"
 echo "continue_config=${CONTINUE_CONFIG}"
 echo "continue_exp=${CONTINUE_EXP}"

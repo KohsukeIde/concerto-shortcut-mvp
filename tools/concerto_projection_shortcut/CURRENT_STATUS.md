@@ -14,11 +14,15 @@ investigation.
   - It does not support the stronger claim that most of Concerto downstream gain
     is explained by the coordinate shortcut.
 - Current action:
-  - The minimal fix attempt, `projres_v1a`, has completed its ABCI-Q gate.
-  - Result: no-go on ScanNet linear.
+  - The minimal full-removal fix attempt, `projres_v1a`, completed its ABCI-Q
+    gate and is no-go on ScanNet linear.
+  - The factorized partial-removal follow-up, `projres_v1b`, also completed its
+    ABCI-Q smoke, continuation, stress, and ScanNet linear gates.
+  - Result: v1b improves over v1a and `no-enc2d-renorm`, but is still below the
+    original continuation; no strong-go for fine-tuning.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
-  - Do not run the optional fine-tune for this arm without a new hypothesis.
+  - Do not run the optional fine-tune for v1a/v1b without a new hypothesis.
 
 ## Documentation Policy
 
@@ -119,15 +123,43 @@ Current interpretation:
 - The old blocker was the multi-GPU `mp.spawn` path on this machine.
 - For current work, use the validation-only ScanNet linear config to avoid the
   full-test disk failure path.
-- On ABCI-Q, run the `projres_v1` fix chain described in
+- `projres_v1b` shows that full coordinate removal was too blunt; partial
+  target residualization around `beta=0.75` recovers meaningful downstream
+  performance, but still does not beat original.
+- On ABCI-Q, keep using the validated `torchrun` / `pbsdsh` path described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- No `projres_v1` ABCI-Q job is currently running.
+- No `projres_v1` / `projres_v1b` ABCI-Q job is currently running.
 
 Recently completed:
+- `132208.qjcm`: ProjRes v1b metric sanity on ABCI-Q `rt_QF=1`,
+  `Exit_status=0`.
+  - setting: v1a-equivalent `beta=1.0`, `alpha=0.05`, 16 train steps
+  - result: `coord_projection_loss_check=0.0`
+- `132209.qjcm` to `132219.qjcm`: ProjRes v1b 11-arm smoke matrix on ABCI-Q
+  `rt_QF=1`, all `Exit_status=0`.
+  - summary root:
+    `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
+  - selected top arms:
+    `combo-b075-a001`, `penalty-b000-a002`, `resonly-b075-a000`,
+    `combo-b050-a002`
+- `132220.qjcm` to `132223.qjcm`: ProjRes v1b 5-epoch continuations, each on
+  ABCI-Q `rt_QF=4` (4 nodes / 16 H100 GPUs), all `Exit_status=0`.
+  - concurrent allocation: 16 nodes / 64 H100 GPUs
+  - walltimes: about 47 minutes
+  - checkpoints:
+    `exp/concerto/arkit-full-projres-v1b-combo-b075-a001-h10016x4-qf16-continue/model/model_last.pth`,
+    `exp/concerto/arkit-full-projres-v1b-penalty-b000-a002-h10016x4-qf16-continue/model/model_last.pth`,
+    `exp/concerto/arkit-full-projres-v1b-resonly-b075-a000-h10016x4-qf16-continue/model/model_last.pth`,
+    `exp/concerto/arkit-full-projres-v1b-combo-b050-a002-h10016x4-qf16-continue/model/model_last.pth`
+- `132255.qjcm` to `132258.qjcm`: ProjRes v1b follow-up stress + ScanNet
+  linear gates on ABCI-Q `rt_QF=1`, all `Exit_status=0`.
+  - summary root:
+    `data/runs/projres_v1b/summaries/h10016x4-qf16`
+  - result: no strong-go for all four arms
 - `132196.qjcm`: ProjRes v1 5-epoch continuation on ABCI-Q `rt_QF=8`
   (8 nodes / 32 H100 GPUs), `Exit_status=0`, walltime `00:39:37`.
   - experiment:
@@ -168,6 +200,32 @@ ProjRes v1 gate result:
   - no-enc2d-renorm last/best mIoU: `0.3794` / `0.3802`
   - deltas vs original: `-0.1167` last, `-0.0925` best
   - deltas vs no-enc2d-renorm: `-0.0167` last, `-0.0175` best
+  - decision: `strong_go=false`, `linear_gate_not_strong_go`
+- Summary:
+  - [results_projres_v1.md](./results_projres_v1.md)
+
+ProjRes v1b gate result:
+- best arm: `combo-b075-a001`
+- beta / alpha: `0.75` / `0.01`
+- final continuation metrics:
+  - `loss=7.8700`, `enc2d_loss=7.6640`,
+    `coord_residual_enc2d_loss=7.2912`,
+    `coord_alignment_loss=1.7203`,
+    `coord_removed_energy=0.0734`,
+    `coord_pred_energy=0.1720`, `coord_residual_norm=0.8921`,
+    `coord_projection_loss_check=0.0000`
+- ARKit stress, enc2d loss mean over 20 batches:
+  - clean `7.649344`
+  - local surface destroy `8.862813`
+  - z flip `8.860726`
+  - xy swap `7.673076`
+  - roll 90 x `9.093753`
+- ScanNet linear gate:
+  - best v1b last/best mIoU: `0.4220` / `0.4220`
+  - original continuation last/best mIoU: `0.4794` / `0.4552`
+  - no-enc2d-renorm last/best mIoU: `0.3794` / `0.3802`
+  - deltas vs original: `-0.0574` last, `-0.0332` best
+  - deltas vs no-enc2d-renorm: `+0.0426` last, `+0.0418` best
   - decision: `strong_go=false`, `linear_gate_not_strong_go`
 - Summary:
   - [results_projres_v1.md](./results_projres_v1.md)
@@ -276,12 +334,15 @@ Stopped job:
   checkpoint, stress csv, or ScanNet linear result was produced.
 
 Expected next stage:
-1. Treat the `projres_v1a` alpha `0.05` gate as complete and no-go.
-2. Do not launch the optional fine-tune from this arm under the current gate.
-3. If continuing this direction, analyze why the residual target preserved
-   `coord_residual_norm` but underperformed on ScanNet linear, then design a
-   new arm before spending more ABCI-Q points.
-4. Keep the fixed DDP metric reduction and ABCI-Q `torchrun` path; those
+1. Treat `projres_v1a` and `projres_v1b` as complete for the current gate.
+2. Do not launch the optional fine-tune from either arm under the current gate.
+3. Use the v1b result as the next design constraint: partial target
+   residualization helps, but still removes or distorts useful signal enough to
+   stay below original continuation.
+4. Design a new arm before spending more ABCI-Q points. The most plausible
+   direction is not stronger removal, but a more selective objective around the
+   useful `beta=0.75` region.
+5. Keep the fixed DDP metric reduction and ABCI-Q `torchrun` path; those
    infrastructure changes are validated.
 
 ## Useful Logs And Artifacts
@@ -311,11 +372,11 @@ Expected next stage:
 
 ## Immediate Next Step
 
-1. Add a narrower forward trace around Concerto student/teacher forward,
-   DINO/image branches, and projection residual loss.
-2. Keep monitoring through ABCI-compatible `qstat`:
+1. Decide the next method variant from the v1b result. Current evidence says
+   "partial removal helps, full removal hurts, original still wins."
+2. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-3. Watch for:
-   - `data/runs/projres_v1/priors/selected_prior.json`
-   - `data/runs/projres_v1/summaries/selected_smoke.json`
-   - stress CSV and ScanNet linear gate JSON under `data/runs/projres_v1/summaries`
+3. Keep the current completed artifacts:
+   - `data/runs/projres_v1/summaries/h10032-qf32`
+   - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
+   - `data/runs/projres_v1b/summaries/h10016x4-qf16`

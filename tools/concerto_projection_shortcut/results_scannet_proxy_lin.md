@@ -1,6 +1,6 @@
 # ScanNet Linear Proxy Results
 
-Updated: 2026-04-16 01:05 JST
+Updated: 2026-04-16 04:35 JST
 
 ## Runs
 
@@ -11,6 +11,10 @@ Updated: 2026-04-16 01:05 JST
 | scannet-proxy-no-enc2d-continue-lin | finished | 0.4010 | 0.5440 | 0.7391 | 0.3765 | 11 |
 | scannet-proxy-no-enc2d-renorm-continue-lin | finished validation / full test aborted (disk) | 0.3794 | 0.5510 | 0.7282 | 0.3802 | 10 |
 | scannet-proxy-projres-v1a-alpha005-h10032-qf32-lin | finished no-go | 0.3627 | 0.5083 | 0.7247 | 0.3627 | 10 |
+| scannet-proxy-projres-v1b-combo-b075-a001-h10016x4-qf16-lin | finished no strong-go | 0.4220 | 0.5719 | 0.7469 | 0.4220 | 10 |
+| scannet-proxy-projres-v1b-resonly-b075-a000-h10016x4-qf16-lin | finished no strong-go | 0.4176 | 0.5625 | 0.7444 | 0.4176 | 10 |
+| scannet-proxy-projres-v1b-combo-b050-a002-h10016x4-qf16-lin | finished no strong-go | 0.4129 | 0.5551 | 0.7441 | 0.4129 | 10 |
+| scannet-proxy-projres-v1b-penalty-b000-a002-h10016x4-qf16-lin | finished no strong-go | 0.3887 | 0.5308 | 0.7324 | 0.3907 | 10 |
 
 ## Readout
 
@@ -28,3 +32,14 @@ Updated: 2026-04-16 01:05 JST
   - final/last eval mIoU is 0.1167 below original continuation.
   - training-side best mIoU is 0.0925 below original continuation.
   - it is also 0.0167 / 0.0175 below `no-enc2d-renorm` on last / best mIoU.
+- ProjRes v1b factorized the fix into partial residualization (`beta`) and
+  alignment penalty (`alpha`). The best tested arm is `combo-b075-a001`
+  (`beta=0.75`, `alpha=0.01`):
+  - final/last and best mIoU are both 0.4220.
+  - this is +0.0593 last / +0.0593 best over `projres_v1a`.
+  - this is +0.0426 last / +0.0418 best over `no-enc2d-renorm`.
+  - it is still -0.0574 last / -0.0332 best below original continuation, so
+    the replacement gate remains no strong-go.
+- Among the v1b continuations, target residualization mattered more than the
+  alignment penalty alone. `penalty-b000-a002` reached only 0.3887 / 0.3907
+  mIoU, whereas the `beta=0.75` residualized arms reached 0.4176 to 0.4220.

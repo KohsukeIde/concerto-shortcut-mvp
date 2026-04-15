@@ -111,6 +111,7 @@ run_train() {
       TRAIN_GPU_IDS_CSV="${devices}" \
       COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
       COORD_PROJECTION_ALPHA="${alpha}" \
+      COORD_PROJECTION_BETA="${COORD_PROJECTION_BETA:-1.0}" \
       LOG_DIR="${LOG_DIR}" \
       bash "${MULTINODE_TRAIN_LAUNCHER}"
     return 0
@@ -118,6 +119,7 @@ run_train() {
   CUDA_VISIBLE_DEVICES="${devices}" \
     COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
     COORD_PROJECTION_ALPHA="${alpha}" \
+    COORD_PROJECTION_BETA="${COORD_PROJECTION_BETA:-1.0}" \
     PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
     bash "${REPO_ROOT}/scripts/train.sh" \
       -p "${PYTHON_BIN}" \
@@ -193,8 +195,10 @@ keys = [
     "enc2d_loss",
     "coord_pred_energy",
     "coord_target_energy",
+    "coord_removed_energy",
     "coord_residual_norm",
     "coord_alignment_loss",
+    "coord_projection_loss_check",
 ]
 values = {key: [] for key in keys}
 pattern = re.compile(r"([A-Za-z0-9_]+):\s*([-+0-9.eE]+)")
@@ -214,6 +218,7 @@ def finite(seq):
 
 summary = {
     "alpha": alpha,
+    "beta": float(__import__("os").environ.get("COORD_PROJECTION_BETA", "1.0")),
     "log": str(log_path),
     "pass": False,
     "reason": "missing_metrics",
@@ -236,6 +241,8 @@ if finite(values["loss"]) and finite(values["enc2d_loss"]) and finite(values["co
         summary["reason"] = "coord_pred_energy_not_lower"
     elif enc_last <= 0.01 or enc_last >= 50:
         summary["reason"] = "enc2d_loss_collapse_or_explode"
+    elif values.get("coord_projection_loss_check") and max(values["coord_projection_loss_check"]) > 1e-3:
+        summary["reason"] = "projection_loss_check_failed"
     else:
         summary["pass"] = True
         summary["reason"] = "pass"
@@ -415,6 +422,7 @@ if [ "${RUN_PREFLIGHT}" = "1" ]; then
   run_cmd env CUDA_VISIBLE_DEVICES="$(first_gpu)" \
     COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
     COORD_PROJECTION_ALPHA="${ALPHAS[0]}" \
+    COORD_PROJECTION_BETA="${COORD_PROJECTION_BETA:-1.0}" \
     "${PYTHON_BIN}" tools/concerto_projection_shortcut/preflight.py \
     --check-data --check-batch --check-forward --config "${SMOKE_CONFIG}" \
     --data-root "${ARKIT_FULL_META_ROOT}"
@@ -475,6 +483,7 @@ if [ ! -f "${STRESS_CSV}" ]; then
   env CUDA_VISIBLE_DEVICES="$(first_gpu)" \
       COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
       COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" \
+      COORD_PROJECTION_BETA="${COORD_PROJECTION_BETA:-1.0}" \
       "${PYTHON_BIN}" tools/concerto_projection_shortcut/eval_enc2d_stress.py \
       --config "${CONTINUE_CONFIG}" \
       --weight "${CONTINUE_CKPT}" \

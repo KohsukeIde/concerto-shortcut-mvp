@@ -55,6 +55,7 @@ SUMMARY_ROOT="${SUMMARY_ROOT:-${EXP_MIRROR_ROOT}/summaries/${EXP_TAG#-}}"
 SMOKE_CONFIG="${SMOKE_CONFIG:-pretrain-concerto-v1m1-0-arkit-full-projres-v1a-smoke-h10016}"
 CONTINUE_CONFIG="${CONTINUE_CONFIG:-pretrain-concerto-v1m1-0-arkit-full-projres-v1a-continue-h10016}"
 ALPHAS_CSV="${ALPHAS_CSV:-0.05,0.10}"
+COORD_PROJECTION_BETA="${COORD_PROJECTION_BETA:-1.0}"
 
 # Keep per-GPU batch at 2 on a single rt_QF node, and cap the smoke to a
 # short sanity run so a broken job does not burn a long walltime allocation.
@@ -70,6 +71,7 @@ SMOKE_PARALLEL="${SMOKE_PARALLEL:-0}"
 STOP_AFTER_SMOKE="${STOP_AFTER_SMOKE:-1}"
 
 export GPU_IDS_CSV EXP_MIRROR_ROOT EXP_TAG SUMMARY_ROOT SMOKE_CONFIG CONTINUE_CONFIG ALPHAS_CSV
+export COORD_PROJECTION_BETA
 export CONCERTO_GLOBAL_BATCH_SIZE CONCERTO_GRAD_ACCUM CONCERTO_NUM_WORKER CONCERTO_MAX_TRAIN_ITER CONCERTO_ENABLE_FLASH
 export MULTINODE_TRAIN SMOKE_ALL_GPUS SMOKE_PARALLEL STOP_AFTER_SMOKE NCCL_STABLE_MODE
 
@@ -86,6 +88,7 @@ echo "exp_tag=${EXP_TAG}"
 echo "summary_root=${SUMMARY_ROOT}"
 echo "smoke_config=${SMOKE_CONFIG}"
 echo "alphas=${ALPHAS_CSV}"
+echo "coord_projection_beta=${COORD_PROJECTION_BETA}"
 echo "concerto_global_batch_size=${CONCERTO_GLOBAL_BATCH_SIZE}"
 echo "concerto_grad_accum=${CONCERTO_GRAD_ACCUM}"
 echo "concerto_num_worker=${CONCERTO_NUM_WORKER}"

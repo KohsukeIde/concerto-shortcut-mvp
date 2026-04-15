@@ -16,9 +16,13 @@ residual fix experiment on ABCI-Q.
 - Use existing ScanNet through a symlink instead of copying it.
 - The old `projres_v1` chain was stopped manually during Stage 1 before any
   prior cache or checkpoint was written.
-- The 8-node / 32-H100 continuation and follow-up ScanNet linear gate completed.
-- The current scientific gate result is no-go: ProjRes v1a did not match or
-  beat original Concerto in the ScanNet linear gate.
+- The 8-node / 32-H100 v1a continuation and follow-up ScanNet linear gate
+  completed.
+- The v1b factorized ablation also completed: 11 smoke arms, four 5-epoch
+  continuations, ARKit stress, and ScanNet linear gates.
+- The current scientific gate result is no strong-go: v1b improves over v1a and
+  `no-enc2d-renorm`, but still does not match or beat original Concerto in the
+  ScanNet linear gate.
 
 ## Scientific State
 
@@ -48,13 +52,17 @@ Key ScanNet proxy numbers:
 | no-enc2d continuation | 0.4010 | 0.3765 | finished |
 | no-enc2d-renorm continuation | 0.3794 | 0.3802 | validation finished, full test aborted due disk |
 | projres_v1a alpha 0.05 | 0.3627 | 0.3627 | finished no-go |
+| projres_v1b combo beta 0.75 alpha 0.01 | 0.4220 | 0.4220 | finished no strong-go |
 
 Readout:
 - `coord_mlp` is only slightly above `no-enc2d`.
 - Objective-level shortcut remains strong.
 - Downstream "mostly coordinate shortcut" is not supported by this continuation
   proxy.
-- Next paper route is fix-and-beat-original.
+- v1b readout: full coordinate removal was too blunt; partial removal around
+  `beta=0.75` is materially better, but still below original.
+- Next paper route is still fix-and-beat-original, with a new selective
+  objective rather than the current projection residual objective.
 
 ## Implemented Fix
 
@@ -67,6 +75,10 @@ Implementation:
 Configs:
 - [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1a-continue.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1a-continue.py)
 - [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1a-smoke.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1a-smoke.py)
+- [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue.py)
+- [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke.py)
+- [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue-h10016.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue-h10016.py)
+- [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke-h10016.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke-h10016.py)
 - [configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-proxy-valonly.py](../../configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-proxy-valonly.py)
 
 Prior fitting:
@@ -75,11 +87,24 @@ Prior fitting:
 Main chain:
 - [run_projres_v1_chain.sh](./run_projres_v1_chain.sh)
 
-Loss definition:
+Factorized v1b helpers:
+- [run_projres_v1b_smoke_arm.sh](./run_projres_v1b_smoke_arm.sh)
+- [launch_projres_v1b_smoke_matrix.sh](./launch_projres_v1b_smoke_matrix.sh)
+- [launch_projres_v1b_continue_top.sh](./launch_projres_v1b_continue_top.sh)
+
+v1a loss definition:
 
 ```text
 u = normalize(stopgrad(g(c)))
 t_res = t0 - dot(t0, u) * u
+loss = 1 - cos(y0, t_res) + alpha * cos(y0, u)^2
+```
+
+v1b loss definition:
+
+```text
+u = normalize(stopgrad(g(c)))
+t_res = t0 - beta * dot(t0, u) * u
 loss = 1 - cos(y0, t_res) + alpha * cos(y0, u)^2
 ```
 
@@ -89,6 +114,8 @@ Logged shortcut metrics:
 - `coord_target_energy`
 - `coord_pred_energy`
 - `coord_residual_norm`
+- `coord_removed_energy`
+- `coord_projection_loss_check`
 
 Interpretation of metrics:
 - `coord_target_energy`: how much of the target lies along the learned coordinate
@@ -104,7 +131,8 @@ The chain is auto-stop gated.
 1. Preflight import, batch, and forward.
 2. Fit `linear_xyz_prior` and `mlp_xyz_prior` on ARKit train/val caches.
 3. Select MLP only if validation cosine loss improves by at least `0.02`.
-4. Run 1-epoch smoke for `alpha=0.05` and `alpha=0.10`.
+4. Run 1-epoch smoke for `alpha=0.05` and `alpha=0.10` in the v1a chain, or
+   the factorized `beta` / `alpha` matrix in the v1b chain.
 5. Continue only the best passing smoke arm for 5 epochs.
 6. Run corrected ARKit stress on the selected checkpoint.
 7. Run ScanNet linear validation-only gate.
@@ -124,7 +152,7 @@ Linear gate conditions:
 ## Current Run Status
 
 ABCI-Q status, 2026-04-16 JST:
-- No `projres_v1` job is currently running.
+- No `projres_v1` / `projres_v1b` job is currently running.
 - ABCI-Q `rt_QF=1` exposes 4 H100 80GB GPUs in this checkout's jobs.
 - The prior stage is complete and should be reused:
   - selected prior: `mlp`
@@ -206,6 +234,30 @@ ABCI-Q status, 2026-04-16 JST:
   - ProjRes v1a last/best mIoU: `0.3627` / `0.3627`
   - deltas vs original continuation: `-0.1167` last, `-0.0925` best
   - deltas vs no-enc2d-renorm: `-0.0167` last, `-0.0175` best
+- Completed v1b factorized gate:
+  - metric sanity job: `132208.qjcm`, `Exit_status=0`
+    - setting: `beta=1.0`, `alpha=0.05`, 16 train steps
+    - result: `coord_projection_loss_check=0.0`
+  - smoke matrix: `132209.qjcm` to `132219.qjcm`, all `Exit_status=0`
+    - summary root:
+      `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
+    - all 11 arms passed
+  - selected continuation arms:
+    - `combo-b075-a001`: `beta=0.75`, `alpha=0.01`
+    - `penalty-b000-a002`: `beta=0.0`, `alpha=0.02`
+    - `resonly-b075-a000`: `beta=0.75`, `alpha=0.0`
+    - `combo-b050-a002`: `beta=0.5`, `alpha=0.02`
+  - continuation jobs: `132220.qjcm` to `132223.qjcm`, each `rt_QF=4`,
+    all `Exit_status=0`, walltimes about 47 minutes
+  - follow-up jobs: `132255.qjcm` to `132258.qjcm`, all `Exit_status=0`,
+    walltimes about 50 minutes
+  - summary root:
+    `data/runs/projres_v1b/summaries/h10016x4-qf16`
+  - best v1b arm: `combo-b075-a001`
+  - best v1b last/best mIoU: `0.4220` / `0.4220`
+  - deltas vs original continuation: `-0.0574` last, `-0.0332` best
+  - deltas vs no-enc2d-renorm: `+0.0426` last, `+0.0418` best
+  - result: `strong_go=false`, `linear_gate_not_strong_go`
 - Post-fix validation:
   - `132190.qjcm`: 16-step smoke, flash on, `Exit_status = 0`, walltime
     `00:02:27`.
@@ -223,7 +275,7 @@ ABCI-Q status, 2026-04-16 JST:
   - `132187.qjcm`: flash-off comparison still reproduced the stall.
   - `132189.qjcm`: per-GPU batch 1 comparison still reproduced the stall.
 - Unfinished stages: optional fine-tune only. It should not be launched for
-  this arm because the linear gate is no-go.
+  v1a/v1b because the linear gate is no strong-go.
 
 Completed setup validation:
 - env setup job `132080.qjcm` completed with `Exit_status = 0`
@@ -432,6 +484,26 @@ qsub -W depend=afterok:132196.qjcm -l rt_QF=1 -l walltime=01:30:00 \
   tools/concerto_projection_shortcut/submit_projres_v1_followup_abciq_qf.sh
 ```
 
+Validated v1b factorized-ablation commands:
+
+```bash
+# Metric sanity for v1a-equivalent beta/alpha.
+qsub -l rt_QF=1 -l walltime=00:08:00 \
+  -v 'ARM_NAME=v1a-metric-b100-a005,COORD_PROJECTION_BETA=1.0,COORD_PROJECTION_ALPHA=0.05,CONCERTO_MAX_TRAIN_ITER=16,EXP_TAG=-h10016-qf1-v1b-metric16' \
+  tools/concerto_projection_shortcut/submit_projres_v1b_smoke_arm_abciq_qf.sh
+
+# 11-arm smoke matrix, completed.
+CONCERTO_MAX_TRAIN_ITER=256 WALLTIME=00:35:00 EXP_TAG=-h10016-qf1-v1b-pre256 \
+  tools/concerto_projection_shortcut/launch_projres_v1b_smoke_matrix.sh
+
+# Launch top four continuations. Each job uses rt_QF=4, so this consumes
+# 16 nodes / 64 H100 GPUs when all four are queued together.
+MAX_CONTINUE_ARMS=4 RT_QF=4 WALLTIME=01:35:00 \
+  SMOKE_SUMMARY_ROOT=/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256 \
+  EXP_TAG=-h10016x4-qf16 CONCERTO_EPOCH=5 CONCERTO_MAX_TRAIN_ITER=0 \
+  tools/concerto_projection_shortcut/launch_projres_v1b_continue_top.sh
+```
+
 ## ABCI-Q Expected Runtime
 
 The current chain does not use all 4 GPUs at every stage.
@@ -452,15 +524,21 @@ First target:
   artifacts are explicitly removed
 - keep the multi-node path restricted to continuation unless a later stage gets
   its own bounded validation.
-- the H10032 continuation, ARKit stress, and ScanNet linear gate are complete.
-- the current ProjRes v1a arm is no-go, so do not spend points on the optional
-  fine-tune without a new hypothesis.
+- the H10032 v1a continuation, ARKit stress, and ScanNet linear gate are
+  complete.
+- the v1b smoke matrix, four continuations, ARKit stress, and ScanNet linear
+  gates are complete.
+- the current v1a/v1b arms are no strong-go, so do not spend points on the
+  optional fine-tune without a new hypothesis.
 
 Rough estimate:
 - 64-step 4-GPU smoke: about 5 minutes walltime on `rt_QF=1`
 - 8-node 16-step validation: about 2 minutes walltime
 - 8-node 5-epoch continuation: completed in `00:39:37`
 - follow-up stress + ScanNet linear gate: completed in `00:50:06`
+- v1b 256-step smoke arm on `rt_QF=1`: requested `00:35:00`
+- v1b 4-node / 16-H100 5-epoch continuation: completed in about 47 minutes
+- v1b follow-up stress + ScanNet linear gate: completed in about 50 minutes
 - fuller prior with `MAX_TRAIN_BATCHES=4096`: not needed unless the prior
   artifacts are deleted or invalidated
 
@@ -523,7 +601,7 @@ Minimum report:
 - selected prior type: `linear` or `mlp`
 - prior validation cosine loss
 - `target_energy`, `pred_energy`, `residual_norm`
-- selected alpha
+- selected alpha and beta, when using v1b-style partial projection
 - smoke pass summary
 - 5-epoch continuation final metrics
 - stress CSV summary

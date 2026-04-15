@@ -312,6 +312,7 @@ class Concerto(PointModel):
             "coord_prior_loss_weight": 1.0,
             "coord_prior_path": None,
             "coord_projection_alpha": 0.05,
+            "coord_projection_beta": 1.0,
             "shuffle_correspondence": False,
         }
         if shortcut_probe is not None:
@@ -556,8 +557,10 @@ class Concerto(PointModel):
                         "coord_residual_enc2d_loss",
                         "coord_alignment_loss",
                         "coord_target_energy",
+                        "coord_removed_energy",
                         "coord_pred_energy",
                         "coord_residual_norm",
+                        "coord_projection_loss_check",
                     ]
                 )
             if self.shortcut_probe["mode"] == "coord_residual_target":
@@ -1650,6 +1653,12 @@ class Concerto(PointModel):
                 if coord_projection_pred is not None:
                     self._trace_forward("coord_projection_loss_start")
                     eps = 1e-6
+                    coord_projection_alpha = self.shortcut_probe[
+                        "coord_projection_alpha"
+                    ]
+                    coord_projection_beta = self.shortcut_probe[
+                        "coord_projection_beta"
+                    ]
                     coord_direction = F.normalize(
                         coord_projection_pred.detach(), dim=1, eps=eps
                     )
@@ -1664,12 +1673,17 @@ class Concerto(PointModel):
                         (feature3d_mask * coord_direction).sum(dim=1, keepdim=True)
                         * coord_direction
                     )
-                    feature2d_mask = feature2d_for_metrics - target_projection
+                    removed_projection = coord_projection_beta * target_projection
+                    feature2d_mask = feature2d_for_metrics - removed_projection
                     coord_alignment_loss = (
                         cos(feature3d_mask, coord_direction).pow(2).mean() * 10
                     )
                     coord_target_energy = (
                         target_projection.pow(2).sum(dim=1)
+                        / feature2d_for_metrics.pow(2).sum(dim=1).clamp_min(eps)
+                    ).mean()
+                    coord_removed_energy = (
+                        removed_projection.pow(2).sum(dim=1)
                         / feature2d_for_metrics.pow(2).sum(dim=1).clamp_min(eps)
                     ).mean()
                     coord_pred_energy = (
@@ -1690,8 +1704,7 @@ class Concerto(PointModel):
                 if coord_alignment_loss is not None:
                     loss = (
                         loss
-                        + self.shortcut_probe["coord_projection_alpha"]
-                        * coord_alignment_loss
+                        + coord_projection_alpha * coord_alignment_loss
                     )
 
                 result_dict["enc2d_loss"] = loss
@@ -1700,8 +1713,16 @@ class Concerto(PointModel):
                     result_dict["coord_residual_enc2d_loss"] = enc2d_alignment_loss
                     result_dict["coord_alignment_loss"] = coord_alignment_loss
                     result_dict["coord_target_energy"] = coord_target_energy.detach()
+                    result_dict["coord_removed_energy"] = coord_removed_energy.detach()
                     result_dict["coord_pred_energy"] = coord_pred_energy.detach()
                     result_dict["coord_residual_norm"] = coord_residual_norm.detach()
+                    result_dict["coord_projection_loss_check"] = (
+                        loss
+                        - (
+                            enc2d_alignment_loss
+                            + coord_projection_alpha * coord_alignment_loss
+                        )
+                    ).abs().detach()
                 if coord_prior_pred is not None:
                     coord_prior_loss = (1 - cos(raw_feature2d_mask, coord_prior_pred)).mean() * 10
                     result_dict["coord_prior_loss"] = coord_prior_loss

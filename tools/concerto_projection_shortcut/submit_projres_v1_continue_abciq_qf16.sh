@@ -76,7 +76,7 @@ if [ ! -f "${OFFICIAL_WEIGHT}" ]; then
   exit 2
 fi
 
-SELECTED_ALPHA="$("${PYTHON_BIN}" - "${SELECTED_SMOKE_JSON}" <<'PY'
+SELECTED_ALPHA="${SELECTED_ALPHA:-$("${PYTHON_BIN}" - "${SELECTED_SMOKE_JSON}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -85,7 +85,17 @@ if not payload.get("pass"):
     raise SystemExit("selected smoke did not pass")
 print(payload["selected"]["alpha"])
 PY
-)"
+)}"
+SELECTED_BETA="${SELECTED_BETA:-$("${PYTHON_BIN}" - "${SELECTED_SMOKE_JSON}" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text())
+if not payload.get("pass"):
+    raise SystemExit("selected smoke did not pass")
+print(payload["selected"].get("beta", "1.0"))
+PY
+)}"
 SELECTED_TAG="$(printf '%s' "${SELECTED_ALPHA}" | tr -d '.')"
 COORD_PRIOR_PATH="$("${PYTHON_BIN}" - "${SELECTED_PRIOR_JSON}" <<'PY'
 import json
@@ -99,7 +109,7 @@ CONTINUE_EXP="${CONTINUE_EXP:-arkit-full-projres-v1a-alpha${SELECTED_TAG}${EXP_T
 export DATASET_NAME GPU_IDS_CSV EXP_MIRROR_ROOT LOG_DIR CONTINUE_CONFIG OFFICIAL_WEIGHT
 export CONCERTO_GLOBAL_BATCH_SIZE CONCERTO_GRAD_ACCUM CONCERTO_NUM_WORKER
 export CONCERTO_MAX_TRAIN_ITER CONCERTO_EPOCH CONCERTO_ENABLE_FLASH
-export COORD_PRIOR_PATH COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}"
+export COORD_PRIOR_PATH COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" COORD_PROJECTION_BETA="${SELECTED_BETA}"
 
 echo "=== ABCI-Q ProjRes v1 H100 multi-node continuation ==="
 echo "date=$(date -Is)"
@@ -113,6 +123,7 @@ echo "gpu_ids=${GPU_IDS_CSV}"
 echo "exp_mirror_root=${EXP_MIRROR_ROOT}"
 echo "smoke_summary=${SELECTED_SMOKE_JSON}"
 echo "selected_alpha=${SELECTED_ALPHA}"
+echo "selected_beta=${SELECTED_BETA}"
 echo "coord_prior_path=${COORD_PRIOR_PATH}"
 echo "continue_config=${CONTINUE_CONFIG}"
 echo "continue_exp=${CONTINUE_EXP}"
@@ -152,6 +163,7 @@ env CUDA_VISIBLE_DEVICES="$(awk -F',' '{print $1}' <<< "${GPU_IDS_CSV}")" \
   CONCERTO_NUM_WORKER="${PREFLIGHT_CONCERTO_NUM_WORKER}" \
   COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
   COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" \
+  COORD_PROJECTION_BETA="${SELECTED_BETA}" \
   "${PYTHON_BIN}" tools/concerto_projection_shortcut/preflight.py \
   --check-data --check-batch --check-forward --config "${CONTINUE_CONFIG}" \
   --data-root "${ARKIT_FULL_META_ROOT}"
@@ -163,6 +175,7 @@ WEIGHT_PATH="${OFFICIAL_WEIGHT}" \
 TRAIN_GPU_IDS_CSV="${GPU_IDS_CSV}" \
 COORD_PRIOR_PATH="${COORD_PRIOR_PATH}" \
 COORD_PROJECTION_ALPHA="${SELECTED_ALPHA}" \
+COORD_PROJECTION_BETA="${SELECTED_BETA}" \
 LOG_DIR="${LOG_DIR}" \
 bash tools/concerto_projection_shortcut/run_pointcept_train_multinode_pbsdsh.sh
 

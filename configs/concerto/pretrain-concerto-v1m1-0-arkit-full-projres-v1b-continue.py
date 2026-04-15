@@ -11,8 +11,8 @@ model = dict(
         coord_normalize=True,
         coord_jitter_std=0.0,
         coord_prior_path=_env.get("COORD_PRIOR_PATH", ""),
-        coord_projection_alpha=float(_env.get("COORD_PROJECTION_ALPHA", "0.05")),
-        coord_projection_beta=float(_env.get("COORD_PROJECTION_BETA", "1.0")),
+        coord_projection_alpha=float(_env.get("COORD_PROJECTION_ALPHA", "0.0")),
+        coord_projection_beta=float(_env.get("COORD_PROJECTION_BETA", "0.5")),
         shuffle_correspondence=False,
     )
 )

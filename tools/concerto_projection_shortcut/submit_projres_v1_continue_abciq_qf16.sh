@@ -67,7 +67,7 @@ if [ ! -f "${SELECTED_SMOKE_JSON}" ]; then
   echo "[error] missing selected smoke: ${SELECTED_SMOKE_JSON}" >&2
   exit 2
 fi
-if [ ! -f "${SELECTED_PRIOR_JSON}" ]; then
+if [ ! -f "${SELECTED_PRIOR_JSON}" ] && [ -z "${COORD_PRIOR_PATH:-}" ]; then
   echo "[error] missing selected prior: ${SELECTED_PRIOR_JSON}" >&2
   exit 2
 fi
@@ -97,13 +97,13 @@ print(payload["selected"].get("beta", "1.0"))
 PY
 )}"
 SELECTED_TAG="$(printf '%s' "${SELECTED_ALPHA}" | tr -d '.')"
-COORD_PRIOR_PATH="$("${PYTHON_BIN}" - "${SELECTED_PRIOR_JSON}" <<'PY'
+COORD_PRIOR_PATH="${COORD_PRIOR_PATH:-$("${PYTHON_BIN}" - "${SELECTED_PRIOR_JSON}" <<'PY'
 import json
 import sys
 from pathlib import Path
 print(json.loads(Path(sys.argv[1]).read_text())["selected_path"])
 PY
-)"
+)}"
 CONTINUE_EXP="${CONTINUE_EXP:-arkit-full-projres-v1a-alpha${SELECTED_TAG}${EXP_TAG}-continue}"
 
 export DATASET_NAME GPU_IDS_CSV EXP_MIRROR_ROOT LOG_DIR CONTINUE_CONFIG OFFICIAL_WEIGHT

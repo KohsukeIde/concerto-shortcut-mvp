@@ -1,6 +1,6 @@
 # ProjRes v1 Results
 
-Updated: 2026-04-16 04:35 JST
+Updated: 2026-04-16 08:25 JST
 
 ## Bottom Line
 
@@ -20,13 +20,167 @@ Best v1b arm:
 - delta vs original: `-0.0574` / `-0.0332`
 - delta vs `no-enc2d-renorm`: `+0.0426` / `+0.0418`
 
+`projres_v1c` tested the next hypothesis from the v1b readout: keep
+`beta=0.75`, use low-capacity / height-biased priors, and avoid another broad
+beta/alpha sweep. It also completed prior fitting, smoke, 5-epoch continuation,
+ARKit stress, and ScanNet linear gates.
+
+Best v1c arm:
+- arm: `mlpz-b075-a001`
+- prior: `mlp_z`
+- beta: `0.75`
+- alpha: `0.01`
+- ScanNet linear last/best mIoU: `0.4186` / `0.4186`
+- delta vs original: `-0.0608` / `-0.0366`
+- delta vs `no-enc2d-renorm`: `+0.0392` / `+0.0384`
+
 Decision:
 - `projres_v1a`: no-go
 - `projres_v1b`: no strong-go
+- `projres_v1c`: no strong-go
 - do not launch optional fine-tune yet
-- next method should not be another full-removal projection residual; the
-  useful region is partial coordinate removal around `beta=0.75`, but it still
-  needs a better objective to close the remaining gap to original.
+- v1c does not beat v1b, so changing only the static coordinate prior family is
+  not enough. The next method should move beyond static projection residual
+  removal and use a more selective or objective-level intervention.
+
+## ProjRes v1c Selective Prior Family Ablation
+
+### Implementation
+
+`projres_v1c` keeps the v1b loss and adds lower-capacity coordinate prior
+families:
+
+```text
+u = normalize(stopgrad(g(c)))
+t_res = t0 - beta * dot(t0, u) * u
+loss = 1 - cos(y0, t_res) + alpha * cos(y0, u)^2
+```
+
+Supported prior arch names:
+- `linear` / `linear_xyz`: 3D xyz linear prior
+- `mlp` / `mlp_xyz`: 3D xyz MLP prior
+- `linear_z`: z-only linear prior
+- `mlp_z`: z-only MLP prior
+
+New / updated helpers:
+- `fit_coord_prior.py` supports `--cache-root` and `--prior-archs`
+- `submit_projres_v1c_fit_priors_abciq_qf.sh`
+- `launch_projres_v1c_prior_matrix.sh`
+- `launch_projres_v1c_continue_top.sh`
+- `launch_projres_v1c_followup_from_manifest.sh`
+- `summarize_projres_smoke_manifest.py`
+
+### Prior Fit
+
+Run:
+- output root: `data/runs/projres_v1c/priors`
+- cache reused: `data/runs/projres_v1/priors/cache`
+- job: `132277.qjcm`, `rt_QF=1`, `Exit_status=0`
+- walltime: requested `00:25:00`
+
+| prior | val cosine loss | target energy | residual norm | checkpoint |
+| --- | ---: | ---: | ---: | --- |
+| linear_z | 0.735445 | 0.080087 | 0.958630 | `data/runs/projres_v1c/priors/linear_z/model_last.pth` |
+| mlp_z | 0.643186 | 0.136156 | 0.928692 | `data/runs/projres_v1c/priors/mlp_z/model_last.pth` |
+
+The `linear_xyz` arm reuses the existing v1 linear xyz prior:
+`data/runs/projres_v1/priors/linear/model_last.pth`.
+
+### Smoke Matrix
+
+Run:
+- summary root:
+  `data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256`
+- launcher:
+  `tools/concerto_projection_shortcut/launch_projres_v1c_prior_matrix.sh`
+- resource:
+  six independent `rt_QF=1` jobs
+- requested steps:
+  `CONCERTO_MAX_TRAIN_ITER=256`
+- walltime requested:
+  `00:35:00`
+- jobs:
+  `132278.qjcm` to `132283.qjcm`
+
+The 256-step smoke walltime was too tight; logs reached 190 to 193 steps. The
+partial logs were summarized with a 128-step minimum and used only as a smoke
+stability filter.
+
+Top arms selected for continuation:
+
+| rank | arm | prior | beta | alpha | smoke score | last enc2d | last residual enc2d | last pred energy | last residual norm | steps |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | linz-b075-a000 | linear_z | 0.75 | 0.00 | 9.9440 | 9.9440 | 9.9440 | 0.0007 | 0.9559 | 193 |
+| 2 | mlpz-b075-a001 | mlp_z | 0.75 | 0.01 | 9.9885 | 9.9885 | 9.9885 | 0.0005 | 0.9273 | 193 |
+| 3 | linxyz-b075-a001 | linear_xyz | 0.75 | 0.01 | 10.0232 | 10.0232 | 10.0231 | 0.0005 | 0.9515 | 190 |
+
+One arm was rejected by the smoke gate:
+- `linxyz-b075-a000`: `coord_residual_norm=0.7054`, below the smoke threshold.
+
+### Continuation
+
+Run:
+- summary root:
+  `data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
+- resource:
+  three continuation jobs, each `rt_QF=4` (4 nodes / 16 H100 GPUs)
+- total queued allocation:
+  12 nodes / 48 H100 GPUs
+- epoch count:
+  `CONCERTO_EPOCH=5`
+- walltime requested:
+  `01:10:00`
+
+Jobs:
+
+| job | arm | prior | beta | alpha | status | walltime | checkpoint |
+| --- | --- | --- | ---: | ---: | --- | --- | --- |
+| 132284.qjcm | linz-b075-a000 | linear_z | 0.75 | 0.00 | Exit 0 | 00:46:32 | `exp/concerto/arkit-full-projres-v1c-linz-b075-a000-h10016x3-qf16-v1c-continue/model/model_last.pth` |
+| 132285.qjcm | mlpz-b075-a001 | mlp_z | 0.75 | 0.01 | Exit 0 | 00:46:53 | `exp/concerto/arkit-full-projres-v1c-mlpz-b075-a001-h10016x3-qf16-v1c-continue/model/model_last.pth` |
+| 132286.qjcm | linxyz-b075-a001 | linear_xyz | 0.75 | 0.01 | Exit 0 | 00:47:27 | `exp/concerto/arkit-full-projres-v1c-linxyz-b075-a001-h10016x3-qf16-v1c-continue/model/model_last.pth` |
+
+Final epoch train result:
+
+| arm | prior | loss | enc2d | residual enc2d | alignment | target energy | removed energy | pred energy | residual norm | loss check |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| linz-b075-a000 | linear_z | 7.4819 | 6.8112 | 6.4365 | 0.6603 | 0.0770 | 0.0433 | 0.0660 | 0.9169 | 0.0000 |
+| mlpz-b075-a001 | mlp_z | 7.8765 | 7.6774 | 7.2917 | 1.6903 | 0.1309 | 0.0736 | 0.1690 | 0.8903 | 0.0000 |
+| linxyz-b075-a001 | linear_xyz | 7.7562 | 7.3453 | 6.9669 | 1.0944 | 0.1121 | 0.0631 | 0.1094 | 0.9005 | 0.0000 |
+
+### ARKit Stress
+
+Source root:
+`data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
+
+Enc2d loss mean over 20 batches:
+
+| arm | prior | clean | local surface destroy | z flip | xy swap | roll 90 x |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| linz-b075-a000 | linear_z | 7.154851 | 7.944562 | 7.561974 | 7.143595 | 7.805688 |
+| mlpz-b075-a001 | mlp_z | 7.763840 | 8.748925 | 8.602632 | 7.788874 | 8.702516 |
+| linxyz-b075-a001 | linear_xyz | 7.345988 | 8.572212 | 8.186496 | 7.332311 | 8.614898 |
+
+### ScanNet Linear Gate
+
+Source root:
+`data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
+
+| arm | prior | beta | alpha | last mIoU | best mIoU | delta last vs original | delta best vs original | delta last vs no-enc2d-renorm | delta best vs no-enc2d-renorm | decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| mlpz-b075-a001 | mlp_z | 0.75 | 0.01 | 0.4186 | 0.4186 | -0.0608 | -0.0366 | +0.0392 | +0.0384 | no strong-go |
+| linxyz-b075-a001 | linear_xyz | 0.75 | 0.01 | 0.4110 | 0.4158 | -0.0684 | -0.0394 | +0.0316 | +0.0356 | no strong-go |
+| linz-b075-a000 | linear_z | 0.75 | 0.00 | 0.4069 | 0.4069 | -0.0725 | -0.0483 | +0.0275 | +0.0267 | no strong-go |
+
+Readout:
+- Lower-capacity / height-biased priors do not beat the v1b best arm.
+- `linear_z` is the most selective and flattest under stress, but downstream is
+  weakest among the continued v1c arms.
+- `mlp_z` is the best v1c arm, but it is still slightly below v1b
+  `combo-b075-a001`.
+- The next promising direction is not another static prior family sweep. The
+  projection residual branch needs a more adaptive or objective-level
+  intervention that removes the harmful coordinate route without globally
+  subtracting useful layout/support signal.
 
 ## ProjRes v1b Factorized Ablation
 

@@ -18,11 +18,14 @@ investigation.
     gate and is no-go on ScanNet linear.
   - The factorized partial-removal follow-up, `projres_v1b`, also completed its
     ABCI-Q smoke, continuation, stress, and ScanNet linear gates.
-  - Result: v1b improves over v1a and `no-enc2d-renorm`, but is still below the
-    original continuation; no strong-go for fine-tuning.
+  - The selective-prior follow-up, `projres_v1c`, completed prior fitting,
+    smoke, continuation, stress, and ScanNet linear gates.
+  - Result: v1b improves over v1a and `no-enc2d-renorm`, v1c does not improve
+    over v1b, and both remain below the original continuation; no strong-go for
+    fine-tuning.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
-  - Do not run the optional fine-tune for v1a/v1b without a new hypothesis.
+  - Do not run the optional fine-tune for v1a/v1b/v1c without a new hypothesis.
 
 ## Documentation Policy
 
@@ -126,15 +129,48 @@ Current interpretation:
 - `projres_v1b` shows that full coordinate removal was too blunt; partial
   target residualization around `beta=0.75` recovers meaningful downstream
   performance, but still does not beat original.
+- `projres_v1c` shows that swapping to lower-capacity / height-biased static
+  priors does not close the gap; `mlp_z` is best within v1c but remains below
+  the v1b best.
 - On ABCI-Q, keep using the validated `torchrun` / `pbsdsh` path described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- No `projres_v1` / `projres_v1b` ABCI-Q job is currently running.
+- No `projres_v1` / `projres_v1b` / `projres_v1c` ABCI-Q job is currently
+  running.
 
 Recently completed:
+- `132277.qjcm`: ProjRes v1c z-prior fit on ABCI-Q `rt_QF=1`,
+  `Exit_status=0`.
+  - cache reused:
+    `data/runs/projres_v1/priors/cache`
+  - fitted priors:
+    `linear_z`, `mlp_z`
+  - selected by cosine loss:
+    `mlp_z`
+- `132278.qjcm` to `132283.qjcm`: ProjRes v1c 6-arm prior-family smoke matrix
+  on ABCI-Q `rt_QF=1`.
+  - summary root:
+    `data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256`
+  - logs reached 190 to 193 steps before the 35 minute walltime; partial smoke
+    summaries were generated with a 128-step minimum.
+  - selected top arms:
+    `linz-b075-a000`, `mlpz-b075-a001`, `linxyz-b075-a001`
+- `132284.qjcm` to `132286.qjcm`: ProjRes v1c 5-epoch continuations, each on
+  ABCI-Q `rt_QF=4` (4 nodes / 16 H100 GPUs), all `Exit_status=0`.
+  - concurrent allocation: 12 nodes / 48 H100 GPUs
+  - walltimes: about 47 minutes
+  - checkpoints:
+    `exp/concerto/arkit-full-projres-v1c-linz-b075-a000-h10016x3-qf16-v1c-continue/model/model_last.pth`,
+    `exp/concerto/arkit-full-projres-v1c-mlpz-b075-a001-h10016x3-qf16-v1c-continue/model/model_last.pth`,
+    `exp/concerto/arkit-full-projres-v1c-linxyz-b075-a001-h10016x3-qf16-v1c-continue/model/model_last.pth`
+- `132287.qjcm` to `132289.qjcm`: ProjRes v1c follow-up stress + ScanNet
+  linear gates on ABCI-Q `rt_QF=1`, all `Exit_status=0`.
+  - summary root:
+    `data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
+  - result: no strong-go for all three arms
 - `132208.qjcm`: ProjRes v1b metric sanity on ABCI-Q `rt_QF=1`,
   `Exit_status=0`.
   - setting: v1a-equivalent `beta=1.0`, `alpha=0.05`, 16 train steps
@@ -226,6 +262,36 @@ ProjRes v1b gate result:
   - no-enc2d-renorm last/best mIoU: `0.3794` / `0.3802`
   - deltas vs original: `-0.0574` last, `-0.0332` best
   - deltas vs no-enc2d-renorm: `+0.0426` last, `+0.0418` best
+  - decision: `strong_go=false`, `linear_gate_not_strong_go`
+- Summary:
+  - [results_projres_v1.md](./results_projres_v1.md)
+
+ProjRes v1c gate result:
+- hypothesis:
+  - keep `beta=0.75` and test lower-capacity / height-biased priors instead of
+    widening the beta/alpha grid.
+- fitted z-priors:
+  - `linear_z`: cosine loss `0.735445`, target energy `0.080087`, residual norm
+    `0.958630`
+  - `mlp_z`: cosine loss `0.643186`, target energy `0.136156`, residual norm
+    `0.928692`
+- continued arms:
+  - `linz-b075-a000`: `linear_z`, `beta=0.75`, `alpha=0.00`
+  - `mlpz-b075-a001`: `mlp_z`, `beta=0.75`, `alpha=0.01`
+  - `linxyz-b075-a001`: `linear_xyz`, `beta=0.75`, `alpha=0.01`
+- best v1c arm:
+  - `mlpz-b075-a001`
+- best v1c final continuation metrics:
+  - `loss=7.8765`, `enc2d_loss=7.6774`,
+    `coord_residual_enc2d_loss=7.2917`,
+    `coord_alignment_loss=1.6903`,
+    `coord_removed_energy=0.0736`,
+    `coord_pred_energy=0.1690`, `coord_residual_norm=0.8903`,
+    `coord_projection_loss_check=0.0000`
+- best v1c ScanNet linear gate:
+  - last/best mIoU: `0.4186` / `0.4186`
+  - deltas vs original: `-0.0608` last, `-0.0366` best
+  - deltas vs no-enc2d-renorm: `+0.0392` last, `+0.0384` best
   - decision: `strong_go=false`, `linear_gate_not_strong_go`
 - Summary:
   - [results_projres_v1.md](./results_projres_v1.md)

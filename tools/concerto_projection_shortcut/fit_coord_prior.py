@@ -25,6 +25,10 @@ def load_cfg(repo_root: Path, config_name: str):
     return Config.fromfile(str(repo_root / "configs" / "concerto" / f"{config_name}.py"))
 
 
+def parse_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def move_batch_to_cuda(batch):
     for key, value in batch.items():
         if torch.is_tensor(value):
@@ -266,6 +270,7 @@ def main() -> int:
         type=Path,
         default=None,
     )
+    parser.add_argument("--cache-root", type=Path, default=None)
     parser.add_argument("--max-train-batches", type=int, default=4096)
     parser.add_argument("--max-val-batches", type=int, default=512)
     parser.add_argument("--max-rows-per-batch", type=int, default=512)
@@ -274,6 +279,7 @@ def main() -> int:
     parser.add_argument("--prior-epochs", type=int, default=20)
     parser.add_argument("--prior-batch-size", type=int, default=8192)
     parser.add_argument("--prior-hidden-channels", type=int, default=512)
+    parser.add_argument("--prior-archs", default="linear,mlp")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--mlp-min-improvement", type=float, default=0.02)
     parser.add_argument("--seed", type=int, default=0)
@@ -286,60 +292,78 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     if args.output_root is None:
         args.output_root = repo_root / "data" / "runs" / "projres_v1" / "priors"
+    if args.cache_root is None:
+        args.cache_root = args.output_root / "cache"
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-    from pointcept.models.builder import build_model
-
-    cfg = load_cfg(repo_root, args.config)
-    model = build_model(cfg.model).cuda()
-    weight_path = args.weight
-    if weight_path is None:
-        default_weight = repo_root / "data" / "weights" / "concerto" / "concerto_base_origin.pth"
-        weight_path = default_weight if default_weight.exists() else None
-    if weight_path is not None:
-        load_weight(model, weight_path.resolve())
-    train_loader = build_loader(
-        cfg,
-        "Training",
-        args.data_root,
-        args.extract_batch_size,
-        args.num_worker,
-    )
-    val_loader = build_loader(
-        cfg,
-        "Validation",
-        args.data_root,
-        args.extract_batch_size,
-        args.num_worker,
-    )
-
     args.output_root.mkdir(parents=True, exist_ok=True)
-    train_cache = collect_cache(
-        model,
-        train_loader,
-        "Training",
-        args.max_train_batches,
-        args.max_rows_per_batch,
-        args.output_root / "cache" / "train.pt",
-        args.dry_run,
-        args.force_cache,
-    )
-    val_cache = collect_cache(
-        model,
-        val_loader,
-        "Validation",
-        args.max_val_batches,
-        args.max_rows_per_batch,
-        args.output_root / "cache" / "val.pt",
-        args.dry_run,
-        args.force_cache,
-    )
-    del model
-    torch.cuda.empty_cache()
+    train_cache_path = args.cache_root / "train.pt"
+    val_cache_path = args.cache_root / "val.pt"
+    if (
+        train_cache_path.exists()
+        and val_cache_path.exists()
+        and not args.force_cache
+        and not args.dry_run
+    ):
+        print(f"[cache] reuse train={train_cache_path}")
+        print(f"[cache] reuse val={val_cache_path}")
+        train_cache = torch.load(train_cache_path, map_location="cpu", weights_only=False)
+        val_cache = torch.load(val_cache_path, map_location="cpu", weights_only=False)
+    else:
+        from pointcept.models.builder import build_model
+
+        cfg = load_cfg(repo_root, args.config)
+        model = build_model(cfg.model).cuda()
+        weight_path = args.weight
+        if weight_path is None:
+            default_weight = repo_root / "data" / "weights" / "concerto" / "concerto_base_origin.pth"
+            weight_path = default_weight if default_weight.exists() else None
+        if weight_path is not None:
+            load_weight(model, weight_path.resolve())
+        train_loader = build_loader(
+            cfg,
+            "Training",
+            args.data_root,
+            args.extract_batch_size,
+            args.num_worker,
+        )
+        val_loader = build_loader(
+            cfg,
+            "Validation",
+            args.data_root,
+            args.extract_batch_size,
+            args.num_worker,
+        )
+
+        train_cache = collect_cache(
+            model,
+            train_loader,
+            "Training",
+            args.max_train_batches,
+            args.max_rows_per_batch,
+            train_cache_path,
+            args.dry_run,
+            args.force_cache,
+        )
+        val_cache = collect_cache(
+            model,
+            val_loader,
+            "Validation",
+            args.max_val_batches,
+            args.max_rows_per_batch,
+            val_cache_path,
+            args.dry_run,
+            args.force_cache,
+        )
+        del model
+        torch.cuda.empty_cache()
 
     metrics = {}
-    for arch in ("linear", "mlp"):
+    archs = parse_csv(args.prior_archs)
+    if not archs:
+        raise ValueError("--prior-archs must contain at least one architecture")
+    for arch in archs:
         metrics[arch] = fit_prior(
             arch,
             train_cache,
@@ -351,10 +375,18 @@ def main() -> int:
             lr=args.lr,
             dry_run=args.dry_run,
         )
-    selected = "linear"
-    improvement = metrics["linear"]["cosine_loss"] - metrics["mlp"]["cosine_loss"]
-    if improvement >= args.mlp_min_improvement:
-        selected = "mlp"
+    if set(archs) == {"linear", "mlp"} and len(archs) == 2:
+        selected = "linear"
+        improvement = metrics["linear"]["cosine_loss"] - metrics["mlp"]["cosine_loss"]
+        if improvement >= args.mlp_min_improvement:
+            selected = "mlp"
+    else:
+        selected = min(archs, key=lambda key: metrics[key]["cosine_loss"])
+        improvement = 0.0
+        if "linear" in metrics:
+            improvement = (
+                metrics["linear"]["cosine_loss"] - metrics[selected]["cosine_loss"]
+            )
     summary = dict(
         selected=selected,
         selected_path=str((args.output_root / selected / "model_last.pth").resolve()),

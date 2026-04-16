@@ -50,6 +50,8 @@ summarize_smoke() {
     "${EXP_NAME}" \
     "${COORD_PROJECTION_ALPHA}" \
     "${COORD_PROJECTION_BETA}" \
+    "${COORD_PRIOR_PATH}" \
+    "${PRIOR_NAME:-}" \
     "${MIN_RESIDUAL_NORM}" <<'PY'
 import json
 import math
@@ -63,7 +65,9 @@ arm_name = sys.argv[3]
 exp_name = sys.argv[4]
 alpha = float(sys.argv[5])
 beta = float(sys.argv[6])
-min_residual_norm = float(sys.argv[7])
+coord_prior_path = sys.argv[7]
+prior_name = sys.argv[8]
+min_residual_norm = float(sys.argv[9])
 
 keys = [
     "loss",
@@ -100,6 +104,8 @@ payload = {
     "exp": exp_name,
     "alpha": alpha,
     "beta": beta,
+    "prior_name": prior_name,
+    "coord_prior_path": coord_prior_path,
     "log": str(log_path),
     "pass": False,
     "reason": "missing_metrics",
@@ -156,6 +162,7 @@ fi
 DATASET_NAME="${DATASET_NAME:-concerto}"
 EXP_MIRROR_ROOT="${EXP_MIRROR_ROOT:-${POINTCEPT_DATA_ROOT}/runs/projres_v1b}"
 EXP_TAG="${EXP_TAG:--h10016-qf1}"
+EXP_PREFIX="${EXP_PREFIX:-arkit-full-projres-v1b}"
 SUMMARY_ROOT="${SUMMARY_ROOT:-${EXP_MIRROR_ROOT}/summaries/${EXP_TAG#-}}"
 LOG_DIR="${LOG_DIR:-${EXP_MIRROR_ROOT}/logs/smoke}"
 CONFIG_NAME="${CONFIG_NAME:-pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke-h10016}"
@@ -166,7 +173,7 @@ COORD_PROJECTION_ALPHA="${COORD_PROJECTION_ALPHA:?COORD_PROJECTION_ALPHA is requ
 COORD_PROJECTION_BETA="${COORD_PROJECTION_BETA:?COORD_PROJECTION_BETA is required}"
 SELECTED_PRIOR_JSON="${SELECTED_PRIOR_JSON:-${POINTCEPT_DATA_ROOT}/runs/projres_v1/priors/selected_prior.json}"
 COORD_PRIOR_PATH="${COORD_PRIOR_PATH:-$(selected_prior_path_from_json "${SELECTED_PRIOR_JSON}")}"
-EXP_NAME="${EXP_NAME:-arkit-full-projres-v1b-${ARM_NAME}${EXP_TAG}-smoke}"
+EXP_NAME="${EXP_NAME:-${EXP_PREFIX}-${ARM_NAME}${EXP_TAG}-smoke}"
 SUMMARY_JSON="${SUMMARY_JSON:-${SUMMARY_ROOT}/${EXP_NAME}.json}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 MIN_RESIDUAL_NORM="${MIN_RESIDUAL_NORM:-0.80}"
@@ -196,6 +203,7 @@ echo "[$(timestamp)] start projres v1b smoke arm"
 echo "arm=${ARM_NAME}"
 echo "alpha=${COORD_PROJECTION_ALPHA}"
 echo "beta=${COORD_PROJECTION_BETA}"
+echo "prior_name=${PRIOR_NAME:-}"
 echo "config=${CONFIG_NAME}"
 echo "exp=${EXP_NAME}"
 echo "summary_json=${SUMMARY_JSON}"

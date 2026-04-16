@@ -14,7 +14,7 @@ def main() -> int:
     args = parser.parse_args()
 
     rows = []
-    for path in sorted(args.summary_root.glob("arkit-full-projres-v1b-*-smoke.json")):
+    for path in sorted(args.summary_root.glob("arkit-full-projres-v1*-*-smoke.json")):
         payload = json.loads(path.read_text())
         payload["summary_json"] = str(path)
         rows.append(payload)

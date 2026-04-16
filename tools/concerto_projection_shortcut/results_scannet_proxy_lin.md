@@ -1,6 +1,6 @@
 # ScanNet Linear Proxy Results
 
-Updated: 2026-04-16 04:35 JST
+Updated: 2026-04-16 08:25 JST
 
 ## Runs
 
@@ -15,6 +15,9 @@ Updated: 2026-04-16 04:35 JST
 | scannet-proxy-projres-v1b-resonly-b075-a000-h10016x4-qf16-lin | finished no strong-go | 0.4176 | 0.5625 | 0.7444 | 0.4176 | 10 |
 | scannet-proxy-projres-v1b-combo-b050-a002-h10016x4-qf16-lin | finished no strong-go | 0.4129 | 0.5551 | 0.7441 | 0.4129 | 10 |
 | scannet-proxy-projres-v1b-penalty-b000-a002-h10016x4-qf16-lin | finished no strong-go | 0.3887 | 0.5308 | 0.7324 | 0.3907 | 10 |
+| scannet-proxy-projres-v1c-mlpz-b075-a001-h10016x3-qf16-v1c-lin | finished no strong-go | 0.4186 | 0.5692 | 0.7490 | 0.4186 | 10 |
+| scannet-proxy-projres-v1c-linxyz-b075-a001-h10016x3-qf16-v1c-lin | finished no strong-go | 0.4110 | 0.5509 | 0.7430 | 0.4158 | 10 |
+| scannet-proxy-projres-v1c-linz-b075-a000-h10016x3-qf16-v1c-lin | finished no strong-go | 0.4069 | 0.5598 | 0.7437 | 0.4069 | 10 |
 
 ## Readout
 
@@ -43,3 +46,12 @@ Updated: 2026-04-16 04:35 JST
 - Among the v1b continuations, target residualization mattered more than the
   alignment penalty alone. `penalty-b000-a002` reached only 0.3887 / 0.3907
   mIoU, whereas the `beta=0.75` residualized arms reached 0.4176 to 0.4220.
+- ProjRes v1c tested lower-capacity / height-biased prior families at
+  `beta=0.75` and `alpha in {0, 0.01}`. The best v1c arm is `mlpz-b075-a001`
+  with 0.4186 / 0.4186 mIoU.
+- v1c remains below the v1b best arm by 0.0034 best mIoU and below original
+  continuation by 0.0608 last / 0.0366 best mIoU.
+- `linear_z` preserves the target residual norm and makes ARKit stress flatter,
+  but its ScanNet linear gate is weaker at 0.4069 / 0.4069. This suggests that
+  z-only low-capacity removal under-removes the harmful route rather than
+  preserving enough useful signal to beat v1b.

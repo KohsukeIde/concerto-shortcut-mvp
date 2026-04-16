@@ -82,11 +82,24 @@ class OnlineCluster(nn.Module):
 class CoordPrior(nn.Module):
     def __init__(self, arch, target_dim, hidden_channels=512):
         super().__init__()
-        if arch == "linear":
+        self.arch = arch
+        if arch in ("linear", "linear_xyz"):
+            self.coord_indices = None
             self.net = nn.Linear(3, target_dim)
-        elif arch == "mlp":
+        elif arch in ("mlp", "mlp_xyz"):
+            self.coord_indices = None
             self.net = nn.Sequential(
                 nn.Linear(3, hidden_channels),
+                nn.GELU(),
+                nn.Linear(hidden_channels, target_dim),
+            )
+        elif arch == "linear_z":
+            self.coord_indices = (2,)
+            self.net = nn.Linear(1, target_dim)
+        elif arch == "mlp_z":
+            self.coord_indices = (2,)
+            self.net = nn.Sequential(
+                nn.Linear(1, hidden_channels),
                 nn.GELU(),
                 nn.Linear(hidden_channels, target_dim),
             )
@@ -94,6 +107,8 @@ class CoordPrior(nn.Module):
             raise ValueError(f"Unsupported coord prior arch: {arch}")
 
     def forward(self, coord):
+        if self.coord_indices is not None:
+            coord = coord[..., self.coord_indices]
         return self.net(coord)
 
 

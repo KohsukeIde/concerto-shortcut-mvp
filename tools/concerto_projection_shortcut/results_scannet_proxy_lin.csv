@@ -8,3 +8,6 @@ exp/concerto/scannet-proxy-projres-v1b-combo-b075-a001-h10016x4-qf16-lin/train.l
 exp/concerto/scannet-proxy-projres-v1b-resonly-b075-a000-h10016x4-qf16-lin/train.log,finished_no_strong_go,0.4176,0.5625,0.7444,mIoU,0.4176,10
 exp/concerto/scannet-proxy-projres-v1b-combo-b050-a002-h10016x4-qf16-lin/train.log,finished_no_strong_go,0.4129,0.5551,0.7441,mIoU,0.4129,10
 exp/concerto/scannet-proxy-projres-v1b-penalty-b000-a002-h10016x4-qf16-lin/train.log,finished_no_strong_go,0.3887,0.5308,0.7324,mIoU,0.3907,10
+exp/concerto/scannet-proxy-projres-v1c-mlpz-b075-a001-h10016x3-qf16-v1c-lin/train.log,finished_no_strong_go,0.4186,0.5692,0.7490,mIoU,0.4186,10
+exp/concerto/scannet-proxy-projres-v1c-linxyz-b075-a001-h10016x3-qf16-v1c-lin/train.log,finished_no_strong_go,0.4110,0.5509,0.7430,mIoU,0.4158,10
+exp/concerto/scannet-proxy-projres-v1c-linz-b075-a000-h10016x3-qf16-v1c-lin/train.log,finished_no_strong_go,0.4069,0.5598,0.7437,mIoU,0.4069,10

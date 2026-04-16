@@ -20,9 +20,11 @@ residual fix experiment on ABCI-Q.
   completed.
 - The v1b factorized ablation also completed: 11 smoke arms, four 5-epoch
   continuations, ARKit stress, and ScanNet linear gates.
+- The v1c selective-prior ablation also completed: z-prior fitting, six smoke
+  arms, three 5-epoch continuations, ARKit stress, and ScanNet linear gates.
 - The current scientific gate result is no strong-go: v1b improves over v1a and
-  `no-enc2d-renorm`, but still does not match or beat original Concerto in the
-  ScanNet linear gate.
+  `no-enc2d-renorm`, v1c does not improve over v1b, and neither matches or
+  beats original Concerto in the ScanNet linear gate.
 
 ## Scientific State
 
@@ -53,6 +55,7 @@ Key ScanNet proxy numbers:
 | no-enc2d-renorm continuation | 0.3794 | 0.3802 | validation finished, full test aborted due disk |
 | projres_v1a alpha 0.05 | 0.3627 | 0.3627 | finished no-go |
 | projres_v1b combo beta 0.75 alpha 0.01 | 0.4220 | 0.4220 | finished no strong-go |
+| projres_v1c mlp_z beta 0.75 alpha 0.01 | 0.4186 | 0.4186 | finished no strong-go |
 
 Readout:
 - `coord_mlp` is only slightly above `no-enc2d`.
@@ -61,8 +64,11 @@ Readout:
   proxy.
 - v1b readout: full coordinate removal was too blunt; partial removal around
   `beta=0.75` is materially better, but still below original.
-- Next paper route is still fix-and-beat-original, with a new selective
-  objective rather than the current projection residual objective.
+- v1c readout: changing the static prior family to lower-capacity /
+  height-biased priors does not close the gap.
+- Next paper route is still fix-and-beat-original, but it likely needs a more
+  adaptive or objective-level intervention rather than another static projection
+  residual objective.
 
 ## Implemented Fix
 
@@ -91,6 +97,13 @@ Factorized v1b helpers:
 - [run_projres_v1b_smoke_arm.sh](./run_projres_v1b_smoke_arm.sh)
 - [launch_projres_v1b_smoke_matrix.sh](./launch_projres_v1b_smoke_matrix.sh)
 - [launch_projres_v1b_continue_top.sh](./launch_projres_v1b_continue_top.sh)
+
+Selective-prior v1c helpers:
+- [submit_projres_v1c_fit_priors_abciq_qf.sh](./submit_projres_v1c_fit_priors_abciq_qf.sh)
+- [launch_projres_v1c_prior_matrix.sh](./launch_projres_v1c_prior_matrix.sh)
+- [launch_projres_v1c_continue_top.sh](./launch_projres_v1c_continue_top.sh)
+- [launch_projres_v1c_followup_from_manifest.sh](./launch_projres_v1c_followup_from_manifest.sh)
+- [summarize_projres_smoke_manifest.py](./summarize_projres_smoke_manifest.py)
 
 v1a loss definition:
 
@@ -152,7 +165,7 @@ Linear gate conditions:
 ## Current Run Status
 
 ABCI-Q status, 2026-04-16 JST:
-- No `projres_v1` / `projres_v1b` job is currently running.
+- No `projres_v1` / `projres_v1b` / `projres_v1c` job is currently running.
 - ABCI-Q `rt_QF=1` exposes 4 H100 80GB GPUs in this checkout's jobs.
 - The prior stage is complete and should be reused:
   - selected prior: `mlp`
@@ -257,6 +270,33 @@ ABCI-Q status, 2026-04-16 JST:
   - best v1b last/best mIoU: `0.4220` / `0.4220`
   - deltas vs original continuation: `-0.0574` last, `-0.0332` best
   - deltas vs no-enc2d-renorm: `+0.0426` last, `+0.0418` best
+  - result: `strong_go=false`, `linear_gate_not_strong_go`
+- Completed v1c selective-prior gate:
+  - prior fit job: `132277.qjcm`, `rt_QF=1`, `Exit_status=0`
+    - cache reused:
+      `data/runs/projres_v1/priors/cache`
+    - fitted priors:
+      `linear_z`, `mlp_z`
+    - selected z prior:
+      `mlp_z`
+  - smoke matrix: `132278.qjcm` to `132283.qjcm`, `rt_QF=1`
+    - summary root:
+      `data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256`
+    - requested 256 steps with `00:35:00` walltime; logs reached 190 to
+      193 steps, then partial smoke summaries were generated with a 128-step
+      minimum.
+    - selected continuation arms:
+      `linz-b075-a000`, `mlpz-b075-a001`, `linxyz-b075-a001`
+  - continuation jobs: `132284.qjcm` to `132286.qjcm`, each `rt_QF=4`,
+    all `Exit_status=0`, walltimes about 47 minutes
+  - follow-up jobs: `132287.qjcm` to `132289.qjcm`, all `Exit_status=0`,
+    walltimes about 50 minutes
+  - summary root:
+    `data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
+  - best v1c arm: `mlpz-b075-a001`
+  - best v1c last/best mIoU: `0.4186` / `0.4186`
+  - deltas vs original continuation: `-0.0608` last, `-0.0366` best
+  - deltas vs no-enc2d-renorm: `+0.0392` last, `+0.0384` best
   - result: `strong_go=false`, `linear_gate_not_strong_go`
 - Post-fix validation:
   - `132190.qjcm`: 16-step smoke, flash on, `Exit_status = 0`, walltime
@@ -504,6 +544,44 @@ MAX_CONTINUE_ARMS=4 RT_QF=4 WALLTIME=01:35:00 \
   tools/concerto_projection_shortcut/launch_projres_v1b_continue_top.sh
 ```
 
+Validated v1c selective-prior commands:
+
+```bash
+# Fit z-only priors using the existing v1 target cache.
+qsub -l rt_QF=1 -l walltime=00:25:00 \
+  tools/concerto_projection_shortcut/submit_projres_v1c_fit_priors_abciq_qf.sh
+
+# 6-arm prior-family smoke matrix. For 256 steps, 35 minutes was tight and
+# produced 190-193-step partial logs; use 45 minutes if exact completion is
+# required.
+CONCERTO_MAX_TRAIN_ITER=256 WALLTIME=00:45:00 EXP_TAG=-h10016-qf1-v1c-prior256 \
+  tools/concerto_projection_shortcut/launch_projres_v1c_prior_matrix.sh
+
+# If smoke logs are partial but long enough, summarize them explicitly.
+python tools/concerto_projection_shortcut/summarize_projres_smoke_manifest.py \
+  --manifest data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256/job_manifest.tsv \
+  --exp-root exp/concerto \
+  --summary-root data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256 \
+  --exp-tag=-h10016-qf1-v1c-prior256 \
+  --min-steps 128
+
+python tools/concerto_projection_shortcut/select_projres_v1b_smoke.py \
+  data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256 \
+  --top-k 3 \
+  --out data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256/selected_smoke.json
+
+# Launch top three continuations. Each job uses rt_QF=4, so this consumes
+# 12 nodes / 48 H100 GPUs when all three are queued together.
+MAX_CONTINUE_ARMS=3 RT_QF=4 WALLTIME=01:10:00 \
+  SMOKE_SUMMARY_ROOT=/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/projres_v1c/summaries/h10016-qf1-v1c-prior256 \
+  EXP_TAG=-h10016x3-qf16-v1c CONCERTO_EPOCH=5 CONCERTO_MAX_TRAIN_ITER=0 \
+  tools/concerto_projection_shortcut/launch_projres_v1c_continue_top.sh
+
+# Dependent stress + ScanNet linear follow-ups.
+EXP_TAG=-h10016x3-qf16-v1c MAX_FOLLOWUP_ARMS=3 WALLTIME=01:05:00 \
+  tools/concerto_projection_shortcut/launch_projres_v1c_followup_from_manifest.sh
+```
+
 ## ABCI-Q Expected Runtime
 
 The current chain does not use all 4 GPUs at every stage.
@@ -528,7 +606,8 @@ First target:
   complete.
 - the v1b smoke matrix, four continuations, ARKit stress, and ScanNet linear
   gates are complete.
-- the current v1a/v1b arms are no strong-go, so do not spend points on the
+- the v1c selective-prior gate is complete.
+- the current v1a/v1b/v1c arms are no strong-go, so do not spend points on the
   optional fine-tune without a new hypothesis.
 
 Rough estimate:
@@ -539,6 +618,11 @@ Rough estimate:
 - v1b 256-step smoke arm on `rt_QF=1`: requested `00:35:00`
 - v1b 4-node / 16-H100 5-epoch continuation: completed in about 47 minutes
 - v1b follow-up stress + ScanNet linear gate: completed in about 50 minutes
+- v1c z-prior fit using cached targets: completed within the 25 minute request
+- v1c 256-step smoke on `rt_QF=1`: 35 minutes was too tight; use 45 minutes if
+  full 256-step completion is required
+- v1c 4-node / 16-H100 5-epoch continuation: completed in about 47 minutes
+- v1c follow-up stress + ScanNet linear gate: completed in about 50 minutes
 - fuller prior with `MAX_TRAIN_BATCHES=4096`: not needed unless the prior
   artifacts are deleted or invalidated
 

@@ -23,9 +23,13 @@ investigation.
   - Result: v1b improves over v1a and `no-enc2d-renorm`, v1c does not improve
     over v1b, and both remain below the original continuation; no strong-go for
     fine-tuning.
+  - A point-conscious long-horizon e025 same-stage check completed for original
+    and v1b `combo-b075-a001`. v1b essentially ties the same-stage original
+    reference but does not beat it: 0.5526 vs 0.5531 ScanNet proxy mIoU.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
-  - Do not run the optional fine-tune for v1a/v1b/v1c without a new hypothesis.
+  - Do not run the optional fine-tune or the e050/e075/e100 ladder without a
+    new decision criterion or hypothesis.
 
 ## Documentation Policy
 
@@ -132,16 +136,39 @@ Current interpretation:
 - `projres_v1c` shows that swapping to lower-capacity / height-biased static
   priors does not close the gap; `mlp_z` is best within v1c but remains below
   the v1b best.
+- The long-horizon e025 same-stage check shows v1b can match the original
+  downstream proxy much more closely than the 5-epoch gate suggested:
+  - same-stage original: 0.5531 / 0.5531 mIoU
+  - v1b `combo-b075-a001`: 0.5526 / 0.5526 mIoU
+  - this is an effective tie, not a +0.01 fix-and-beat-original result
 - On ABCI-Q, keep using the validated `torchrun` / `pbsdsh` path described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- No `projres_v1` / `projres_v1b` / `projres_v1c` ABCI-Q job is currently
-  running.
+- No `projres_v1` / `projres_v1b` / `projres_v1c` / `projres_long` ABCI-Q job
+  is currently running.
 
 Recently completed:
+- `132455.qjcm` and `132457.qjcm`: long-horizon e025 continuations on ABCI-Q
+  `rt_QF=8`, both `Exit_status=0`.
+  - `132455.qjcm`: original reference, walltime `03:11:21`
+  - `132457.qjcm`: v1b `combo-b075-a001`, walltime `03:11:46`
+  - requested walltime was `03:50:00`, so the setting was sufficient without
+    excessive slack.
+  - checkpoints:
+    `exp/concerto/arkit-full-original-long-e025-qf32-continue/model/model_last.pth`
+    and
+    `exp/concerto/arkit-full-projres-v1b-combo-b075-a001-long-e025-qf32-continue/model/model_last.pth`
+- `132456.qjcm` and `132458.qjcm`: dependent ScanNet proxy follow-ups on
+  ABCI-Q `rt_QF=1`, both `Exit_status=0`.
+  - walltimes: `00:50:15` and `00:49:57`
+  - requested walltime was `01:05:00`
+  - results:
+    original e025 `0.5531 / 0.5531`, v1b e025 `0.5526 / 0.5526`
+  - summary root:
+    `data/runs/projres_long/summaries/long-e025-qf32`
 - `132277.qjcm`: ProjRes v1c z-prior fit on ABCI-Q `rt_QF=1`,
   `Exit_status=0`.
   - cache reused:
@@ -438,11 +465,16 @@ Expected next stage:
 
 ## Immediate Next Step
 
-1. Decide the next method variant from the v1b result. Current evidence says
-   "partial removal helps, full removal hurts, original still wins."
-2. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+1. Do not immediately launch the e050/e075/e100 ladder. The e025 same-stage
+   check shows v1b is a near tie with original, not a +0.01 win.
+2. Decide whether "same downstream with lower coordinate-alignment energy" is
+   scientifically useful enough to justify a staged e050 resume; otherwise move
+   to a new adaptive/objective-level variant.
+3. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-3. Keep the current completed artifacts:
+4. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`
+   - `data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
+   - `data/runs/projres_long/summaries/long-e025-qf32`

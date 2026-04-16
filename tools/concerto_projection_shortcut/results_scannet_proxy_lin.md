@@ -1,6 +1,6 @@
 # ScanNet Linear Proxy Results
 
-Updated: 2026-04-16 08:25 JST
+Updated: 2026-04-16 20:16 JST
 
 ## Runs
 
@@ -18,6 +18,8 @@ Updated: 2026-04-16 08:25 JST
 | scannet-proxy-projres-v1c-mlpz-b075-a001-h10016x3-qf16-v1c-lin | finished no strong-go | 0.4186 | 0.5692 | 0.7490 | 0.4186 | 10 |
 | scannet-proxy-projres-v1c-linxyz-b075-a001-h10016x3-qf16-v1c-lin | finished no strong-go | 0.4110 | 0.5509 | 0.7430 | 0.4158 | 10 |
 | scannet-proxy-projres-v1c-linz-b075-a000-h10016x3-qf16-v1c-lin | finished no strong-go | 0.4069 | 0.5598 | 0.7437 | 0.4069 | 10 |
+| scannet-proxy-arkit-full-original-long-e025-qf32-continue-lin | finished long-horizon e025 reference | 0.5531 | 0.6832 | 0.8070 | 0.5531 | 10 |
+| scannet-proxy-arkit-full-projres-v1b-combo-b075-a001-long-e025-qf32-continue-lin | finished long-horizon e025 same-stage tie | 0.5526 | 0.6807 | 0.8080 | 0.5526 | 10 |
 
 ## Readout
 
@@ -55,3 +57,15 @@ Updated: 2026-04-16 08:25 JST
   but its ScanNet linear gate is weaker at 0.4069 / 0.4069. This suggests that
   z-only low-capacity removal under-removes the harmful route rather than
   preserving enough useful signal to beat v1b.
+- Long-horizon e025 check:
+  - two 25-epoch continuations were run with the same original-derived schedule
+    shape on ABCI-Q `rt_QF=8`, followed by the same validation-only ScanNet
+    proxy.
+  - same-stage original reached 0.5531 / 0.5531 mIoU.
+  - same-stage v1b `combo-b075-a001` reached 0.5526 / 0.5526 mIoU.
+  - v1b is therefore effectively tied with, but still slightly below, the
+    same-stage original reference by 0.0005 mIoU.
+  - This is stronger than the earlier 5-epoch readout, but it is not a
+    fix-and-beat-original result. The old gate JSON reports `strong_go` because
+    it compares against the older 5-epoch baseline, not this same-stage
+    long-horizon reference.

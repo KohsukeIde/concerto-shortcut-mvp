@@ -1,6 +1,6 @@
 # ProjRes v1 ABCI-Q Handoff
 
-Updated: 2026-04-16 JST
+Updated: 2026-04-16 20:16 JST
 
 This document is the handoff entry point for running the coordinate projection
 residual fix experiment on ABCI-Q.
@@ -22,9 +22,12 @@ residual fix experiment on ABCI-Q.
   continuations, ARKit stress, and ScanNet linear gates.
 - The v1c selective-prior ablation also completed: z-prior fitting, six smoke
   arms, three 5-epoch continuations, ARKit stress, and ScanNet linear gates.
-- The current scientific gate result is no strong-go: v1b improves over v1a and
-  `no-enc2d-renorm`, v1c does not improve over v1b, and neither matches or
-  beats original Concerto in the ScanNet linear gate.
+- A staged long-horizon e025 check also completed for same-stage original vs
+  v1b `combo-b075-a001` using `rt_QF=8`.
+- The current scientific gate result is no fix-and-beat-original yet:
+  v1b improves over v1a and `no-enc2d-renorm`, v1c does not improve over v1b,
+  and the e025 long-horizon check shows v1b essentially tied with, but still
+  slightly below, the same-stage original reference.
 
 ## Scientific State
 
@@ -56,6 +59,8 @@ Key ScanNet proxy numbers:
 | projres_v1a alpha 0.05 | 0.3627 | 0.3627 | finished no-go |
 | projres_v1b combo beta 0.75 alpha 0.01 | 0.4220 | 0.4220 | finished no strong-go |
 | projres_v1c mlp_z beta 0.75 alpha 0.01 | 0.4186 | 0.4186 | finished no strong-go |
+| long e025 original reference | 0.5531 | 0.5531 | finished reference |
+| long e025 v1b combo beta 0.75 alpha 0.01 | 0.5526 | 0.5526 | finished same-stage tie |
 
 Readout:
 - `coord_mlp` is only slightly above `no-enc2d`.
@@ -66,6 +71,9 @@ Readout:
   `beta=0.75` is materially better, but still below original.
 - v1c readout: changing the static prior family to lower-capacity /
   height-biased priors does not close the gap.
+- e025 long-horizon readout: v1b can match original much more closely than the
+  5-epoch gate suggested, but it still does not beat same-stage original or
+  meet the +0.01 replacement margin.
 - Next paper route is still fix-and-beat-original, but it likely needs a more
   adaptive or objective-level intervention rather than another static projection
   residual objective.
@@ -85,6 +93,7 @@ Configs:
 - [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke.py)
 - [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue-h10016.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue-h10016.py)
 - [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke-h10016.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-projres-v1b-smoke-h10016.py)
+- [configs/concerto/pretrain-concerto-v1m1-0-arkit-full-continue-h10016.py](../../configs/concerto/pretrain-concerto-v1m1-0-arkit-full-continue-h10016.py)
 - [configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-proxy-valonly.py](../../configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-proxy-valonly.py)
 
 Prior fitting:
@@ -104,6 +113,10 @@ Selective-prior v1c helpers:
 - [launch_projres_v1c_continue_top.sh](./launch_projres_v1c_continue_top.sh)
 - [launch_projres_v1c_followup_from_manifest.sh](./launch_projres_v1c_followup_from_manifest.sh)
 - [summarize_projres_smoke_manifest.py](./summarize_projres_smoke_manifest.py)
+
+Long-horizon helpers:
+- [submit_concerto_continue_abciq_qf.sh](./submit_concerto_continue_abciq_qf.sh)
+- [launch_projres_longhorizon_stage.sh](./launch_projres_longhorizon_stage.sh)
 
 v1a loss definition:
 
@@ -165,7 +178,8 @@ Linear gate conditions:
 ## Current Run Status
 
 ABCI-Q status, 2026-04-16 JST:
-- No `projres_v1` / `projres_v1b` / `projres_v1c` job is currently running.
+- No `projres_v1` / `projres_v1b` / `projres_v1c` / `projres_long` job is
+  currently running.
 - ABCI-Q `rt_QF=1` exposes 4 H100 80GB GPUs in this checkout's jobs.
 - The prior stage is complete and should be reused:
   - selected prior: `mlp`
@@ -232,6 +246,31 @@ ABCI-Q status, 2026-04-16 JST:
   - selected artifact:
     `data/runs/projres_v1/summaries/h10016-qf1fixed64/selected_smoke.json`
   - selected `alpha=0.05` based on a 64-step single-node smoke
+- Completed long-horizon e025 same-stage check:
+  - stage tag: `long-e025-qf32`
+  - continuation jobs: `132455.qjcm` and `132457.qjcm`, each `rt_QF=8`,
+    both `Exit_status=0`
+  - continuation walltimes:
+    - original reference: `03:11:21`
+    - v1b `combo-b075-a001`: `03:11:46`
+  - requested continuation walltime: `03:50:00`
+  - continuation checkpoints:
+    `exp/concerto/arkit-full-original-long-e025-qf32-continue/model/model_last.pth`
+    and
+    `exp/concerto/arkit-full-projres-v1b-combo-b075-a001-long-e025-qf32-continue/model/model_last.pth`
+  - follow-up jobs: `132456.qjcm` and `132458.qjcm`, both `rt_QF=1`,
+    both `Exit_status=0`
+  - follow-up walltimes:
+    - original reference: `00:50:15`
+    - v1b `combo-b075-a001`: `00:49:57`
+  - requested follow-up walltime: `01:05:00`
+  - ScanNet proxy results:
+    - original e025: `0.5531` last / `0.5531` best mIoU
+    - v1b e025: `0.5526` last / `0.5526` best mIoU
+  - same-stage delta: v1b is `-0.0005` mIoU vs original
+  - summary root:
+    `data/runs/projres_long/summaries/long-e025-qf32`
+  - interpretation: this is a same-stage tie, not a +0.01 replacement win.
 - Completed H10032 gate:
   - continuation job: `132196.qjcm`, 8 nodes / 32 H100 GPUs,
     `Exit_status=0`, walltime `00:39:37`
@@ -314,8 +353,10 @@ ABCI-Q status, 2026-04-16 JST:
     returned from forward.
   - `132187.qjcm`: flash-off comparison still reproduced the stall.
   - `132189.qjcm`: per-GPU batch 1 comparison still reproduced the stall.
-- Unfinished stages: optional fine-tune only. It should not be launched for
-  v1a/v1b because the linear gate is no strong-go.
+- Unfinished stages: optional fine-tune and the e050/e075/e100 long-horizon
+  ladder. They should not be launched for v1a/v1b/v1c unless the next decision
+  explicitly accepts "same downstream with lower shortcut energy" or introduces
+  a new adaptive/objective-level hypothesis.
 
 Completed setup validation:
 - env setup job `132080.qjcm` completed with `Exit_status = 0`

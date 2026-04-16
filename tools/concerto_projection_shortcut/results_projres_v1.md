@@ -1,6 +1,6 @@
 # ProjRes v1 Results
 
-Updated: 2026-04-16 08:25 JST
+Updated: 2026-04-16 20:16 JST
 
 ## Bottom Line
 
@@ -38,10 +38,64 @@ Decision:
 - `projres_v1a`: no-go
 - `projres_v1b`: no strong-go
 - `projres_v1c`: no strong-go
+- long-horizon e025 same-stage check:
+  - original: 0.5531 / 0.5531 ScanNet proxy mIoU
+  - v1b `combo-b075-a001`: 0.5526 / 0.5526 ScanNet proxy mIoU
+  - readout: v1b is essentially tied with same-stage original, but does not
+    beat it by the +0.01 replacement margin
 - do not launch optional fine-tune yet
 - v1c does not beat v1b, so changing only the static coordinate prior family is
   not enough. The next method should move beyond static projection residual
   removal and use a more selective or objective-level intervention.
+
+## Long-Horizon e025 Same-Stage Check
+
+Motivation:
+- The v1b/v1c 5-epoch continuation readout may be too short to decide whether
+  static projection residualization truly loses to original Concerto.
+- To control point cost, only one staged checkpoint was run first: epoch 25.
+- The comparison used a same-stage original reference and the current best v1b
+  arm, rather than relying on the older 5-epoch original baseline.
+
+Run:
+- stage tag: `long-e025-qf32`
+- continuation resource: two `rt_QF=8` ABCI-Q jobs, 8 nodes / 32 H100 GPUs per
+  job
+- continuation walltime requested: `03:50:00`
+- follow-up resource: two dependent `rt_QF=1` ScanNet proxy jobs
+- follow-up walltime requested: `01:05:00`
+
+Jobs:
+
+| job | arm | config | beta | alpha | status | walltime | checkpoint |
+| --- | --- | --- | ---: | ---: | --- | --- | --- |
+| 132455.qjcm | original | `pretrain-concerto-v1m1-0-arkit-full-continue-h10016` | - | - | Exit 0 | 03:11:21 | `exp/concerto/arkit-full-original-long-e025-qf32-continue/model/model_last.pth` |
+| 132457.qjcm | v1b combo-b075-a001 | `pretrain-concerto-v1m1-0-arkit-full-projres-v1b-continue-h10016` | 0.75 | 0.01 | Exit 0 | 03:11:46 | `exp/concerto/arkit-full-projres-v1b-combo-b075-a001-long-e025-qf32-continue/model/model_last.pth` |
+
+Continuation final train result:
+
+| arm | loss | enc2d | residual enc2d | alignment | target energy | removed energy | pred energy | residual norm | loss check |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| original | 6.2718 | 5.8209 | - | - | - | - | - | - | - |
+| v1b combo-b075-a001 | 6.7734 | 6.9957 | 5.5812 | 0.9701 | 0.1064 | 0.0598 | 0.0970 | 0.7340 | 0.0000 |
+
+ScanNet proxy follow-up:
+
+| job | arm | status | walltime | last mIoU | best mIoU | mAcc | allAcc | gate JSON |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| 132456.qjcm | original e025 | Exit 0 | 00:50:15 | 0.5531 | 0.5531 | 0.6832 | 0.8070 | `data/runs/projres_long/summaries/long-e025-qf32/scannet-proxy-arkit-full-original-long-e025-qf32-continue-lin_gate.json` |
+| 132458.qjcm | v1b combo-b075-a001 e025 | Exit 0 | 00:49:57 | 0.5526 | 0.5526 | 0.6807 | 0.8080 | `data/runs/projres_long/summaries/long-e025-qf32/scannet-proxy-arkit-full-projres-v1b-combo-b075-a001-long-e025-qf32-continue-lin_gate.json` |
+
+Readout:
+- The e025 check changes the earlier 5-epoch readout: v1b no longer looks
+  materially below original when both are run with the same longer schedule.
+- It is still not a fix-and-beat-original result: v1b is 0.0005 mIoU below
+  same-stage original and does not meet the +0.01 replacement margin.
+- Because the result is a near tie and not a win, do not automatically spend
+  points on the e050/e075/e100 ladder. Resume to e050 only if the next decision
+  criterion explicitly accepts "same downstream with lower shortcut energy" as
+  useful enough, or if a new adaptive/objective-level variant needs a stronger
+  long-horizon reference.
 
 ## ProjRes v1c Selective Prior Family Ablation
 

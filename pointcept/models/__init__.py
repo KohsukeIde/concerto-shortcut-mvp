@@ -26,3 +26,6 @@ from .masked_scene_contrast import *
 from .point_prompt_training import *
 from .sonata import *
 from .concerto import *
+
+# Post-hoc nuisance surgery
+from .posthoc_nuisance_surgery import *

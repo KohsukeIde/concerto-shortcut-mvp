@@ -26,10 +26,15 @@ investigation.
   - A point-conscious long-horizon e025 same-stage check completed for original
     and v1b `combo-b075-a001`. v1b essentially ties the same-stage original
     reference but does not beat it: 0.5526 vs 0.5531 ScanNet proxy mIoU.
+  - A fresh same-stage e050 run is currently active for original and v1b
+    `combo-b075-a001` on ABCI-Q `rt_QF=8` each.
+  - A frozen-feature post-training pilot completed for SPLICE-3D / HLNS on the
+    original e025 checkpoint. All three posthoc arms are near the original e025
+    ScanNet proxy mIoU without updating the Concerto backbone.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
-  - Do not run the optional fine-tune or the e050/e075/e100 ladder without a
-    new decision criterion or hypothesis.
+  - Do not run the optional fine-tune or extend to e075/e100 without a new
+    decision criterion or hypothesis.
 
 ## Documentation Policy
 
@@ -49,11 +54,13 @@ investigation.
    - [results_scannet_proxy_lin.md](./results_scannet_proxy_lin.md)
 4. ProjRes v1 gate:
    - [results_projres_v1.md](./results_projres_v1.md)
-5. Coordinate projection residual handoff:
+5. Frozen post-training nuisance surgery:
+   - [results_posthoc_nuisance_surgery.md](./results_posthoc_nuisance_surgery.md)
+6. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-6. Short narrative summary:
+7. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-7. Reproduction / runner overview:
+8. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## ARKit Full Causal Branch
@@ -141,16 +148,40 @@ Current interpretation:
   - same-stage original: 0.5531 / 0.5531 mIoU
   - v1b `combo-b075-a001`: 0.5526 / 0.5526 mIoU
   - this is an effective tie, not a +0.01 fix-and-beat-original result
+- Frozen post-training nuisance surgery on the original e025 checkpoint is also
+  near-tie:
+  - SPLICE-3D `height+xyz`: 0.5509 / 0.5509 mIoU
+  - SPLICE-3D `height`: 0.5510 / 0.5510 mIoU
+  - HLNS channel-group proxy `height+xyz`: 0.5515 / 0.5515 mIoU
+  - this is not a win, but it is a cheap post-training path that leaves the
+    backbone frozen and does not materially damage the ScanNet proxy.
 - On ABCI-Q, keep using the validated `torchrun` / `pbsdsh` path described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- No `projres_v1` / `projres_v1b` / `projres_v1c` / `projres_long` ABCI-Q job
-  is currently running.
+- `132600.qjcm`: original fresh e050 same-stage continuation, ABCI-Q `rt_QF=8`
+  (8 nodes / 32 H100 GPUs), running.
+  - exp:
+    `data/runs/projres_long/exp/arkit-full-original-long-e050-qf32-continue`
+  - latest observed state: epoch 12/50, remaining about 4h50m.
+- `132602.qjcm`: v1b `combo-b075-a001` fresh e050 same-stage continuation,
+  ABCI-Q `rt_QF=8` (8 nodes / 32 H100 GPUs), running.
+  - exp:
+    `data/runs/projres_long/exp/arkit-full-projres-v1b-combo-b075-a001-long-e050-qf32-continue`
+  - latest observed state: epoch 11/50, remaining about 4h50m.
+- `132601.qjcm` and `132603.qjcm`: dependent ScanNet proxy follow-ups, held
+  until the corresponding e050 continuation finishes.
 
 Recently completed:
+- `132608.qjcm`: frozen post-training nuisance surgery e025 pilot, ABCI-Q
+  `rt_QF=1`, completed.
+  - result root:
+    `data/runs/posthoc_surgery_e025pilot/original-long-e025-qf32`
+  - results:
+    SPLICE-3D `height+xyz` 0.5509 / 0.5509, SPLICE-3D `height` 0.5510 /
+    0.5510, HLNS `height+xyz` 0.5515 / 0.5515 ScanNet proxy mIoU.
 - `132455.qjcm` and `132457.qjcm`: long-horizon e025 continuations on ABCI-Q
   `rt_QF=8`, both `Exit_status=0`.
   - `132455.qjcm`: original reference, walltime `03:11:21`
@@ -427,14 +458,16 @@ Stopped job:
   checkpoint, stress csv, or ScanNet linear result was produced.
 
 Expected next stage:
-1. Treat `projres_v1a` and `projres_v1b` as complete for the current gate.
+1. Finish the active e050 same-stage check for original and
+   `projres_v1b combo-b075-a001`.
 2. Do not launch the optional fine-tune from either arm under the current gate.
-3. Use the v1b result as the next design constraint: partial target
-   residualization helps, but still removes or distorts useful signal enough to
-   stay below original continuation.
-4. Design a new arm before spending more ABCI-Q points. The most plausible
-   direction is not stronger removal, but a more selective objective around the
-   useful `beta=0.75` region.
+3. Do not automatically extend to e075/e100 until the e050 ScanNet follow-up is
+   read out. If e050 is still a near tie or better with improved shortcut
+   metrics, then stage the next checkpoint using the fixed target-epoch /
+   stop-epoch resume path.
+4. Keep the posthoc nuisance-surgery line as the cheap fallback while the
+   expensive continuation jobs run. The e025 pilot shows frozen post-training
+   stays within `0.0022` mIoU of the original e025 reference.
 5. Keep the fixed DDP metric reduction and ABCI-Q `torchrun` path; those
    infrastructure changes are validated.
 
@@ -465,16 +498,21 @@ Expected next stage:
 
 ## Immediate Next Step
 
-1. Do not immediately launch the e050/e075/e100 ladder. The e025 same-stage
-   check shows v1b is a near tie with original, not a +0.01 win.
-2. Decide whether "same downstream with lower coordinate-alignment energy" is
-   scientifically useful enough to justify a staged e050 resume; otherwise move
-   to a new adaptive/objective-level variant.
-3. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+1. Continue monitoring the active e050 fresh same-stage jobs:
+   - original: `132600.qjcm`
+   - v1b `combo-b075-a001`: `132602.qjcm`
+   - held follow-ups: `132601.qjcm`, `132603.qjcm`
+2. Read out the dependent ScanNet follow-ups before deciding whether to stage
+   e075/e100 or pivot to the posthoc fallback.
+3. Use the exact-resume launcher only for future staged runs that kept the same
+   target scheduler from the first stage; old target-e025 checkpoints are not
+   exact e050 resumes.
+4. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-4. Keep the current completed artifacts:
+5. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`
    - `data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
    - `data/runs/projres_long/summaries/long-e025-qf32`
+   - `data/runs/posthoc_surgery_e025pilot`

@@ -154,14 +154,14 @@ run_linear() {
   if [ -f "${linear_ckpt}" ]; then
     echo "[$(timestamp)] skip linear train: ${linear_ckpt}"
   else
-    echo "[$(timestamp)] linear: gpu=${LINEAR_GPU} config=${LINEAR_CONFIG} exp=${LINEAR_EXP}"
-    env CUDA_VISIBLE_DEVICES="${LINEAR_GPU}" \
+    echo "[$(timestamp)] linear: gpu_ids=${LINEAR_GPU_IDS_CSV} num_gpu=${LINEAR_NUM_GPU} launcher=${LINEAR_TRAIN_LAUNCHER} config=${LINEAR_CONFIG} exp=${LINEAR_EXP}"
+    env CUDA_VISIBLE_DEVICES="${LINEAR_GPU_IDS_CSV}" \
         PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
         POINTCEPT_TRAIN_LAUNCHER="${LINEAR_TRAIN_LAUNCHER}" \
         bash "${REPO_ROOT}/scripts/train.sh" \
           -p "${PYTHON_BIN}" \
           -d "${DATASET_NAME}" \
-          -g 1 \
+          -g "${LINEAR_NUM_GPU}" \
           -c "${LINEAR_CONFIG}" \
           -n "${LINEAR_EXP}" \
           -w "${CONTINUE_CKPT}"
@@ -192,6 +192,8 @@ RUN_LINEAR="${RUN_LINEAR:-1}"
 FOLLOWUP_PARALLEL="${FOLLOWUP_PARALLEL:-1}"
 STRESS_GPU="${STRESS_GPU:-0}"
 LINEAR_GPU="${LINEAR_GPU:-1}"
+LINEAR_GPU_IDS_CSV="${LINEAR_GPU_IDS_CSV:-${LINEAR_GPU}}"
+LINEAR_NUM_GPU="${LINEAR_NUM_GPU:-$(awk -F',' '{print NF}' <<< "${LINEAR_GPU_IDS_CSV}")}"
 LINEAR_TRAIN_LAUNCHER="${LINEAR_TRAIN_LAUNCHER:-pointcept}"
 
 mkdir -p "${SUMMARY_ROOT}" "${LOG_DIR}"
@@ -237,6 +239,9 @@ echo "linear_gate_json=${LINEAR_GATE_JSON}"
 echo "run_stress=${RUN_STRESS}"
 echo "run_linear=${RUN_LINEAR}"
 echo "followup_parallel=${FOLLOWUP_PARALLEL}"
+echo "linear_gpu_ids_csv=${LINEAR_GPU_IDS_CSV}"
+echo "linear_num_gpu=${LINEAR_NUM_GPU}"
+echo "linear_train_launcher=${LINEAR_TRAIN_LAUNCHER}"
 
 if [ ! -f "${CONTINUE_CKPT}" ]; then
   echo "[$(timestamp)] error: missing continuation checkpoint: ${CONTINUE_CKPT}" >&2

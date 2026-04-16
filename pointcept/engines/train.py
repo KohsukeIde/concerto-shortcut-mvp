@@ -137,7 +137,18 @@ class Trainer(TrainerBase):
         super(Trainer, self).__init__()
         self.epoch = 0
         self.start_epoch = 0
-        self.max_epoch = cfg.eval_epoch
+        self.target_epoch = cfg.eval_epoch
+        self.stop_epoch = getattr(cfg, "stop_epoch", None)
+        if self.stop_epoch is not None:
+            self.stop_epoch = int(self.stop_epoch)
+            if self.stop_epoch <= 0:
+                self.stop_epoch = None
+            elif self.stop_epoch > self.target_epoch:
+                raise ValueError(
+                    "stop_epoch must be <= eval_epoch "
+                    f"({self.stop_epoch} > {self.target_epoch})"
+                )
+        self.max_epoch = self.stop_epoch or self.target_epoch
         self.best_metric_value = -torch.inf
         self.logger = get_root_logger(
             log_file=os.path.join(cfg.save_path, "train.log"),
@@ -145,6 +156,11 @@ class Trainer(TrainerBase):
         )
         self.logger.info("=> Loading config ...")
         self.cfg = cfg
+        if self.stop_epoch is not None:
+            self.logger.info(
+                "=> Staged stop enabled: "
+                f"stop_epoch={self.stop_epoch}, target_epoch={self.target_epoch}"
+            )
         self.logger.info(f"Save path: {cfg.save_path}")
         self.logger.info(f"Config:\n{cfg.pretty_text}")
         self.logger.info("=> Building model ...")

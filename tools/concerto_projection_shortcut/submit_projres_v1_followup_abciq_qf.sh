@@ -46,11 +46,13 @@ RUN_STRESS="${RUN_STRESS:-1}"
 RUN_LINEAR="${RUN_LINEAR:-1}"
 STRESS_GPU="${STRESS_GPU:-0}"
 LINEAR_GPU="${LINEAR_GPU:-1}"
+LINEAR_GPU_IDS_CSV="${LINEAR_GPU_IDS_CSV:-${LINEAR_GPU}}"
+LINEAR_NUM_GPU="${LINEAR_NUM_GPU:-$(awk -F',' '{print NF}' <<< "${LINEAR_GPU_IDS_CSV}")}"
 LINEAR_TRAIN_LAUNCHER="${LINEAR_TRAIN_LAUNCHER:-pointcept}"
 
 export EXP_MIRROR_ROOT EXP_TAG SUMMARY_ROOT LOG_DIR
 export MAX_STRESS_BATCHES FOLLOWUP_PARALLEL RUN_STRESS RUN_LINEAR
-export STRESS_GPU LINEAR_GPU LINEAR_TRAIN_LAUNCHER
+export STRESS_GPU LINEAR_GPU LINEAR_GPU_IDS_CSV LINEAR_NUM_GPU LINEAR_TRAIN_LAUNCHER
 
 echo "=== ABCI-Q ProjRes v1 follow-up ==="
 echo "date=$(date -Is)"
@@ -71,6 +73,8 @@ echo "run_stress=${RUN_STRESS}"
 echo "run_linear=${RUN_LINEAR}"
 echo "stress_gpu=${STRESS_GPU}"
 echo "linear_gpu=${LINEAR_GPU}"
+echo "linear_gpu_ids_csv=${LINEAR_GPU_IDS_CSV}"
+echo "linear_num_gpu=${LINEAR_NUM_GPU}"
 echo "linear_train_launcher=${LINEAR_TRAIN_LAUNCHER}"
 nvidia-smi -L || true
 nvcc --version || true

@@ -38,6 +38,10 @@ Added frozen post-training surgery components:
 - `tools/concerto_projection_shortcut/eval_scannet_semseg_stress.py`
 - `tools/concerto_projection_shortcut/run_posthoc_stress_suite.sh`
 - `tools/concerto_projection_shortcut/submit_posthoc_stress_abciq_qf.sh`
+- `tools/concerto_projection_shortcut/extract_frozen_backbone_features_step1_geom.py`
+- `tools/concerto_projection_shortcut/fit_geometry_step1_smoke.py`
+- `tools/concerto_projection_shortcut/run_step1_geometry_smoke.sh`
+- `tools/concerto_projection_shortcut/submit_step1_geometry_smoke_abciq_qf.sh`
 - `configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-splice3d-frozen.py`
 - `configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-hlns-frozen.py`
 - `configs/concerto/semseg-ptv3-base-v1m1-0a-scannet-lin-recycle-frozen.py`
@@ -128,6 +132,60 @@ Decision:
   without a stronger new hypothesis, because the learned write-back is tiny and
   does not change the stress conclusion.
 
+## Step 1 Local Geometry Smoke
+
+Goal:
+- Before running UGNR, test whether a true local geometry descriptor carries
+  additional ScanNet signal beyond the frozen Concerto feature.
+
+Implementation:
+- `extract_frozen_backbone_features_step1_geom.py` adds `geom_local9` to the
+  frozen feature cache.
+- `geom_local9` is computed from full-scene kNN over raw coordinates:
+  normalized covariance eigenvalues, oriented normal, curvature, linearity, and
+  planarity.
+- `fit_geometry_step1_smoke.py` evaluates:
+  - `geometry_only`
+  - `concat = [x, phi]`
+  - `residual_expert_global = W0 x + A phi`, with `W0` fixed.
+
+Runs:
+- `132832.qjcm`: tiny 2-scene path smoke, completed.
+- `132833.qjcm`: 20-scene calibration, completed.
+- `132835.qjcm`: main cache extraction, completed cache creation but failed in
+  float32 normal-equation solve.
+- `132837.qjcm`: fit-only rerun after robust float64 ridge solve, completed.
+
+Main result:
+- root:
+  `data/runs/step1_geometry_smoke/arkit-full-original-long-e025-qf32-continue/geom_smoke`
+- cache:
+  `data/runs/step1_geometry_smoke/arkit-full-original-long-e025-qf32-continue/cache/semseg-ptv3-base-v1m1-0a-scannet-lin-proxy_r1024_mt512_mv128_geomk32`
+- feature rows:
+  - train: 524288
+  - val: 131072
+  - feature dim: 1232
+  - geometry dim: 9
+  - kNN: 32
+
+Offline cache-level results:
+
+| method | val mIoU | delta vs original | val mAcc | val allAcc |
+| --- | ---: | ---: | ---: | ---: |
+| original | 0.4943 | +0.0000 | 0.5892 | 0.8071 |
+| geometry_only | 0.0679 | -0.4264 | 0.1084 | 0.5840 |
+| concat | 0.4944 | +0.0000 | 0.5894 | 0.8071 |
+| residual_expert_global | 0.4943 | -0.0001 | 0.5892 | 0.8071 |
+
+Decision:
+- Step 1 does not pass. The threshold was `+0.003` mIoU over the offline
+  original baseline; `concat` improves by only `+0.00002`, and
+  `residual_expert_global` is slightly negative.
+- This weakens the premise for UGNR: the tested local geometry descriptor does
+  not provide a useful missing linear signal on top of the frozen Concerto
+  cache.
+- Do not launch UGNR unless a new descriptor or gate hypothesis is introduced.
+
 ## Readout
 
 - SPLICE-3D behaves as intended in the pilot: nuisance energy is driven near
@@ -144,7 +202,7 @@ Decision:
 
 Recommended next step:
 - Do not spend more points on broad posthoc sweeps yet.
-- If continuing posthoc, the next hypothesis should change the residual channel,
-  not just tune SPLICE gamma: e.g. class-conditional residual recycling,
-  boundary/local-geometry descriptors, or an analysis-first head/channel
-  localization test.
+- The Step 1 local-geometry smoke is no-go, so do not launch UGNR with the
+  current `geom_local9` descriptor.
+- If continuing posthoc, the next hypothesis must change the information source
+  or supervision, not just tune SPLICE gamma or UGNR lambda.

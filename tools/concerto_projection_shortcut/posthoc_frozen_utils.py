@@ -77,11 +77,24 @@ def center_features(x_train: torch.Tensor, x_val: torch.Tensor) -> Tuple[torch.T
 
 
 def ridge_regression(x: torch.Tensor, y: torch.Tensor, ridge: float) -> torch.Tensor:
+    out_dtype = x.dtype
+    x = x.double()
+    y = y.double()
     d = x.shape[1]
     xtx = x.T @ x
-    reg = ridge * torch.eye(d, dtype=x.dtype)
+    reg = ridge * torch.eye(d, dtype=x.dtype, device=x.device)
     xty = x.T @ y
-    return torch.linalg.solve(xtx + reg, xty)
+    system = xtx + reg
+    try:
+        return torch.linalg.solve(system, xty).to(out_dtype)
+    except torch._C._LinAlgError:
+        for jitter in (1e-6, 1e-5, 1e-4, 1e-3, 1e-2):
+            try:
+                jitter_eye = jitter * torch.eye(d, dtype=x.dtype, device=x.device)
+                return torch.linalg.solve(system + jitter_eye, xty).to(out_dtype)
+            except torch._C._LinAlgError:
+                continue
+        return (torch.linalg.pinv(system) @ xty).to(out_dtype)
 
 
 def orth_basis(mat: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:

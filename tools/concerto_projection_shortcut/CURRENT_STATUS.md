@@ -32,6 +32,10 @@ investigation.
   - The posthoc e025 stress downstream gate also completed. SPLICE-3D and
     Residual Recycling preserve clean mIoU within `-0.005`, but none improves a
     stress condition by `+0.005`; Stage 1 is no-go as a mainline claim.
+  - The Step 1 local-geometry smoke for UGNR completed. `geom_local9` concat
+    and residual-expert variants do not improve the offline frozen-cache
+    baseline by the required `+0.003` mIoU, so UGNR should not be launched with
+    this descriptor.
   - The attempted fresh same-stage e050 original/v1b runs did not produce valid
     e050 checkpoints. Both hit walltime at epoch 6 after delayed node startup.
   - Data and run outputs should live under repo-local `data/`.
@@ -165,6 +169,13 @@ Current interpretation:
   - Residual Recycling coord9 max stress gain: `+0.0023` on `z_flip`
   - pass threshold was `clean >= original - 0.005` and any stress
     `>= original + 0.005`; clean passes, stress does not.
+- The Step 1 local-geometry smoke is no-go for the current `geom_local9`
+  descriptor:
+  - offline frozen-cache original baseline: `0.49433` mIoU
+  - `concat=[x, phi]`: `0.49435`, delta `+0.00002`
+  - `residual_expert_global=W0x+Aphi`: `0.49427`, delta `-0.00006`
+  - pass threshold was `+0.003`; this does not support launching UGNR with the
+    tested local geometry descriptor.
 - On ABCI-Q, keep using the validated `torchrun` / `pbsdsh` path described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
@@ -174,6 +185,17 @@ Running now:
 - None observed at the time of this update.
 
 Recently completed:
+- `132837.qjcm`: Step 1 local-geometry smoke fit-only rerun after robust
+  float64 ridge solve, ABCI-Q `rt_QF=1`, completed.
+  - result root:
+    `data/runs/step1_geometry_smoke/arkit-full-original-long-e025-qf32-continue/geom_smoke`
+  - result: `concat` delta `+0.00002`, `residual_expert_global` delta
+    `-0.00006`; no-go by the `+0.003` geometry-signal criterion.
+- `132835.qjcm`: Step 1 local-geometry main cache extraction, ABCI-Q
+  `rt_QF=1`, created the 524288 train / 131072 val row `geom_local9` cache but
+  hit a singular float32 normal-equation solve in the fit stage.
+- `132832.qjcm` and `132833.qjcm`: Step 1 tiny path smoke and calibration,
+  ABCI-Q `rt_QF=1`, both completed.
 - `132789.qjcm`: Residual Recycling e025 stress downstream, ABCI-Q `rt_QF=1`,
   completed.
   - result root:

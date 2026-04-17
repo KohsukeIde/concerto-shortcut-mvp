@@ -1,4 +1,9 @@
-# Official Concerto Causal Battery
+# Official Concerto Large-Video Causal Battery
+
+This battery used `pretrain-concerto-v1m1-2-large-video.pth`, which is the
+released full pretraining checkpoint with enc2d heads for the large-video
+variant. Treat these numbers as cross-variant evidence, not as the final
+Concerto paper main-variant diagnostic.
 
 - raw logs: `/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/official_causal_battery/official-large-video-step0-mb32/raw.csv`
 

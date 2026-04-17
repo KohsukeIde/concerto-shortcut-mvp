@@ -38,10 +38,16 @@ investigation.
     this descriptor.
   - The attempted fresh same-stage e050 original/v1b runs did not produce valid
     e050 checkpoints. Both hit walltime at epoch 6 after delayed node startup.
-  - Step 0 official-checkpoint causal battery completed on
-    `pretrain-concerto-v1m1-2-large-video.pth` for ARKit val and Concerto
-    ScanNet val. Target swaps strongly increase enc2d loss on both datasets,
-    so the shortcut signal is not an ARKit-continued artifact.
+  - Step 0 official-checkpoint causal battery completed on the released
+    `pretrain-concerto-v1m1-2-large-video.pth` checkpoint for ARKit val and
+    Concerto ScanNet val. Target swaps strongly increase enc2d loss on both
+    datasets, so the signal is not an ARKit-continued artifact. This checkpoint
+    is the large-video variant, so it is now treated as cross-variant evidence,
+    not as the final Concerto paper main-variant diagnostic.
+  - Main-variant Step 0/0.5 is the current next action: use
+    `concerto_base_origin.pth` as a frozen backbone, short-refit the missing
+    enc2d alignment projection on the six indoor Concerto datasets, run the
+    target-swap battery, then fit a frozen coord-MLP rival before SR-LoRA.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -61,7 +67,7 @@ investigation.
    - [results_arkit_full_causal.md](./results_arkit_full_causal.md)
 2. Geometry-vs-coordinate stress result:
    - [results_arkit_full_stress_corrected.md](./results_arkit_full_stress_corrected.md)
-3. Official checkpoint ARKit/ScanNet causal battery:
+3. Official checkpoint large-video ARKit/ScanNet causal battery:
    - [results_official_causal_battery.md](./results_official_causal_battery.md)
 4. ScanNet continuation proxy:
    - [results_scannet_proxy_lin.md](./results_scannet_proxy_lin.md)
@@ -76,13 +82,16 @@ investigation.
 9. Reproduction / runner overview:
    - [README.md](./README.md)
 
-## Official Checkpoint Causal Battery
+## Official Large-Video Checkpoint Causal Battery
 
 Source:
 - [results_official_causal_battery.md](./results_official_causal_battery.md)
 
 Setup:
 - Weight: `data/weights/concerto/pretrain-concerto-v1m1-2-large-video.pth`.
+- Scope: released full pretraining checkpoint for the large-video variant.
+  These numbers remain useful as cross-variant evidence, but the main Concerto
+  paper variant now needs the frozen-backbone head-refit diagnostic below.
 - ARKit root: `data/arkitscenes_absmeta`.
 - ScanNet root: `data/concerto_scannet_imagepoint_absmeta`.
 - Smoke size: 32 batches per dataset and mode.
@@ -101,13 +110,69 @@ Key numbers:
 | ScanNet val | cross-scene target swap | 5.467065 | +2.050520 |
 
 Interpretation:
-- The released full pretraining checkpoint remains sensitive to target swaps on
-  ARKit validation.
+- The released large-video full pretraining checkpoint remains sensitive to
+  target swaps on ARKit validation.
 - The same signal is stronger on Concerto-preprocessed ScanNet validation.
-- This supports the stronger read that the issue is inside the cross-modal JEPA
-  objective, not only an ARKit-continued artifact.
-- `concerto_base*.pth` are backbone/downstream weights and do not contain
-  enc2d heads; do not use them for official enc2d causal evaluation.
+- This supports the read that the issue is not only an ARKit-continued artifact.
+- `concerto_base_origin.pth` is the Concerto paper main-variant backbone weight
+  but does not contain enc2d / patch projection heads. The main-variant line
+  therefore uses frozen-backbone head-refit rather than exact unreleased enc2d
+  head recovery.
+
+## Main-Variant Step 0/0.5 Plan
+
+Current implementation:
+- Data prep:
+  - `setup_concerto_six_imagepoint.sh`
+  - `prepare_concerto_imagepoint_splits.py`
+  - `verify_concerto_six_datasets.py`
+- Main-variant diagnostics:
+  - `fit_main_variant_enc2d_head.py`
+  - `fit_main_variant_coord_mlp_rival.py`
+  - `run_main_variant_step05.sh`
+  - `submit_main_variant_step05_abciq_qf.sh`
+
+Dataset scope:
+- ScanNet, ScanNet++, Structured3D, S3DIS, ARKitScenes, HM3D.
+- RE10K is excluded from this mainline because it belongs to the large-video
+  variant.
+
+Current data state:
+- Ready: ARKitScenes absmeta and Concerto ScanNet image-point absmeta.
+- Data prep running on CPU-only `rt_QC=1` jobs:
+  - HM3D: `132997.qjcm`, walltime `04:00:00`
+  - S3DIS: `132998.qjcm`, walltime `03:00:00`
+  - ScanNet++: `132999.qjcm`, walltime `08:00:00`
+  - Structured3D download shards:
+    - `133003.qjcm`
+    - `133004.qjcm`
+    - `133005.qjcm`
+    - `133006.qjcm`
+    - `133007.qjcm`
+    - `133008.qjcm`
+    - `133009.qjcm`
+    - `133010.qjcm`
+  - Structured3D extract/rewrite after shard completion: `133011.qjcm`,
+    walltime `10:00:00`
+- Missing until those jobs finish: ScanNet++, S3DIS, HM3D, Structured3D
+  image-point absmeta roots.
+- A dry-run code smoke on the ready ARKit/ScanNet subset finished with
+  `Exit_status=0` as `133001.qjcm`; its outputs are kept under
+  `data/runs/main_variant_*/*main-origin-step05-smoke2*` and are not treated as
+  scientific results.
+- The old single Structured3D prep job `133000.qjcm` was replaced because the
+  dataset is large enough to benefit from parallel shard download.
+- Dependent first capped six-dataset Step 0/0.5 job is now `133012.qjcm` with
+  dependency `afterok:132997:132998:132999:133011`, `rt_QF=1`, walltime
+  `03:00:00`, tag `main-origin-six-step05-cap64`.
+
+Acceptance:
+- `results_main_variant_causal_battery.md/csv` should be produced from the
+  frozen-backbone head-refit checkpoint.
+- `results_official_coord_mlp_rival.md/csv` should compare the coord-MLP rival
+  to the head-refit full baseline and target-swap losses.
+- SR-LoRA Phase A remains blocked until Step 0.5 confirms that the coord rival
+  is meaningful.
 
 ## ARKit Full Causal Branch
 

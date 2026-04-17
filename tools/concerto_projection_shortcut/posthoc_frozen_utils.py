@@ -42,6 +42,35 @@ def make_nuisance(coord_norm: torch.Tensor, spec: str) -> torch.Tensor:
     raise ValueError(f"Unsupported nuisance spec: {spec}")
 
 
+def make_geometry(coord_norm: torch.Tensor, spec: str) -> torch.Tensor:
+    x = coord_norm[:, 0:1]
+    y = coord_norm[:, 1:2]
+    z = coord_norm[:, 2:3]
+    xyz = coord_norm[:, :3]
+    if spec == "height":
+        return z
+    if spec == "xyz":
+        return xyz
+    if spec == "height+xyz":
+        return torch.cat([z, xyz], dim=1)
+    if spec == "coord9":
+        return torch.cat([x, y, z, x * x, y * y, z * z, x * y, y * z, z * x], dim=1)
+    if spec == "coord10":
+        ones = torch.ones_like(z)
+        return torch.cat([ones, x, y, z, x * x, y * y, z * z, x * y, y * z, z * x], dim=1)
+    raise ValueError(f"Unsupported geometry spec: {spec}")
+
+
+def geometry_dim(spec: str) -> int:
+    return {
+        "height": 1,
+        "xyz": 3,
+        "height+xyz": 4,
+        "coord9": 9,
+        "coord10": 10,
+    }[spec]
+
+
 def center_features(x_train: torch.Tensor, x_val: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     mean = x_train.mean(dim=0, keepdim=True)
     return x_train - mean, x_val - mean, mean.squeeze(0)
@@ -86,6 +115,28 @@ def apply_transform(x: torch.Tensor, mean: torch.Tensor, transform: torch.Tensor
     return y + mean
 
 
+def standardize_geometry(train_phi: torch.Tensor, val_phi: torch.Tensor):
+    mean = train_phi.mean(dim=0, keepdim=True)
+    std = train_phi.std(dim=0, keepdim=True, unbiased=False).clamp_min(1e-6)
+    return (train_phi - mean) / std, (val_phi - mean) / std, mean.squeeze(0), std.squeeze(0)
+
+
+def apply_residual_recycling(
+    x: torch.Tensor,
+    mean: torch.Tensor,
+    transform: torch.Tensor,
+    geom: torch.Tensor,
+    harm_basis: torch.Tensor,
+    geom_weight: torch.Tensor,
+    recycle_scale: float,
+) -> torch.Tensor:
+    y = apply_transform(x, mean, transform)
+    if harm_basis.numel() == 0 or geom_weight.numel() == 0:
+        return y
+    coeff = geom @ geom_weight
+    return y + float(recycle_scale) * (coeff @ harm_basis.T)
+
+
 def nuisance_energy(x: torch.Tensor, mean: torch.Tensor, basis: torch.Tensor) -> float:
     if basis.numel() == 0:
         return 0.0
@@ -111,15 +162,21 @@ def fit_linear_classifier(train_x: torch.Tensor, train_label: torch.Tensor, val_
     return {"train_acc": float(train_acc), "val_acc": float(val_acc), "num_classes": num_classes}
 
 
-def save_editor_checkpoint(output_path: Path, transform: torch.Tensor, mean: torch.Tensor, metadata: dict) -> None:
+def save_editor_checkpoint(
+    output_path: Path,
+    transform: torch.Tensor,
+    mean: torch.Tensor,
+    metadata: dict,
+    extra_state: Dict[str, torch.Tensor] | None = None,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "state_dict": {
-            "transform": transform.float().cpu(),
-            "mean": mean.float().cpu(),
-            "bias": torch.zeros_like(mean).float().cpu(),
-        },
-        "metadata": metadata,
+    state_dict = {
+        "transform": transform.float().cpu(),
+        "mean": mean.float().cpu(),
+        "bias": torch.zeros_like(mean).float().cpu(),
     }
+    if extra_state:
+        state_dict.update({key: value.float().cpu() for key, value in extra_state.items()})
+    payload = {"state_dict": state_dict, "metadata": metadata}
     torch.save(payload, output_path)
     (output_path.with_suffix(output_path.suffix + ".json")).write_text(json.dumps(metadata, indent=2))

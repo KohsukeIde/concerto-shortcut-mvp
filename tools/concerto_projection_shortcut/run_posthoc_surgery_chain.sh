@@ -19,6 +19,12 @@ NUISANCE=${NUISANCE:-height+xyz}
 GAMMA=${GAMMA:-1.0}
 RIDGE=${RIDGE:-1e-2}
 CLASSIFIER_RIDGE=${CLASSIFIER_RIDGE:-1e-2}
+RECYCLE_GEOM=${RECYCLE_GEOM:-coord9}
+RECYCLE_SCALE=${RECYCLE_SCALE:-1.0}
+RECYCLE_RIDGE=${RECYCLE_RIDGE:-1e-2}
+RECYCLE_COEFF_RIDGE=${RECYCLE_COEFF_RIDGE:-1e-2}
+RECYCLE_MAX_RANK=${RECYCLE_MAX_RANK:-8}
+RECYCLE_COEFF_CLIP=${RECYCLE_COEFF_CLIP:-0.0}
 POSTHOC_ROOT=${POSTHOC_ROOT:-${POINTCEPT_DATA_ROOT}/runs/posthoc_surgery}
 if [ -z "${BACKBONE_TAG:-}" ]; then
   if [ "$(basename "$(dirname "${BACKBONE_CKPT}")")" = "model" ]; then
@@ -29,7 +35,13 @@ if [ -z "${BACKBONE_TAG:-}" ]; then
 fi
 BACKBONE_TAG="$(printf '%s' "${BACKBONE_TAG}" | tr -c 'A-Za-z0-9_.-' '_')"
 SAFE_NUISANCE="$(printf '%s' "${NUISANCE}" | tr '+/' '__')"
-OUTDIR=${OUTDIR:-${POSTHOC_ROOT}/${BACKBONE_TAG}/${METHOD}_${SAFE_NUISANCE}_g${GAMMA}}
+SAFE_RECYCLE_GEOM="$(printf '%s' "${RECYCLE_GEOM}" | tr '+/' '__')"
+if [[ "${METHOD}" == "recycle" || "${METHOD}" == "residual_recycling" ]]; then
+  DEFAULT_POSTHOC_RUN="${METHOD}_${SAFE_NUISANCE}_${SAFE_RECYCLE_GEOM}_g${GAMMA}_r${RECYCLE_SCALE}"
+else
+  DEFAULT_POSTHOC_RUN="${METHOD}_${SAFE_NUISANCE}_g${GAMMA}"
+fi
+OUTDIR=${OUTDIR:-${POSTHOC_ROOT}/${BACKBONE_TAG}/${DEFAULT_POSTHOC_RUN}}
 ROWS_PER_SCENE=${ROWS_PER_SCENE:-1024}
 MAX_BATCHES_TRAIN=${MAX_BATCHES_TRAIN:--1}
 MAX_BATCHES_VAL=${MAX_BATCHES_VAL:--1}
@@ -39,7 +51,7 @@ CACHE_ROOT=${CACHE_ROOT:-${POSTHOC_ROOT}/${BACKBONE_TAG}/cache/${CONFIG}_r${ROWS
 DATASET_NAME=${DATASET_NAME:-concerto}
 EXP_MIRROR_ROOT=${EXP_MIRROR_ROOT:-${POSTHOC_ROOT}/exp}
 LINEAR_CONFIG=${LINEAR_CONFIG:-semseg-ptv3-base-v1m1-0a-scannet-lin-${METHOD}-frozen}
-LINEAR_EXP=${LINEAR_EXP:-posthoc-${BACKBONE_TAG}-${METHOD}-${SAFE_NUISANCE}-g${GAMMA}-lin}
+LINEAR_EXP=${LINEAR_EXP:-posthoc-${BACKBONE_TAG}-${DEFAULT_POSTHOC_RUN}-lin}
 RUN_LINEAR=${RUN_LINEAR:-1}
 GPUS=${GPUS:-4}
 GPU_IDS_CSV=${GPU_IDS_CSV:-0,1,2,3}
@@ -64,6 +76,8 @@ echo "[posthoc] backbone_ckpt=${BACKBONE_CKPT}"
 echo "[posthoc] backbone_tag=${BACKBONE_TAG}"
 echo "[posthoc] method=${METHOD}"
 echo "[posthoc] nuisance=${NUISANCE}"
+echo "[posthoc] recycle_geom=${RECYCLE_GEOM}"
+echo "[posthoc] recycle_scale=${RECYCLE_SCALE}"
 echo "[posthoc] outdir=${OUTDIR}"
 echo "[posthoc] cache_root=${CACHE_ROOT}"
 echo "[posthoc] rows_per_scene=${ROWS_PER_SCENE}"
@@ -99,6 +113,25 @@ if [[ "${METHOD}" == "splice3d" ]]; then
     --ridge "${RIDGE}" \
     --classifier-ridge "${CLASSIFIER_RIDGE}"
   export POSTHOC_EDITOR_CKPT="${OUTDIR}/splice3d_editor.pth"
+elif [[ "${METHOD}" == "recycle" || "${METHOD}" == "residual_recycling" ]]; then
+  "${PYTHON_BIN}" "${REPO_ROOT}/tools/concerto_projection_shortcut/fit_residual_recycling_frozen.py" \
+    --train-cache "${CACHE_ROOT}/train_features.pt" \
+    --val-cache "${CACHE_ROOT}/val_features.pt" \
+    --output "${OUTDIR}/residual_recycling_editor.pth" \
+    --nuisance "${NUISANCE}" \
+    --geometry "${RECYCLE_GEOM}" \
+    --gamma "${GAMMA}" \
+    --recycle-scale "${RECYCLE_SCALE}" \
+    --ridge "${RIDGE}" \
+    --classifier-ridge "${CLASSIFIER_RIDGE}" \
+    --recycle-ridge "${RECYCLE_RIDGE}" \
+    --coeff-ridge "${RECYCLE_COEFF_RIDGE}" \
+    --max-rank "${RECYCLE_MAX_RANK}"
+  export POSTHOC_EDITOR_CKPT="${OUTDIR}/residual_recycling_editor.pth"
+  export POSTHOC_RECYCLE_GEOM_SPEC="${RECYCLE_GEOM}"
+  export POSTHOC_RECYCLE_MAX_RANK="${RECYCLE_MAX_RANK}"
+  export POSTHOC_RECYCLE_SCALE="${RECYCLE_SCALE}"
+  export POSTHOC_RECYCLE_COEFF_CLIP="${RECYCLE_COEFF_CLIP}"
 else
   "${PYTHON_BIN}" "${REPO_ROOT}/tools/concerto_projection_shortcut/fit_hlns_frozen.py" \
     --train-cache "${CACHE_ROOT}/train_features.pt" \

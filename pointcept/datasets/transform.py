@@ -346,6 +346,54 @@ class RandomFlip(object):
 
 
 @TRANSFORMS.register_module()
+class CoordStress(object):
+    def __init__(self, stress="clean", voxel_size=0.2):
+        self.stress = stress
+        self.voxel_size = voxel_size
+
+    @staticmethod
+    def _matrix(stress):
+        if stress == "z_flip":
+            return np.array(
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
+                dtype=np.float32,
+            )
+        if stress == "xy_swap":
+            return np.array(
+                [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+                dtype=np.float32,
+            )
+        if stress == "roll_90_x":
+            return np.array(
+                [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+                dtype=np.float32,
+            )
+        raise ValueError(f"Unsupported stress matrix: {stress}")
+
+    def __call__(self, data_dict):
+        if self.stress == "clean":
+            return data_dict
+        if "coord" not in data_dict:
+            return data_dict
+
+        if self.stress == "local_surface_destroy":
+            voxel_size = float(self.voxel_size)
+            anchor = np.floor(data_dict["coord"] / voxel_size) * voxel_size
+            data_dict["coord"] = anchor + np.random.rand(*data_dict["coord"].shape).astype(
+                data_dict["coord"].dtype
+            ) * voxel_size
+            if "normal" in data_dict:
+                data_dict["normal"] = np.zeros_like(data_dict["normal"])
+            return data_dict
+
+        matrix = self._matrix(self.stress)
+        data_dict["coord"] = np.dot(data_dict["coord"], matrix.T)
+        if "normal" in data_dict:
+            data_dict["normal"] = np.dot(data_dict["normal"], matrix.T)
+        return data_dict
+
+
+@TRANSFORMS.register_module()
 class RandomJitter(object):
     def __init__(self, sigma=0.01, clip=0.05):
         assert clip > 0

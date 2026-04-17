@@ -18,6 +18,7 @@ WORKDIR="${WORKDIR:-${REPO_ROOT}}"
 PREFERRED_IFNAME="${PREFERRED_IFNAME:-}"
 NCCL_STABLE_MODE="${NCCL_STABLE_MODE:-1}"
 POINTCEPT_TRAIN_LAUNCHER="${POINTCEPT_TRAIN_LAUNCHER:-torchrun}"
+NODE_START_TIMEOUT_SEC="${NODE_START_TIMEOUT_SEC:-300}"
 
 if [ -z "${PBS_NODEFILE:-}" ] || [ ! -f "${PBS_NODEFILE:-}" ]; then
   echo "[error] PBS_NODEFILE is required for multi-node training." >&2
@@ -77,6 +78,7 @@ export WORKDIR REPO_ROOT DATASET_NAME CONFIG_NAME EXP_NAME WEIGHT_PATH
 export TRAIN_RESUME
 export TRAIN_GPU_IDS_CSV NPROC_PER_NODE NNODES MASTER_ADDR MASTER_PORT DIST_URL
 export RUN_DIR HOSTS_FILE DONE_MARKER VENV_ACTIVATE PYTHON_BIN PYTHON_MODULE CUDA_MODULE
+export NODE_START_TIMEOUT_SEC
 export HF_HOME HF_HUB_CACHE HUGGINGFACE_HUB_CACHE HF_XET_CACHE TORCH_HOME
 export POINTCEPT_TRAIN_LAUNCHER
 export COORD_PRIOR_PATH="${COORD_PRIOR_PATH:-}"
@@ -100,6 +102,7 @@ for var in \
   WORKDIR REPO_ROOT DATASET_NAME CONFIG_NAME EXP_NAME WEIGHT_PATH TRAIN_RESUME \
   TRAIN_GPU_IDS_CSV NPROC_PER_NODE NNODES MASTER_ADDR MASTER_PORT DIST_URL \
   RUN_DIR HOSTS_FILE DONE_MARKER VENV_ACTIVATE PYTHON_BIN PYTHON_MODULE CUDA_MODULE \
+  NODE_START_TIMEOUT_SEC \
   HF_HOME HF_HUB_CACHE HUGGINGFACE_HUB_CACHE HF_XET_CACHE TORCH_HOME \
   COORD_PRIOR_PATH COORD_PROJECTION_ALPHA COORD_PROJECTION_BETA PYTORCH_CUDA_ALLOC_CONF \
   CONCERTO_GLOBAL_BATCH_SIZE CONCERTO_GRAD_ACCUM CONCERTO_NUM_WORKER \
@@ -228,9 +231,32 @@ chmod +x "${NODE_ENTRY}"
 echo "=== LAUNCH via pbsdsh ==="
 echo "+ pbsdsh -c ${NNODES} -- bash ${NODE_ENTRY}"
 rm -f "${DONE_MARKER}"
+rm -f "${RUN_DIR}/logs"/*.log 2>/dev/null || true
 set +e
-pbsdsh -c "${NNODES}" -- bash "${NODE_ENTRY}"
+pbsdsh -c "${NNODES}" -- bash "${NODE_ENTRY}" &
+pbsdsh_pid=$!
+startup_deadline=$((SECONDS + NODE_START_TIMEOUT_SEC))
+startup_timed_out=0
+while kill -0 "${pbsdsh_pid}" 2>/dev/null; do
+  started_nodes="$(find "${RUN_DIR}/logs" -maxdepth 1 -type f -name '*.log' | wc -l | tr -d ' ')"
+  if [ "${started_nodes}" -ge "${NNODES}" ]; then
+    echo "[ok] all ${started_nodes}/${NNODES} node logs appeared within startup window"
+    break
+  fi
+  if [ "${SECONDS}" -ge "${startup_deadline}" ]; then
+    echo "[error] only ${started_nodes}/${NNODES} node logs appeared after ${NODE_START_TIMEOUT_SEC}s" >&2
+    echo "[error] aborting pbsdsh launch before burning the full walltime" >&2
+    kill "${pbsdsh_pid}" 2>/dev/null || true
+    startup_timed_out=1
+    break
+  fi
+  sleep 5
+done
+wait "${pbsdsh_pid}"
 status=$?
+if [ "${startup_timed_out}" -eq 1 ]; then
+  status=98
+fi
 set -e
 if [ "${status}" -ne 0 ]; then
   echo "[error] pbsdsh returned ${status}" >&2

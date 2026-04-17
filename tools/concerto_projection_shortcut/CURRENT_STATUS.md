@@ -26,15 +26,18 @@ investigation.
   - A point-conscious long-horizon e025 same-stage check completed for original
     and v1b `combo-b075-a001`. v1b essentially ties the same-stage original
     reference but does not beat it: 0.5526 vs 0.5531 ScanNet proxy mIoU.
-  - A fresh same-stage e050 run is currently active for original and v1b
-    `combo-b075-a001` on ABCI-Q `rt_QF=8` each.
   - A frozen-feature post-training pilot completed for SPLICE-3D / HLNS on the
     original e025 checkpoint. All three posthoc arms are near the original e025
     ScanNet proxy mIoU without updating the Concerto backbone.
+  - The posthoc e025 stress downstream gate also completed. SPLICE-3D and
+    Residual Recycling preserve clean mIoU within `-0.005`, but none improves a
+    stress condition by `+0.005`; Stage 1 is no-go as a mainline claim.
+  - The attempted fresh same-stage e050 original/v1b runs did not produce valid
+    e050 checkpoints. Both hit walltime at epoch 6 after delayed node startup.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
-  - Do not run the optional fine-tune or extend to e075/e100 without a new
-    decision criterion or hypothesis.
+  - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
+    without a new decision criterion or hypothesis.
 
 ## Documentation Policy
 
@@ -153,28 +156,47 @@ Current interpretation:
   - SPLICE-3D `height+xyz`: 0.5509 / 0.5509 mIoU
   - SPLICE-3D `height`: 0.5510 / 0.5510 mIoU
   - HLNS channel-group proxy `height+xyz`: 0.5515 / 0.5515 mIoU
+  - Residual Recycling `height+xyz`, `coord9`: 0.5506 / 0.5506 mIoU
   - this is not a win, but it is a cheap post-training path that leaves the
     backbone frozen and does not materially damage the ScanNet proxy.
+- The e025 posthoc stress downstream gate is no-go:
+  - SPLICE-3D height max stress gain: `+0.0027` on `z_flip`
+  - SPLICE-3D height+xyz max stress gain: `+0.0029` on `z_flip`
+  - Residual Recycling coord9 max stress gain: `+0.0023` on `z_flip`
+  - pass threshold was `clean >= original - 0.005` and any stress
+    `>= original + 0.005`; clean passes, stress does not.
 - On ABCI-Q, keep using the validated `torchrun` / `pbsdsh` path described in
   [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md).
 
 ## Active Downstream Jobs
 
 Running now:
-- `132600.qjcm`: original fresh e050 same-stage continuation, ABCI-Q `rt_QF=8`
-  (8 nodes / 32 H100 GPUs), running.
-  - exp:
-    `data/runs/projres_long/exp/arkit-full-original-long-e050-qf32-continue`
-  - latest observed state: epoch 12/50, remaining about 4h50m.
-- `132602.qjcm`: v1b `combo-b075-a001` fresh e050 same-stage continuation,
-  ABCI-Q `rt_QF=8` (8 nodes / 32 H100 GPUs), running.
-  - exp:
-    `data/runs/projres_long/exp/arkit-full-projres-v1b-combo-b075-a001-long-e050-qf32-continue`
-  - latest observed state: epoch 11/50, remaining about 4h50m.
-- `132601.qjcm` and `132603.qjcm`: dependent ScanNet proxy follow-ups, held
-  until the corresponding e050 continuation finishes.
+- None observed at the time of this update.
 
 Recently completed:
+- `132789.qjcm`: Residual Recycling e025 stress downstream, ABCI-Q `rt_QF=1`,
+  completed.
+  - result root:
+    `data/runs/posthoc_stress_e025pilot_recycle`
+  - result: clean `0.5509`, max stress gain `+0.0023` on `z_flip`; no-go by
+    the `+0.005` stress criterion.
+- `132780.qjcm`: Residual Recycling e025 posthoc linear probe, ABCI-Q
+  `rt_QF=1`, completed.
+  - result root:
+    `data/runs/posthoc_surgery_e025pilot/original-long-e025-qf32/recycle_height_xyz_coord9_g1.0_r1.0`
+  - result: `0.5506 / 0.5506` ScanNet proxy mIoU.
+- `132775.qjcm`: SPLICE-3D e025 stress downstream, ABCI-Q `rt_QF=1`,
+  completed.
+  - result root:
+    `data/runs/posthoc_stress_e025pilot`
+  - result: clean preserved, max stress gains below `+0.005`; no-go for Stage 1.
+- `132600.qjcm` and `132602.qjcm`: attempted fresh e050 same-stage
+  continuations on ABCI-Q `rt_QF=8`, both failed by walltime.
+  - `132600.qjcm`: original e050, `Exit_status=-29`, stopped at epoch 6.
+  - `132602.qjcm`: v1b e050, `Exit_status=-29`, stopped at epoch 6.
+  - No valid e050 same-stage checkpoint should be read from these runs.
+- `132601.qjcm` and `132603.qjcm`: dependent follow-ups for the failed e050
+  attempts did not produce valid e050 follow-up results.
 - `132608.qjcm`: frozen post-training nuisance surgery e025 pilot, ABCI-Q
   `rt_QF=1`, completed.
   - result root:

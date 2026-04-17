@@ -38,6 +38,10 @@ investigation.
     this descriptor.
   - The attempted fresh same-stage e050 original/v1b runs did not produce valid
     e050 checkpoints. Both hit walltime at epoch 6 after delayed node startup.
+  - Step 0 official-checkpoint causal battery completed on
+    `pretrain-concerto-v1m1-2-large-video.pth` for ARKit val and Concerto
+    ScanNet val. Target swaps strongly increase enc2d loss on both datasets,
+    so the shortcut signal is not an ARKit-continued artifact.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -57,18 +61,53 @@ investigation.
    - [results_arkit_full_causal.md](./results_arkit_full_causal.md)
 2. Geometry-vs-coordinate stress result:
    - [results_arkit_full_stress_corrected.md](./results_arkit_full_stress_corrected.md)
-3. ScanNet continuation proxy:
+3. Official checkpoint ARKit/ScanNet causal battery:
+   - [results_official_causal_battery.md](./results_official_causal_battery.md)
+4. ScanNet continuation proxy:
    - [results_scannet_proxy_lin.md](./results_scannet_proxy_lin.md)
-4. ProjRes v1 gate:
+5. ProjRes v1 gate:
    - [results_projres_v1.md](./results_projres_v1.md)
-5. Frozen post-training nuisance surgery:
+6. Frozen post-training nuisance surgery:
    - [results_posthoc_nuisance_surgery.md](./results_posthoc_nuisance_surgery.md)
-6. Coordinate projection residual handoff:
+7. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-7. Short narrative summary:
+8. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-8. Reproduction / runner overview:
+9. Reproduction / runner overview:
    - [README.md](./README.md)
+
+## Official Checkpoint Causal Battery
+
+Source:
+- [results_official_causal_battery.md](./results_official_causal_battery.md)
+
+Setup:
+- Weight: `data/weights/concerto/pretrain-concerto-v1m1-2-large-video.pth`.
+- ARKit root: `data/arkitscenes_absmeta`.
+- ScanNet root: `data/concerto_scannet_imagepoint_absmeta`.
+- Smoke size: 32 batches per dataset and mode.
+
+Key numbers:
+
+| dataset | mode | enc2d loss | delta vs baseline |
+| --- | --- | ---: | ---: |
+| ARKit val | baseline | 2.737827 | 0.000000 |
+| ARKit val | global target permutation | 3.324298 | +0.586471 |
+| ARKit val | cross-image target swap | 3.371361 | +0.633534 |
+| ARKit val | cross-scene target swap | 3.324546 | +0.586719 |
+| ScanNet val | baseline | 3.416545 | 0.000000 |
+| ScanNet val | global target permutation | 5.466386 | +2.049841 |
+| ScanNet val | cross-image target swap | 5.502719 | +2.086174 |
+| ScanNet val | cross-scene target swap | 5.467065 | +2.050520 |
+
+Interpretation:
+- The released full pretraining checkpoint remains sensitive to target swaps on
+  ARKit validation.
+- The same signal is stronger on Concerto-preprocessed ScanNet validation.
+- This supports the stronger read that the issue is inside the cross-modal JEPA
+  objective, not only an ARKit-continued artifact.
+- `concerto_base*.pth` are backbone/downstream weights and do not contain
+  enc2d heads; do not use them for official enc2d causal evaluation.
 
 ## ARKit Full Causal Branch
 

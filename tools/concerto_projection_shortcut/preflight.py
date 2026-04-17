@@ -101,7 +101,7 @@ def validate_sample_record(data_root: Path, split_name: str, record_name: str, r
             raise ValueError(f"{split_name}:{record_name} correspondence missing: {path}")
 
 
-def check_data_layout(data_root: Path) -> None:
+def check_data_layout(data_root: Path, required_splits: Iterable[str] = REQUIRED_SPLITS) -> None:
     if not data_root.exists():
         print_check("data root", False, str(data_root))
         raise SystemExit(1)
@@ -112,7 +112,7 @@ def check_data_layout(data_root: Path) -> None:
         print_check("split dir", False, str(splits_dir))
         raise SystemExit(1)
 
-    for split_name in REQUIRED_SPLITS:
+    for split_name in required_splits:
         split_file = splits_dir / f"{split_name}.json"
         if not split_file.exists():
             print_check("split file", False, str(split_file))
@@ -204,6 +204,8 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=repo_root_from_here())
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--config", action="append", default=[])
+    parser.add_argument("--required-split", action="append", default=[])
+    parser.add_argument("--dataset-split", action="append", default=[])
     parser.add_argument("--check-data", action="store_true")
     parser.add_argument("--check-batch", action="store_true")
     parser.add_argument("--check-forward", action="store_true")
@@ -215,7 +217,7 @@ def main() -> int:
 
     ensure_repo_layout(repo_root)
     if args.check_data:
-        check_data_layout(data_root)
+        check_data_layout(data_root, args.required_split or REQUIRED_SPLITS)
 
     cfg_objects = []
     for config_name in configs:
@@ -223,6 +225,8 @@ def main() -> int:
         if cfg is not None:
             if args.data_root is not None and hasattr(cfg.data, "train"):
                 cfg.data.train.data_root = str(data_root)
+            if args.dataset_split and hasattr(cfg.data, "train"):
+                cfg.data.train.split = args.dataset_split
             cfg_objects.append((config_name, cfg))
 
     if args.check_batch or args.check_forward:

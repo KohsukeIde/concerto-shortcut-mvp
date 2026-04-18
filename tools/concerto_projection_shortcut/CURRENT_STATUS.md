@@ -61,13 +61,17 @@ investigation.
     gain. Do not launch the remaining matrix follow-ups without a new
     hypothesis. A loss-based hinge switch has been added and smoke-tested in
     `133137.qjcm`; it is wired correctly but not yet downstream-validated.
-  - Concerto 3D patch-separation Step A completed as the companion to DINO
-    Step A'. On ScanNet `picture`/`wall`, DINOv2 raw patch features are much
-    more linearly separable than the corresponding Concerto 3D features pooled
-    to image patches: DINO balanced accuracy `0.7797` / AUC `0.8827`, Concerto
-    encoder-pooled `0.5381` / `0.6662`, Concerto patch-projected `0.5547` /
-    `0.6980`. This points to a semantic transfer / 3D alignment bottleneck for
-    the `picture -> wall` failure pair, not a DINO-only failure.
+  - Concerto 3D patch-separation Step A and its exact-patch controls completed.
+    The first-pass DINO Step A' vs Concerto A'' comparison was not
+    apples-to-apples: on the exact same A'' patch subset, `picture_vs_wall`
+    DINO balanced accuracy is only `0.5801`, close to Concerto
+    `encoder_pooled` `0.5772` and above `patch_proj` `0.5217`. The earlier
+    `raw_dino 0.7797` vs Concerto `0.5381/0.5547` gap is therefore mostly a
+    subset-mismatch / rare-class caveat, not confirmed generic semantic
+    transfer loss. Across checked pairs, Concerto 3D is comparable to or better
+    than exact DINO for several pairs (`desk_vs_wall`, `desk_vs_table`,
+    `shower_curtain_vs_wall`), while `door_vs_wall` is near chance for all
+    features.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -101,11 +105,13 @@ investigation.
    - [results_dino_patch_bias_stepA.md](./results_dino_patch_bias_stepA.md)
 9. Concerto 3D patch-separation Step A:
    - [results_concerto3d_patch_separation_stepA.md](./results_concerto3d_patch_separation_stepA.md)
-10. Coordinate projection residual handoff:
+10. Concerto 3D / DINO exact-patch controls:
+   - [results_concerto3d_dino_exact_controls_stepA.md](./results_concerto3d_dino_exact_controls_stepA.md)
+11. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-11. Short narrative summary:
+12. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-12. Reproduction / runner overview:
+13. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -226,15 +232,29 @@ Acceptance:
     `133152.qjcm` finished with `Exit_status=0`, walltime `00:04:51`.
     - `encoder_pooled`: picture/wall balanced accuracy `0.5381`, AUC `0.6662`.
     - `patch_proj`: picture/wall balanced accuracy `0.5547`, AUC `0.6980`.
-    - Compared to DINO Step A' `raw_dino` balanced accuracy `0.7797`, AUC
-      `0.8827`, the 3D-aligned representation loses most of the linear
-      `picture`/`wall` separation.
-    - Interpretation: for the dominant `picture -> wall` ScanNet failure,
-      DINOv2 itself is separable, while Concerto's 3D patch-pooled representation
-      is much less separable. The immediate target should be semantic transfer /
-      cross-modal aggregation, not only teacher-side debiasing or global
-      coordinate-rival surgery. See
+    - First-pass interpretation was intentionally downgraded after the
+      exact-patch controls below. This result is useful as a warning signal, but
+      the DINO Step A' `raw_dino` comparison used a different patch subset. See
       `tools/concerto_projection_shortcut/results_concerto3d_patch_separation_stepA.md`.
+  - Concerto 3D / DINO exact-patch controls are complete. Job `133155.qjcm`
+    finished with `Exit_status=0`, walltime `00:05:48`.
+    - Controls added:
+      exact same patch set for DINO and Concerto, unweighted / balanced /
+      positive-weighted probes, 100-iteration class-stratified bootstrap CIs,
+      and multiple confused class pairs.
+    - `picture_vs_wall`, balanced probe:
+      `dino_exact` `0.5801` CI `[0.5324, 0.6148]`, `encoder_pooled` `0.5772`
+      CI `[0.5459, 0.6156]`, `patch_proj` `0.5217` CI `[0.4830, 0.5686]`.
+    - Other balanced-probe examples:
+      `desk_vs_wall`: DINO `0.6731`, encoder `0.6973`, patch-proj `0.7496`;
+      `desk_vs_table`: DINO `0.8375`, encoder `0.8618`, patch-proj `0.8919`;
+      `shower_curtain_vs_wall`: DINO `0.6898`, encoder `0.7574`, patch-proj
+      `0.6505`; `door_vs_wall` is near chance for all features.
+    - Interpretation: the data do not support a broad "DINO semantics are lost
+      in 3D alignment" claim. The bottleneck is pair/subset-specific; the
+      dominant `picture -> wall` failure is not explained by a clean DINO-vs-3D
+      separability gap on the exact same patch set. See
+      `tools/concerto_projection_shortcut/results_concerto3d_dino_exact_controls_stepA.md`.
 
 ## ARKit Full Causal Branch
 

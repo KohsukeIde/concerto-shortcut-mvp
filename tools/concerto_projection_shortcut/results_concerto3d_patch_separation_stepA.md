@@ -1,5 +1,14 @@
 # Concerto 3D Patch Separation Step A
 
+## Superseded Control Note
+
+This first-pass A'' comparison is superseded by
+`results_concerto3d_dino_exact_controls_stepA.md` for the main interpretation.
+The exact-patch control shows that the earlier DINO Step A' `0.7797` vs
+Concerto `0.5381/0.5547` gap was not apples-to-apples: on the exact same A''
+patch subset, `picture_vs_wall` DINO balanced accuracy is `0.5801`, close to
+Concerto `encoder_pooled` `0.5772`.
+
 ## Setup
 - config: `pretrain-concerto-v1m1-2-large-video`
 - weight: `/groups/qgah50055/ide/concerto-shortcut-mvp/data/weights/concerto/pretrain-concerto-v1m1-2-large-video.pth`

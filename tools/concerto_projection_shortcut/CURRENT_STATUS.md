@@ -70,7 +70,9 @@ investigation.
     weak pairs much better (`picture_vs_wall` point feature `0.7041`, linear
     logits `0.7602`; most other pairs `>=0.86`). The bottleneck is therefore
     not generic DINO-to-3D semantic loss; it is pair/stage/subset-specific, with
-    `picture -> wall` still present at the final 20-way readout.
+    `picture -> wall` still present at the final 20-way readout. This
+    supersedes the earlier raw comparison of DINO `0.7797` against Concerto
+    `0.5381/0.5547` as an immediate semantic-transfer-bottleneck claim.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -225,7 +227,10 @@ Acceptance:
     `0.8787`. A minimal rank-2 RASA-lite position removal barely reduces
     position R2 (`0.8651`) and does not hurt picture/wall separation. This
     supports a teacher-side positional-bias diagnostic, but not a DINO-only
-    failure claim; the 2D teacher carries semantics and position together. See
+    failure claim; the 2D teacher carries semantics and position together. The
+    raw A' patch set is not the same subset used by the first-pass Concerto A''
+    rows, so DINO-vs-Concerto semantic-transfer comparisons should use the
+    exact-patch stage-wise trace below, not the raw `0.7797` number. See
     `tools/concerto_projection_shortcut/results_dino_patch_bias_stepA.md`.
   - Concerto 3D patch-separation Step A is complete on the same
     Concerto-preprocessed ScanNet image-point data, using
@@ -237,7 +242,9 @@ Acceptance:
     - `patch_proj`: picture/wall balanced accuracy `0.5547`, AUC `0.6980`.
     - First-pass interpretation was intentionally downgraded after the
       exact-patch controls below. This result is useful as a warning signal, but
-      the DINO Step A' `raw_dino` comparison used a different patch subset. See
+      the DINO Step A' `raw_dino` comparison used a different patch subset and
+      must not be used as direct evidence that DINO semantics are broadly lost
+      in 3D alignment. See
       `tools/concerto_projection_shortcut/results_concerto3d_patch_separation_stepA.md`.
   - Concerto 3D / DINO exact-patch stage-wise trace is complete. Rerun job
     `133188.qjcm` finished with `Exit_status=0`, time use `00:21:05`.

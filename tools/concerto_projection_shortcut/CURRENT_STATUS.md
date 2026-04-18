@@ -47,19 +47,19 @@ investigation.
   - Main-variant Step 0/0.5 completed with `concerto_base_origin.pth` as a
     frozen backbone plus short-refit enc2d alignment projection on the six
     indoor Concerto datasets. Target swaps remain clearly positive on ARKit and
-    ScanNet, but the coord-MLP rival is near target-swap damage rather than near
-    the full head-refit baseline, so coord-only SR-LoRA should not be launched
-    without revising the rival.
+    ScanNet. The coord-MLP rival is weak on ARKit and partial on ScanNet, so it
+    is usable only as a lower-bound rival, not as a full shortcut proxy.
   - A target-corruption distance diagnostic completed for the main-variant
     ARKit/ScanNet battery. ARKit cross-scene targets are not closer to the
     original targets than cross-image targets, so the lower ARKit cross-scene
     loss is not explained by `cos(t_original, t_corrupted)` alone.
-  - SR-LoRA v5 Phase A implementation is integrated for the released
-    large-video full checkpoint with a six-indoor-dataset mix and the frozen
-    coord-only rival from Step 0.5. A 2-iteration `rt_QF=1` smoke completed as
-    `133093.qjcm`, confirming config dump, checkpoint load, LoRA-only optimizer
-    groups, coord-rival margin metrics, teacher-anchor distillation, backward,
-    and checkpoint save.
+  - SR-LoRA v5 Phase A completed its code smoke, 256-iteration pilot, 4-arm
+    training matrix, and representative downstream follow-ups. Training is
+    stable, but downstream is no-go. `m=0.1` gives only `+0.0009/+0.0015`
+    ScanNet linear last/best mIoU and no stress gain; `m=0.2` increases margin
+    pressure but gives `-0.0003/-0.0003` linear last/best mIoU and no stress
+    gain. Do not launch the remaining matrix follow-ups without a new
+    hypothesis.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -87,11 +87,13 @@ investigation.
    - [results_projres_v1.md](./results_projres_v1.md)
 6. Frozen post-training nuisance surgery:
    - [results_posthoc_nuisance_surgery.md](./results_posthoc_nuisance_surgery.md)
-7. Coordinate projection residual handoff:
+7. SR-LoRA v5 Phase A:
+   - [results_sr_lora_phasea.md](./results_sr_lora_phasea.md)
+8. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-8. Short narrative summary:
+9. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-9. Reproduction / runner overview:
+10. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -166,12 +168,17 @@ Acceptance:
   `data/runs/main_variant_coord_mlp_rival/main-origin-six-step05/results_official_coord_mlp_rival.md`.
 - Main-variant target-corruption distance:
   `data/runs/main_variant_target_corruption_distance/main-origin-six-step05/results_target_corruption_distance.md`.
-- SR-LoRA Phase A code smoke:
-  `exp/concerto/sr-lora-v5-smoke3-r4-d03/model/model_last.pth`;
-  log `data/logs/abciq/sr_lora_phasea_133093.qjcm.log`.
-- SR-LoRA Phase A is no longer blocked at the implementation level. The next
-  decision is whether to launch the 4-condition matrix immediately or first run
-  a short single-condition pilot beyond 2 iterations.
+- SR-LoRA Phase A:
+  [results_sr_lora_phasea.md](./results_sr_lora_phasea.md) and
+  [results_sr_lora_phasea.csv](./results_sr_lora_phasea.csv).
+  - Smoke: `133093.qjcm`, `sr-lora-v5-smoke3-r4-d03`.
+  - Pilot: `133095.qjcm`, `sr-lora-v5-pilot-r4-d03-i256-qf4`.
+  - Matrix: `133097.qjcm` to `133100.qjcm`.
+  - Corrected `m=0.1` follow-up: `133102.qjcm`.
+  - `m=0.2` pilot/follow-up: `133104.qjcm`, `133105.qjcm`.
+  - Failed first follow-up: `133101.qjcm`, base-config/large-checkpoint shape
+    mismatch; corrected by large ScanNet proxy config.
+  - Decision: coord-only SR-LoRA v5 is training-stable but downstream no-go.
 
 ## ARKit Full Causal Branch
 

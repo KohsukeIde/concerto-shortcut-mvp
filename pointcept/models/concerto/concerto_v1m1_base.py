@@ -774,6 +774,12 @@ class Concerto(PointModel):
             return dict(
                 coord=pooled_coord.new_zeros((0, 3)),
                 target=pooled_coord.new_zeros((0, self._num_channels)),
+                batch_index=torch.empty(
+                    (0,), device=pooled_coord.device, dtype=torch.long
+                ),
+                image_index=torch.empty(
+                    (0,), device=pooled_coord.device, dtype=torch.long
+                ),
             )
 
         bincount_img_num = data_dict["img_num"]
@@ -783,6 +789,12 @@ class Concerto(PointModel):
             return dict(
                 coord=pooled_coord.new_zeros((0, 3)),
                 target=pooled_coord.new_zeros((0, self._num_channels)),
+                batch_index=torch.empty(
+                    (0,), device=pooled_coord.device, dtype=torch.long
+                ),
+                image_index=torch.empty(
+                    (0,), device=pooled_coord.device, dtype=torch.long
+                ),
             )
 
         feature2d = self.ENC2D_forward(data_dict["images"])
@@ -814,6 +826,17 @@ class Concerto(PointModel):
             dim=0,
             dim_size=feature_index.shape[0],
         )
+        feature_batch_index = torch_scatter.scatter_min(
+            batch_index.long(),
+            inverse_index,
+            dim=0,
+            dim_size=feature_index.shape[0],
+        )[0]
+        feature_image_index = torch.div(
+            feature_index,
+            self.patch_h * self.patch_w,
+            rounding_mode="floor",
+        )
         feature2d_mask = feature2d[feature_index]
         if self.enc2d_cos_shift:
             feature2d_mask = feature2d_mask - feature2d_mask.mean(
@@ -825,7 +848,14 @@ class Concerto(PointModel):
             ]
             feature_coord_mask = feature_coord_mask[choice]
             feature2d_mask = feature2d_mask[choice]
-        return dict(coord=feature_coord_mask, target=feature2d_mask)
+            feature_batch_index = feature_batch_index[choice]
+            feature_image_index = feature_image_index[choice]
+        return dict(
+            coord=feature_coord_mask,
+            target=feature2d_mask,
+            batch_index=feature_batch_index,
+            image_index=feature_image_index,
+        )
 
     def before_train(self):
         # make ModelHook after CheckPointLoader

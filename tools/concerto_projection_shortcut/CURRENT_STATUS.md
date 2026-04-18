@@ -44,10 +44,16 @@ investigation.
     datasets, so the signal is not an ARKit-continued artifact. This checkpoint
     is the large-video variant, so it is now treated as cross-variant evidence,
     not as the final Concerto paper main-variant diagnostic.
-  - Main-variant Step 0/0.5 is the current next action: use
-    `concerto_base_origin.pth` as a frozen backbone, short-refit the missing
-    enc2d alignment projection on the six indoor Concerto datasets, run the
-    target-swap battery, then fit a frozen coord-MLP rival before SR-LoRA.
+  - Main-variant Step 0/0.5 completed with `concerto_base_origin.pth` as a
+    frozen backbone plus short-refit enc2d alignment projection on the six
+    indoor Concerto datasets. Target swaps remain clearly positive on ARKit and
+    ScanNet, but the coord-MLP rival is near target-swap damage rather than near
+    the full head-refit baseline, so coord-only SR-LoRA should not be launched
+    without revising the rival.
+  - A target-corruption distance diagnostic completed for the main-variant
+    ARKit/ScanNet battery. ARKit cross-scene targets are not closer to the
+    original targets than cross-image targets, so the lower ARKit cross-scene
+    loss is not explained by `cos(t_original, t_corrupted)` alone.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -141,41 +147,21 @@ Dataset scope:
   variant.
 
 Current data state:
-- Ready: ARKitScenes absmeta and Concerto ScanNet image-point absmeta.
-- Data prep running on CPU-only `rt_QC=1` jobs:
-  - HM3D: `132997.qjcm`, walltime `04:00:00`
-  - S3DIS: `132998.qjcm`, walltime `03:00:00`
-  - ScanNet++: `132999.qjcm`, walltime `08:00:00`
-  - Structured3D download shards:
-    - `133003.qjcm`
-    - `133004.qjcm`
-    - `133005.qjcm`
-    - `133006.qjcm`
-    - `133007.qjcm`
-    - `133008.qjcm`
-    - `133009.qjcm`
-    - `133010.qjcm`
-  - Structured3D extract/rewrite after shard completion: `133011.qjcm`,
-    walltime `10:00:00`
-- Missing until those jobs finish: ScanNet++, S3DIS, HM3D, Structured3D
-  image-point absmeta roots.
-- A dry-run code smoke on the ready ARKit/ScanNet subset finished with
-  `Exit_status=0` as `133001.qjcm`; its outputs are kept under
-  `data/runs/main_variant_*/*main-origin-step05-smoke2*` and are not treated as
-  scientific results.
-- The old single Structured3D prep job `133000.qjcm` was replaced because the
-  dataset is large enough to benefit from parallel shard download.
-- Dependent first capped six-dataset Step 0/0.5 job is now `133012.qjcm` with
-  dependency `afterok:132997:132998:132999:133011`, `rt_QF=1`, walltime
-  `03:00:00`, tag `main-origin-six-step05-cap64`.
+- Ready: ARKitScenes, ScanNet, ScanNet++, S3DIS, HM3D, and Structured3D
+  Concerto image-point absmeta roots under repo-local `data/`.
+- The final six-dataset Step 0/0.5 job `133050.qjcm` finished with
+  `Exit_status=0`, `rt_QF=1`, tag `main-origin-six-step05`.
+- Target-corruption distance job `133090.qjcm` finished with `Exit_status=0`.
 
 Acceptance:
-- `results_main_variant_causal_battery.md/csv` should be produced from the
-  frozen-backbone head-refit checkpoint.
-- `results_official_coord_mlp_rival.md/csv` should compare the coord-MLP rival
-  to the head-refit full baseline and target-swap losses.
-- SR-LoRA Phase A remains blocked until Step 0.5 confirms that the coord rival
-  is meaningful.
+- Main-variant causal battery:
+  `data/runs/main_variant_enc2d_headfit/main-origin-six-step05/results_main_variant_causal_battery.md`.
+- Main-variant coord-MLP rival:
+  `data/runs/main_variant_coord_mlp_rival/main-origin-six-step05/results_official_coord_mlp_rival.md`.
+- Main-variant target-corruption distance:
+  `data/runs/main_variant_target_corruption_distance/main-origin-six-step05/results_target_corruption_distance.md`.
+- SR-LoRA Phase A remains blocked for the coord-only rival. The next reasonable
+  Step 0.5 variant is `coord+normal` or another local-context rival.
 
 ## ARKit Full Causal Branch
 

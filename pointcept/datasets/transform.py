@@ -352,6 +352,13 @@ class CoordStress(object):
         self.voxel_size = voxel_size
 
     @staticmethod
+    def _parse_number(token):
+        sign = -1.0 if token.startswith("m") else 1.0
+        if token.startswith(("p", "m")):
+            token = token[1:]
+        return sign * float(token) / 100.0
+
+    @staticmethod
     def _matrix(stress):
         if stress == "z_flip":
             return np.array(
@@ -384,6 +391,25 @@ class CoordStress(object):
             ) * voxel_size
             if "normal" in data_dict:
                 data_dict["normal"] = np.zeros_like(data_dict["normal"])
+            return data_dict
+
+        if self.stress.startswith("z_shift_"):
+            amount = self._parse_number(self.stress.rsplit("_", 1)[-1])
+            data_dict["coord"][:, 2] += amount
+            return data_dict
+
+        if self.stress.startswith("z_scale_"):
+            scale = self._parse_number(self.stress.rsplit("_", 1)[-1])
+            data_dict["coord"][:, 2] *= scale
+            if "normal" in data_dict:
+                norm = np.linalg.norm(data_dict["normal"], axis=1, keepdims=True)
+                data_dict["normal"] = data_dict["normal"] / np.maximum(norm, 1e-6)
+            return data_dict
+
+        if self.stress.startswith("xy_shift_post_"):
+            amount = self._parse_number(self.stress.rsplit("_", 1)[-1])
+            data_dict["coord"][:, 0] += amount
+            data_dict["coord"][:, 1] += amount
             return data_dict
 
         matrix = self._matrix(self.stress)

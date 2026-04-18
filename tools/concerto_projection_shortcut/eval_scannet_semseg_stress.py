@@ -40,10 +40,16 @@ def add_stress_transform(val_cfg, stress: str, voxel_size: float):
     transform = list(val_cfg.transform)
     stress_cfg = dict(type="CoordStress", stress=stress, voxel_size=voxel_size)
     insert_at = 1
-    for idx, item in enumerate(transform):
-        if item.get("type") == "Copy":
-            insert_at = idx + 1
-            break
+    if stress.startswith("xy_shift_post_"):
+        for idx, item in enumerate(transform):
+            if item.get("type") == "CenterShift" and item.get("apply_z") is False:
+                insert_at = idx + 1
+                break
+    else:
+        for idx, item in enumerate(transform):
+            if item.get("type") == "Copy":
+                insert_at = idx + 1
+                break
     transform.insert(insert_at, stress_cfg)
     val_cfg.transform = transform
     return val_cfg
@@ -139,6 +145,19 @@ def evaluate_stress(model, cfg, stress: str, voxel_size: float, batch_size: int,
     m_iou = float(np.mean(iou_class))
     m_acc = float(np.mean(acc_class))
     all_acc = float(intersection_sum.sum().item() / (target_sum.sum().item() + 1e-10))
+    class_rows = []
+    names = list(getattr(cfg.data, "names", [f"class_{i}" for i in range(cfg.data.num_classes)]))
+    for idx, name in enumerate(names):
+        class_rows.append(
+            {
+                "stress": stress,
+                "class_id": idx,
+                "class_name": name,
+                "iou": float(iou_class[idx]),
+                "accuracy": float(acc_class[idx]),
+                "target_count": float(target_sum[idx].item()),
+            }
+        )
     return {
         "stress": stress,
         "batches": count,
@@ -146,6 +165,7 @@ def evaluate_stress(model, cfg, stress: str, voxel_size: float, batch_size: int,
         "mAcc": m_acc,
         "allAcc": all_acc,
         "loss": loss_sum / max(count, 1),
+        "_class_rows": class_rows,
     }
 
 
@@ -188,11 +208,31 @@ def main() -> int:
         )
         print(f"[done] {rows[-1]}", flush=True)
 
+    write_rows = []
+    class_rows = []
+    for row in rows:
+        row = dict(row)
+        class_rows.extend(row.pop("_class_rows"))
+        write_rows.append(row)
+
     with args.output.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["stress", "batches", "mIoU", "mAcc", "allAcc", "loss"])
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(write_rows)
+    if args.output.name.endswith(".csv.tmp"):
+        class_name = args.output.name[: -len(".csv.tmp")] + "_classwise.csv.tmp"
+    else:
+        class_name = args.output.stem + "_classwise.csv"
+    class_output = args.output.with_name(class_name)
+    with class_output.open("w", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["stress", "class_id", "class_name", "iou", "accuracy", "target_count"],
+        )
+        writer.writeheader()
+        writer.writerows(class_rows)
     print(f"[write] {args.output}", flush=True)
+    print(f"[write] {class_output}", flush=True)
     return 0
 
 

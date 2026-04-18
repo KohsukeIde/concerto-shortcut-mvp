@@ -192,6 +192,12 @@ Acceptance:
     `tools/concerto_projection_shortcut/results_scannet_classwise_diagnosis.md`.
   - Next SR-style work should be class-aware or confusion-aware, not another
     global coordinate-rival similarity-margin sweep.
+  - ScanNet counterfactual downstream stress is complete. Constant
+    floor-relative `z_shift` and post-center `xy_shift` barely move mIoU
+    (`|delta| <= 0.0008`), while `z_scale_050` drops mIoU by `0.0120`.
+    This suggests downstream dependence is more about relative vertical
+    scale/shape than absolute coordinate offset. See
+    `tools/concerto_projection_shortcut/results_scannet_counterfactual_downstream.md`.
 
 ## ARKit Full Causal Branch
 

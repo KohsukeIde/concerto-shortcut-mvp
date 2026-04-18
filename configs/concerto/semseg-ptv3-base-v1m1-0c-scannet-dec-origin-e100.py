@@ -6,7 +6,7 @@ epoch = 100
 eval_epoch = 100
 
 hooks = [
-    dict(type="CheckpointLoader", keywords="module.", replacement="module.backbone."),
+    dict(type="CheckpointLoader", keywords="module", replacement="module.backbone"),
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
     dict(type="SemSegEvaluator"),

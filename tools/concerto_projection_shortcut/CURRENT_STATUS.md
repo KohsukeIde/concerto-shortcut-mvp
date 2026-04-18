@@ -61,6 +61,13 @@ investigation.
     gain. Do not launch the remaining matrix follow-ups without a new
     hypothesis. A loss-based hinge switch has been added and smoke-tested in
     `133137.qjcm`; it is wired correctly but not yet downstream-validated.
+  - Concerto 3D patch-separation Step A completed as the companion to DINO
+    Step A'. On ScanNet `picture`/`wall`, DINOv2 raw patch features are much
+    more linearly separable than the corresponding Concerto 3D features pooled
+    to image patches: DINO balanced accuracy `0.7797` / AUC `0.8827`, Concerto
+    encoder-pooled `0.5381` / `0.6662`, Concerto patch-projected `0.5547` /
+    `0.6980`. This points to a semantic transfer / 3D alignment bottleneck for
+    the `picture -> wall` failure pair, not a DINO-only failure.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -92,11 +99,13 @@ investigation.
    - [results_sr_lora_phasea.md](./results_sr_lora_phasea.md)
 8. DINO patch-bias Step A':
    - [results_dino_patch_bias_stepA.md](./results_dino_patch_bias_stepA.md)
-9. Coordinate projection residual handoff:
+9. Concerto 3D patch-separation Step A:
+   - [results_concerto3d_patch_separation_stepA.md](./results_concerto3d_patch_separation_stepA.md)
+10. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-10. Short narrative summary:
+11. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-11. Reproduction / runner overview:
+12. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -209,6 +218,23 @@ Acceptance:
     supports a teacher-side positional-bias diagnostic, but not a DINO-only
     failure claim; the 2D teacher carries semantics and position together. See
     `tools/concerto_projection_shortcut/results_dino_patch_bias_stepA.md`.
+  - Concerto 3D patch-separation Step A is complete on the same
+    Concerto-preprocessed ScanNet image-point data, using
+    `pretrain-concerto-v1m1-2-large-video.pth`. Job `133151.qjcm` exposed that
+    `segment20.npy` was not loaded by `DefaultImagePointDataset`; the runner now
+    creates lightweight `segment.npy -> segment20.npy` aliases. Corrected job
+    `133152.qjcm` finished with `Exit_status=0`, walltime `00:04:51`.
+    - `encoder_pooled`: picture/wall balanced accuracy `0.5381`, AUC `0.6662`.
+    - `patch_proj`: picture/wall balanced accuracy `0.5547`, AUC `0.6980`.
+    - Compared to DINO Step A' `raw_dino` balanced accuracy `0.7797`, AUC
+      `0.8827`, the 3D-aligned representation loses most of the linear
+      `picture`/`wall` separation.
+    - Interpretation: for the dominant `picture -> wall` ScanNet failure,
+      DINOv2 itself is separable, while Concerto's 3D patch-pooled representation
+      is much less separable. The immediate target should be semantic transfer /
+      cross-modal aggregation, not only teacher-side debiasing or global
+      coordinate-rival surgery. See
+      `tools/concerto_projection_shortcut/results_concerto3d_patch_separation_stepA.md`.
 
 ## ARKit Full Causal Branch
 

@@ -592,6 +592,27 @@ class Concerto(PointModel):
                 )
         return replaced
 
+    def _sr_lora_norm_metrics(self, reference):
+        zero = reference.sum() * 0.0
+        lora_b_sq = zero
+        lora_delta_sq = zero
+        for module in self.student.backbone.enc.modules():
+            if not isinstance(module, LoRALinear):
+                continue
+            a = module.lora_A.weight.float()
+            b = module.lora_B.weight.float()
+            lora_b_sq = lora_b_sq + b.pow(2).sum().to(reference.device)
+            aa = a @ a.t()
+            bb = b.t() @ b
+            delta_sq = (aa * bb.t()).sum().clamp_min(0.0)
+            lora_delta_sq = lora_delta_sq + (
+                delta_sq * (float(module.scaling) ** 2)
+            ).to(reference.device)
+        return {
+            "sr_lora_b_norm": lora_b_sq.clamp_min(0.0).sqrt().detach(),
+            "sr_lora_delta_norm": lora_delta_sq.clamp_min(0.0).sqrt().detach(),
+        }
+
     def _coord_rival_dataset_id_from_name(self, name):
         text = str(name)
         mapping = getattr(self, "coord_rival_dataset_to_id", {})
@@ -808,6 +829,8 @@ class Concerto(PointModel):
                         "sr_distill_loss",
                         "sr_full_sim",
                         "sr_rival_sim",
+                        "sr_lora_b_norm",
+                        "sr_lora_delta_norm",
                     ]
                 )
 
@@ -2072,6 +2095,9 @@ class Concerto(PointModel):
                     result_dict["sr_rival_sim"] = sr_rival_sim.mean().detach()
                     if sr_distill_loss is not None:
                         result_dict["sr_distill_loss"] = sr_distill_loss
+                    else:
+                        result_dict["sr_distill_loss"] = loss.detach() * 0.0
+                    result_dict.update(self._sr_lora_norm_metrics(loss))
                 if coord_prior_pred is not None:
                     coord_prior_loss = (1 - cos(raw_feature2d_mask, coord_prior_pred)).mean() * 10
                     result_dict["coord_prior_loss"] = coord_prior_loss

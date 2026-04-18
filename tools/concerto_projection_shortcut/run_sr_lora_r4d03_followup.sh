@@ -15,7 +15,7 @@ if [ "${SKIP_VENV_ACTIVATE:-0}" != "1" ]; then
 fi
 
 DATASET_NAME="${DATASET_NAME:-concerto}"
-LINEAR_CONFIG="${LINEAR_CONFIG:-semseg-ptv3-base-v1m1-0a-scannet-lin-proxy-valonly}"
+LINEAR_CONFIG="${LINEAR_CONFIG:-semseg-ptv3-large-v1m1-0a-scannet-lin-proxy-valonly}"
 STRESS_CONFIG="${STRESS_CONFIG:-${LINEAR_CONFIG}}"
 BASELINE_WEIGHT="${BASELINE_WEIGHT:-${WEIGHT_DIR}/pretrain-concerto-v1m1-2-large-video.pth}"
 SR_WEIGHT="${SR_WEIGHT:-${REPO_ROOT}/exp/concerto/sr-lora-v5-r4-d0p3-i256-qf4-matrix/model/model_last_merged_lora.pth}"
@@ -29,10 +29,12 @@ COMPARE_MD="${COMPARE_MD:-${OUT_ROOT}/followup_compare.md}"
 
 RUN_LINEAR="${RUN_LINEAR:-1}"
 RUN_STRESS="${RUN_STRESS:-1}"
-BASELINE_GPU="${BASELINE_GPU:-0}"
-SR_GPU="${SR_GPU:-1}"
-BASELINE_STRESS_GPU="${BASELINE_STRESS_GPU:-2}"
-SR_STRESS_GPU="${SR_STRESS_GPU:-3}"
+BASELINE_GPU_IDS="${BASELINE_GPU_IDS:-0,1}"
+SR_GPU_IDS="${SR_GPU_IDS:-2,3}"
+BASELINE_NUM_GPU="${BASELINE_NUM_GPU:-$(awk -F',' '{print NF}' <<< "${BASELINE_GPU_IDS}")}"
+SR_NUM_GPU="${SR_NUM_GPU:-$(awk -F',' '{print NF}' <<< "${SR_GPU_IDS}")}"
+BASELINE_STRESS_GPU="${BASELINE_STRESS_GPU:-0}"
+SR_STRESS_GPU="${SR_STRESS_GPU:-1}"
 STRESS_BATCH_SIZE="${STRESS_BATCH_SIZE:-1}"
 STRESS_NUM_WORKER="${STRESS_NUM_WORKER:-4}"
 STRESS_MAX_BATCHES="${STRESS_MAX_BATCHES:--1}"
@@ -43,19 +45,20 @@ mkdir -p "${OUT_ROOT}"
 run_train_one() {
   local exp_name="$1"
   local weight_path="$2"
-  local gpu_id="$3"
+  local gpu_ids="$3"
+  local num_gpu="$4"
   local checkpoint="${REPO_ROOT}/exp/${DATASET_NAME}/${exp_name}/model/model_last.pth"
   if [ -f "${checkpoint}" ]; then
     echo "[$(timestamp)] skip linear: ${checkpoint}"
     return 0
   fi
-  echo "[$(timestamp)] linear: exp=${exp_name} gpu=${gpu_id} weight=${weight_path}"
-  CUDA_VISIBLE_DEVICES="${gpu_id}" \
+  echo "[$(timestamp)] linear: exp=${exp_name} gpu_ids=${gpu_ids} num_gpu=${num_gpu} weight=${weight_path}"
+  CUDA_VISIBLE_DEVICES="${gpu_ids}" \
   PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
     bash "${REPO_ROOT}/scripts/train.sh" \
       -p "${PYTHON_BIN}" \
       -d "${DATASET_NAME}" \
-      -g 1 \
+      -g "${num_gpu}" \
       -c "${LINEAR_CONFIG}" \
       -n "${exp_name}" \
       -w "${weight_path}"
@@ -216,11 +219,15 @@ echo "sr_exp=${SR_EXP}"
 echo "out_root=${OUT_ROOT}"
 echo "run_linear=${RUN_LINEAR}"
 echo "run_stress=${RUN_STRESS}"
+echo "baseline_gpu_ids=${BASELINE_GPU_IDS}"
+echo "sr_gpu_ids=${SR_GPU_IDS}"
+echo "baseline_num_gpu=${BASELINE_NUM_GPU}"
+echo "sr_num_gpu=${SR_NUM_GPU}"
 
 if [ "${RUN_LINEAR}" = "1" ]; then
-  run_train_one "${BASELINE_EXP}" "${BASELINE_WEIGHT}" "${BASELINE_GPU}" &
+  run_train_one "${BASELINE_EXP}" "${BASELINE_WEIGHT}" "${BASELINE_GPU_IDS}" "${BASELINE_NUM_GPU}" &
   baseline_pid="$!"
-  run_train_one "${SR_EXP}" "${SR_WEIGHT}" "${SR_GPU}" &
+  run_train_one "${SR_EXP}" "${SR_WEIGHT}" "${SR_GPU_IDS}" "${SR_NUM_GPU}" &
   sr_pid="$!"
   wait "${baseline_pid}"
   wait "${sr_pid}"

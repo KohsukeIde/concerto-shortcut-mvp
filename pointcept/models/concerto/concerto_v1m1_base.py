@@ -357,6 +357,7 @@ class Concerto(PointModel):
             "coord_rival_path": None,
             "sr_margin_alpha": 1.0,
             "sr_margin_value": 0.1,
+            "sr_margin_type": "similarity",
             "sr_distill_weight": 0.3,
             "sr_lora_enable": False,
             "sr_lora_r": 8,
@@ -829,6 +830,8 @@ class Concerto(PointModel):
                         "sr_distill_loss",
                         "sr_full_sim",
                         "sr_rival_sim",
+                        "sr_full_loss",
+                        "sr_rival_loss",
                         "sr_lora_b_norm",
                         "sr_lora_delta_norm",
                     ]
@@ -2052,6 +2055,9 @@ class Concerto(PointModel):
                 sr_margin_loss = None
                 sr_distill_loss = None
                 sr_rival_sim = None
+                sr_full_sim = None
+                sr_full_loss = None
+                sr_rival_loss = None
                 if coord_alignment_loss is not None:
                     loss = (
                         loss
@@ -2061,11 +2067,29 @@ class Concerto(PointModel):
                     if sr_rival_pred_mask is None:
                         raise RuntimeError("coord_margin_rival expected rival prediction")
                     sr_rival_sim = cos(feature2d_mask.detach(), sr_rival_pred_mask.detach())
-                    sr_margin_loss = F.relu(
-                        float(self.shortcut_probe["sr_margin_value"])
-                        + sr_rival_sim
-                        - cos(feature2d_mask, feature3d_mask)
-                    ).mean()
+                    sr_full_sim = cos(feature2d_mask, feature3d_mask)
+                    sr_full_loss = (1 - sr_full_sim) * 10
+                    sr_rival_loss = (1 - sr_rival_sim) * 10
+                    sr_margin_type = str(
+                        self.shortcut_probe.get("sr_margin_type", "similarity")
+                    ).lower()
+                    if sr_margin_type == "similarity":
+                        sr_margin_loss = F.relu(
+                            float(self.shortcut_probe["sr_margin_value"])
+                            + sr_rival_sim
+                            - sr_full_sim
+                        ).mean()
+                    elif sr_margin_type == "loss":
+                        sr_margin_loss = F.relu(
+                            float(self.shortcut_probe["sr_margin_value"])
+                            + sr_full_loss
+                            - sr_rival_loss
+                        ).mean()
+                    else:
+                        raise ValueError(
+                            "shortcut_probe.sr_margin_type must be "
+                            f"'similarity' or 'loss', got {sr_margin_type!r}"
+                        )
                     loss = loss + float(self.shortcut_probe["sr_margin_alpha"]) * sr_margin_loss
                     if sr_teacher_anchor_mask is not None:
                         sr_distill_loss = F.mse_loss(
@@ -2091,8 +2115,10 @@ class Concerto(PointModel):
                     ).abs().detach()
                 if sr_margin_loss is not None:
                     result_dict["sr_margin_loss"] = sr_margin_loss
-                    result_dict["sr_full_sim"] = cos(feature2d_mask, feature3d_mask).mean().detach()
+                    result_dict["sr_full_sim"] = sr_full_sim.mean().detach()
                     result_dict["sr_rival_sim"] = sr_rival_sim.mean().detach()
+                    result_dict["sr_full_loss"] = sr_full_loss.mean().detach()
+                    result_dict["sr_rival_loss"] = sr_rival_loss.mean().detach()
                     if sr_distill_loss is not None:
                         result_dict["sr_distill_loss"] = sr_distill_loss
                     else:

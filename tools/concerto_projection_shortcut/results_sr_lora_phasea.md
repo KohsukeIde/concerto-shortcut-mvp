@@ -38,15 +38,16 @@ The line is stable at the training level, but the downstream gate is no-go:
 
 ## Training Runs
 
-| stage | job | exp | rank | distill | margin | enc2d | margin loss | full sim | rival sim | distill loss | delta norm | status |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| smoke | `133093.qjcm` | `sr-lora-v5-smoke3-r4-d03` | 4 | 0.3 | 0.1 | 5.2760 | 0.0139 | 0.4223 | 0.2595 | 0.0288 | - | pass |
-| pilot | `133095.qjcm` | `sr-lora-v5-pilot-r4-d03-i256-qf4` | 4 | 0.3 | 0.1 | 4.0167 | 0.0148 | 0.6026 | 0.3633 | 0.0997 | 2.7964 | pass |
-| matrix | `133097.qjcm` | `sr-lora-v5-r4-d0p3-i256-qf4-matrix` | 4 | 0.3 | 0.1 | 4.0095 | 0.0147 | 0.6035 | 0.3635 | 0.0981 | 2.5362 | pass |
-| matrix | `133098.qjcm` | `sr-lora-v5-r4-d1p0-i256-qf4-matrix` | 4 | 1.0 | 0.1 | 4.0698 | 0.0147 | 0.6027 | 0.3630 | 0.0878 | 1.9275 | pass |
-| matrix | `133099.qjcm` | `sr-lora-v5-r8-d0p3-i256-qf4-matrix` | 8 | 0.3 | 0.1 | 4.0130 | 0.0147 | 0.6030 | 0.3632 | 0.0989 | 3.7434 | pass |
-| matrix | `133100.qjcm` | `sr-lora-v5-r8-d1p0-i256-qf4-matrix` | 8 | 1.0 | 0.1 | 4.0665 | 0.0147 | 0.6031 | 0.3633 | 0.0862 | 3.2764 | pass |
-| pilot | `133104.qjcm` | `sr-lora-v5-r4-d0p3-m0p2-i256-qf4` | 4 | 0.3 | 0.2 | 4.0404 | 0.0443 | 0.6029 | 0.3630 | 0.0980 | 2.6529 | pass |
+| stage | job | exp | rank | distill | margin | type | enc2d | margin loss | full sim | rival sim | distill loss | delta norm | status |
+| --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| smoke | `133093.qjcm` | `sr-lora-v5-smoke3-r4-d03` | 4 | 0.3 | 0.1 | similarity | 5.2760 | 0.0139 | 0.4223 | 0.2595 | 0.0288 | - | pass |
+| pilot | `133095.qjcm` | `sr-lora-v5-pilot-r4-d03-i256-qf4` | 4 | 0.3 | 0.1 | similarity | 4.0167 | 0.0148 | 0.6026 | 0.3633 | 0.0997 | 2.7964 | pass |
+| matrix | `133097.qjcm` | `sr-lora-v5-r4-d0p3-i256-qf4-matrix` | 4 | 0.3 | 0.1 | similarity | 4.0095 | 0.0147 | 0.6035 | 0.3635 | 0.0981 | 2.5362 | pass |
+| matrix | `133098.qjcm` | `sr-lora-v5-r4-d1p0-i256-qf4-matrix` | 4 | 1.0 | 0.1 | similarity | 4.0698 | 0.0147 | 0.6027 | 0.3630 | 0.0878 | 1.9275 | pass |
+| matrix | `133099.qjcm` | `sr-lora-v5-r8-d0p3-i256-qf4-matrix` | 8 | 0.3 | 0.1 | similarity | 4.0130 | 0.0147 | 0.6030 | 0.3632 | 0.0989 | 3.7434 | pass |
+| matrix | `133100.qjcm` | `sr-lora-v5-r8-d1p0-i256-qf4-matrix` | 8 | 1.0 | 0.1 | similarity | 4.0665 | 0.0147 | 0.6031 | 0.3633 | 0.0862 | 3.2764 | pass |
+| pilot | `133104.qjcm` | `sr-lora-v5-r4-d0p3-m0p2-i256-qf4` | 4 | 0.3 | 0.2 | similarity | 4.0404 | 0.0443 | 0.6029 | 0.3630 | 0.0980 | 2.6529 | pass |
+| smoke | `133137.qjcm` | `sr-lora-v5-lossmargin-smoke-r4-d03-lm1p0` | 4 | 0.3 | 1.0 | loss | 3.8486 | 0.1153 | 0.6300 | 0.3690 | 0.1107 | 0.0023 | pass |
 
 Notes:
 
@@ -58,6 +59,11 @@ Notes:
 - The `m=0.2` pilot increased `sr_margin_loss` from roughly `0.015` to roughly
   `0.044`, confirming stronger margin pressure without immediate training
   collapse.
+- A 2-iteration loss-based hinge smoke completed after the no-go follow-ups.
+  It used `SR_MARGIN_TYPE=loss` and `SR_MARGIN_VALUE=1.0`, where the margin is
+  in the same `*10` enc2d-loss units as `enc2d_alignment_loss`. The run logged
+  `sr_full_loss=3.7000`, `sr_rival_loss=6.3098`, and `sr_margin_loss=0.1153`,
+  confirming that the loss-margin branch is wired and active.
 
 ## Downstream Follow-up
 
@@ -110,7 +116,8 @@ large-video checkpoint representation. The most direct pressure increase
 tested so far, margin `m=0.2`, did not improve ScanNet linear or stress
 metrics.
 
-Do not launch the remaining matrix follow-ups, a longer run, or a larger
-matrix without a new hypothesis. If this line is revisited, the next likely
-changes are not more iterations but a different pressure term or a stronger
-position-only rival.
+Do not launch the remaining similarity-margin matrix follow-ups, a longer
+similarity-margin run, or a larger similarity-margin matrix without a new
+hypothesis. The loss-based hinge branch is now available as a separate minimal
+ablation, but it only has a 2-iteration smoke so far and has not yet passed a
+downstream gate.

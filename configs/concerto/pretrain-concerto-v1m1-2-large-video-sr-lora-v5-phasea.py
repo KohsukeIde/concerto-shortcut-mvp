@@ -60,6 +60,7 @@ model.update(
         coord_rival_path=_coord_rival_path,
         sr_margin_alpha=float(_env.get("SR_MARGIN_ALPHA", "1.0")),
         sr_margin_value=float(_env.get("SR_MARGIN_VALUE", "0.1")),
+        sr_margin_type=_env.get("SR_MARGIN_TYPE", "similarity"),
         sr_distill_weight=float(_env.get("SR_DISTILL_WEIGHT", "0.3")),
         sr_lora_enable=True,
         sr_lora_r=_sr_rank,

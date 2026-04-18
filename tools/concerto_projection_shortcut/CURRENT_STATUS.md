@@ -59,7 +59,8 @@ investigation.
     ScanNet linear last/best mIoU and no stress gain; `m=0.2` increases margin
     pressure but gives `-0.0003/-0.0003` linear last/best mIoU and no stress
     gain. Do not launch the remaining matrix follow-ups without a new
-    hypothesis.
+    hypothesis. A loss-based hinge switch has been added and smoke-tested in
+    `133137.qjcm`; it is wired correctly but not yet downstream-validated.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -176,9 +177,21 @@ Acceptance:
   - Matrix: `133097.qjcm` to `133100.qjcm`.
   - Corrected `m=0.1` follow-up: `133102.qjcm`.
   - `m=0.2` pilot/follow-up: `133104.qjcm`, `133105.qjcm`.
+  - Loss-based hinge smoke: `133137.qjcm`.
   - Failed first follow-up: `133101.qjcm`, base-config/large-checkpoint shape
     mismatch; corrected by large ScanNet proxy config.
-  - Decision: coord-only SR-LoRA v5 is training-stable but downstream no-go.
+  - Decision: coord-only similarity-margin SR-LoRA v5 is training-stable but
+    downstream no-go. Loss-based hinge is available for the next minimal
+    ablation.
+  - ScanNet class-wise diagnosis is complete. Baseline weak classes are led by
+    `picture` (`0.3962` IoU, mostly confused as `wall`), followed by
+    `counter`, `desk`, `sink`, `otherfurniture`, `cabinet`,
+    `shower curtain`, and `door`. SR-LoRA m=0.1/m=0.2 only gives narrow gains
+    on `sink` and `shower curtain`; it does not solve `picture -> wall` and
+    m=0.2 worsens `picture`. See
+    `tools/concerto_projection_shortcut/results_scannet_classwise_diagnosis.md`.
+  - Next SR-style work should be class-aware or confusion-aware, not another
+    global coordinate-rival similarity-margin sweep.
 
 ## ARKit Full Causal Branch
 

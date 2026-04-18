@@ -1,0 +1,30 @@
+section,experiment,class,metric,value,delta_vs_baseline,notes
+overall,baseline,all,mIoU,0.7681,,confusion-eval clean ScanNet val; 312 batches
+overall,baseline,all,mAcc,0.8649,,
+overall,baseline,all,allAcc,0.9158,,
+overall,sr_lora_m01,all,mIoU,0.7688,+0.0007,rank4 distill0.3 margin0.1 similarity SR-LoRA
+overall,sr_lora_m01,all,mAcc,0.8655,+0.0006,
+overall,sr_lora_m01,all,allAcc,0.9156,-0.0002,
+overall,sr_lora_m02,all,mIoU,0.7683,+0.0002,rank4 distill0.3 margin0.2 similarity SR-LoRA
+overall,sr_lora_m02,all,mAcc,0.8637,-0.0012,
+overall,sr_lora_m02,all,allAcc,0.9153,-0.0004,
+weak_baseline,baseline,picture,IoU,0.3962,,top confusion wall 0.443 of target picture
+weak_baseline,baseline,counter,IoU,0.6543,,top confusion cabinet 0.093
+weak_baseline,baseline,desk,IoU,0.6790,,top confusions wall 0.036 table 0.034 bookshelf 0.033
+weak_baseline,baseline,sink,IoU,0.6859,,top confusions cabinet 0.076 counter 0.073
+weak_baseline,baseline,otherfurniture,IoU,0.6929,,top confusion wall 0.068
+weak_baseline,baseline,cabinet,IoU,0.6992,,top confusion wall 0.056
+weak_baseline,baseline,shower curtain,IoU,0.7179,,top confusion wall 0.166
+weak_baseline,baseline,door,IoU,0.7579,,top confusion wall 0.084
+delta,sr_lora_m01,shower curtain,IoU,0.7253,+0.0074,best class gain from m0.1
+delta,sr_lora_m01,sink,IoU,0.6928,+0.0069,second best class gain from m0.1
+delta,sr_lora_m01,picture,IoU,0.3984,+0.0022,weak class barely improved
+delta,sr_lora_m01,cabinet,IoU,0.6958,-0.0034,worst class drop from m0.1
+delta,sr_lora_m01,refridgerator,IoU,0.7601,-0.0030,
+delta,sr_lora_m01,table,IoU,0.7718,-0.0011,
+delta,sr_lora_m02,shower curtain,IoU,0.7262,+0.0083,best class gain from m0.2
+delta,sr_lora_m02,sink,IoU,0.6933,+0.0074,second best class gain from m0.2
+delta,sr_lora_m02,sofa,IoU,0.7903,+0.0041,
+delta,sr_lora_m02,cabinet,IoU,0.6938,-0.0054,worst class drop from m0.2
+delta,sr_lora_m02,window,IoU,0.7592,-0.0049,
+delta,sr_lora_m02,picture,IoU,0.3939,-0.0024,weakest baseline class worsened

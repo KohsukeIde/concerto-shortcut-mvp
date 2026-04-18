@@ -44,11 +44,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--repo-root", type=Path, default=repo_root_from_here())
     parser.add_argument("--config", default="pretrain-concerto-v1m1-2-large-video")
+    parser.add_argument("--linear-config", default="exp/concerto/scannet-proxy-large-video-official-lin/config.py")
     parser.add_argument(
         "--weight",
         type=Path,
         default=Path("data/weights/concerto/pretrain-concerto-v1m1-2-large-video.pth"),
     )
+    parser.add_argument(
+        "--linear-weight",
+        type=Path,
+        default=Path("exp/concerto/scannet-proxy-large-video-official-lin/model/model_last.pth"),
+    )
+    parser.add_argument("--no-linear-stage", action="store_true")
     parser.add_argument("--data-root", type=Path, default=Path("data/concerto_scannet_imagepoint_absmeta"))
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--train-split", default="train")
@@ -105,8 +112,119 @@ def pair_name(pair: tuple[int, int]) -> str:
     return f"{SCANNET20_CLASS_NAMES[pair[0]]}_vs_{SCANNET20_CLASS_NAMES[pair[1]]}".replace(" ", "_")
 
 
+def load_config(path: Path):
+    from pointcept.utils.config import Config
+
+    return Config.fromfile(str(path))
+
+
+def load_state_dict(model: torch.nn.Module, weight_path: Path) -> None:
+    checkpoint = torch.load(weight_path, map_location="cpu", weights_only=False)
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    cleaned = {}
+    for key, value in state_dict.items():
+        if key.startswith("module."):
+            key = key[7:]
+        cleaned[key] = value
+    info = model.load_state_dict(cleaned, strict=False)
+    print(
+        f"[load_state] path={weight_path} missing={len(info.missing_keys)} unexpected={len(info.unexpected_keys)}",
+        flush=True,
+    )
+
+
+def unroll_point(point):
+    while "pooling_parent" in point.keys():
+        parent = point.pop("pooling_parent")
+        inverse = point.pop("pooling_inverse")
+        parent.feat = torch.cat([parent.feat, point.feat[inverse]], dim=-1)
+        point = parent
+    return point
+
+
+def major_view_mask_from_offset(offset: torch.Tensor, num_global_view: int) -> tuple[torch.Tensor, torch.Tensor]:
+    device = offset.device
+    data_offset = torch.cat([torch.tensor([0], device=device), offset], dim=0)
+    major_count = (
+        data_offset[1 : len(data_offset) : num_global_view]
+        - data_offset[0 : len(data_offset) - 1 : num_global_view]
+    )
+    major_offset = torch.cat([torch.tensor([0], device=device), torch.cumsum(major_count, dim=0)])
+    mask = torch.cat(
+        [
+            torch.arange(0, c, device=device) + data_offset[i * num_global_view]
+            for i, c in enumerate(major_count)
+        ],
+        dim=0,
+    )
+    return mask, major_offset
+
+
 @torch.no_grad()
-def extract_batch_features(model, batch: dict, target_classes: set[int], min_points: int, majority_threshold: float):
+def pooled_linear_stages(linear_model, batch: dict, feature_index: torch.Tensor, model_num_global_view: int, patch_h: int, patch_w: int):
+    from pointcept.models.utils.structure import Point
+
+    point = Point(
+        feat=batch["global_feat"],
+        coord=batch["global_coord"],
+        offset=batch["global_offset"],
+        grid_size=batch["grid_size"][0],
+    )
+    point = linear_model.backbone(point)
+    point = unroll_point(point)
+    linear_feat = point.feat
+    linear_logits = linear_model.seg_head(linear_feat)
+    major_mask, major_offset = major_view_mask_from_offset(batch["global_offset"], model_num_global_view)
+    correspondence = batch["global_correspondence"][major_mask]
+    corr_mask = torch.any(correspondence != torch.tensor([-1, -1], device=correspondence.device), dim=2)
+    valid_index = torch.where(corr_mask)
+    if valid_index[0].numel() == 0:
+        return None
+    batch_points = offset2batch(major_offset[1:])
+    offset_img_num = torch.cat([torch.tensor([0], device=linear_feat.device), torch.cumsum(batch["img_num"], dim=0)])
+    batch_index = batch_points[valid_index[0]]
+    batch_img_num = offset_img_num[:-1][batch_index]
+    sem_feature_index = torch.cat(
+        [
+            batch_img_num.unsqueeze(-1),
+            valid_index[1].unsqueeze(-1),
+            correspondence[valid_index],
+        ],
+        dim=-1,
+    ).long()
+    sem_feature_index = (
+        sem_feature_index[:, 0] * patch_h * patch_w
+        + sem_feature_index[:, 1] * patch_h * patch_w
+        + sem_feature_index[:, 2] * patch_w
+        + sem_feature_index[:, 3]
+    )
+    sem_feature_index, inverse_index = torch.unique(sem_feature_index, sorted=True, return_inverse=True)
+    pooled_feat = torch_scatter.scatter_mean(
+        linear_feat[major_mask][valid_index[0]],
+        inverse_index,
+        dim=0,
+        dim_size=sem_feature_index.shape[0],
+    )
+    pooled_logits = torch_scatter.scatter_mean(
+        linear_logits[major_mask][valid_index[0]],
+        inverse_index,
+        dim=0,
+        dim_size=sem_feature_index.shape[0],
+    )
+    pos = torch.searchsorted(sem_feature_index, feature_index)
+    valid = (pos < sem_feature_index.numel()) & (sem_feature_index[pos.clamp_max(max(sem_feature_index.numel() - 1, 0))] == feature_index)
+    aligned_feat = pooled_feat.new_zeros((feature_index.numel(), pooled_feat.shape[1]))
+    aligned_logits = pooled_logits.new_zeros((feature_index.numel(), pooled_logits.shape[1]))
+    aligned_feat[valid] = pooled_feat[pos[valid]]
+    aligned_logits[valid] = pooled_logits[pos[valid]]
+    return {
+        "available": valid,
+        "linear_feat_pooled": aligned_feat,
+        "linear_logits_pooled": aligned_logits,
+    }
+
+
+def extract_batch_features(model, linear_model, batch: dict, target_classes: set[int], min_points: int, majority_threshold: float):
     from pointcept.models.utils.structure import Point
 
     global_point = Point(
@@ -186,18 +304,48 @@ def extract_batch_features(model, batch: dict, target_classes: set[int], min_poi
     keep = (totals >= min_points) & (confidence >= majority_threshold) & target_mask
     if not keep.any():
         return None
+    linear_out = None
+    if linear_model is not None:
+        linear_out = pooled_linear_stages(
+            linear_model,
+            batch,
+            feature_index,
+            model_num_global_view=model.num_global_view,
+            patch_h=model.patch_h,
+            patch_w=model.patch_w,
+        )
+        if linear_out is None:
+            return None
+        keep_indices = keep.nonzero(as_tuple=False).flatten()
+        linear_keep = linear_out["available"][keep]
+        if not linear_keep.any():
+            return None
+        keep_indices = keep_indices[linear_keep]
+    else:
+        keep_indices = keep.nonzero(as_tuple=False).flatten()
     return {
-        "encoder_pooled": encoder_feat[keep].float().cpu(),
-        "patch_proj": patch_proj[keep].float().cpu(),
-        "dino_exact": dino[keep].float().cpu(),
-        "class_id": top_label[keep].cpu().long(),
-        "points": totals[keep].cpu().long(),
-        "confidence": confidence[keep].cpu().float(),
+        "encoder_pooled": encoder_feat[keep_indices].float().cpu(),
+        "patch_proj": patch_proj[keep_indices].float().cpu(),
+        "dino_exact": dino[keep_indices].float().cpu(),
+        "class_id": top_label[keep_indices].cpu().long(),
+        "points": totals[keep_indices].cpu().long(),
+        "confidence": confidence[keep_indices].cpu().float(),
+        **(
+            {
+                "linear_feat_pooled": linear_out["linear_feat_pooled"][keep_indices].float().cpu(),
+                "linear_logits_pooled": linear_out["linear_logits_pooled"][keep_indices].float().cpu(),
+            }
+            if linear_out is not None
+            else {}
+        ),
     }
 
 
-def collect_split(args: argparse.Namespace, model, loader, split: str, max_batches: int, target_classes: set[int]):
-    features = {"dino_exact": [], "encoder_pooled": [], "patch_proj": []}
+def collect_split(args: argparse.Namespace, model, linear_model, loader, split: str, max_batches: int, target_classes: set[int]):
+    feature_names = ["dino_exact", "encoder_pooled", "patch_proj"]
+    if linear_model is not None:
+        feature_names += ["linear_feat_pooled", "linear_logits_pooled"]
+    features = {name: [] for name in feature_names}
     labels: list[torch.Tensor] = []
     class_counts = {cls: 0 for cls in sorted(target_classes)}
     seen_batches = 0
@@ -209,6 +357,7 @@ def collect_split(args: argparse.Namespace, model, loader, split: str, max_batch
             batch = move_batch_to_cuda(batch)
             out = extract_batch_features(
                 model,
+                linear_model,
                 batch,
                 target_classes=target_classes,
                 min_points=args.min_points_per_patch,
@@ -365,8 +514,26 @@ def evaluate_pair(pair, train, val, args: argparse.Namespace) -> list[dict]:
     val_mask = (val["class_id"] == pos_cls) | (val["class_id"] == neg_cls)
     train_y = (train["class_id"][train_mask] == pos_cls).float()
     val_y = (val["class_id"][val_mask] == pos_cls).float()
+    if (
+        int((train_y == 1).sum().item()) == 0
+        or int((train_y == 0).sum().item()) == 0
+        or int((val_y == 1).sum().item()) == 0
+        or int((val_y == 0).sum().item()) == 0
+    ):
+        print(
+            "[skip] {pair} train_pos={train_pos} train_neg={train_neg} val_pos={val_pos} val_neg={val_neg}".format(
+                pair=pair_name(pair),
+                train_pos=int((train_y == 1).sum().item()),
+                train_neg=int((train_y == 0).sum().item()),
+                val_pos=int((val_y == 1).sum().item()),
+                val_neg=int((val_y == 0).sum().item()),
+            ),
+            flush=True,
+        )
+        return []
     rows = []
-    for feature in ("dino_exact", "encoder_pooled", "patch_proj"):
+    feature_order = ["dino_exact", "encoder_pooled", "patch_proj", "linear_feat_pooled", "linear_logits_pooled"]
+    for feature in [name for name in feature_order if name in train]:
         for probe in ("unweighted", "balanced", "weighted"):
             result = fit_probe(train[feature][train_mask], train_y, val[feature][val_mask], val_y, args, probe)
             ci = bootstrap_ci(result.pop("logits"), result.pop("labels"), args.bootstrap_iters, args.seed + len(rows) + 101)
@@ -450,6 +617,8 @@ def write_outputs(args: argparse.Namespace, rows: list[dict], metadata: dict) ->
         "- `dino_exact` is the frozen DINO target feature from `model.ENC2D_forward` on the exact same augmented image patches used for the Concerto rows.",
         "- `encoder_pooled` is the Concerto 3D encoder feature pooled to those same patch ids through point-pixel correspondence.",
         "- `patch_proj` is the Concerto enc2d patch projection of `encoder_pooled`.",
+        "- `linear_feat_pooled` is the official ScanNet linear-probe backbone feature pooled to the same patch ids.",
+        "- `linear_logits_pooled` is the official ScanNet linear-probe logits pooled to the same patch ids.",
         "- `balanced` trains the binary probe on a class-balanced train subset; validation metrics are still reported on all validation rows through balanced accuracy and AUC.",
         "- Confidence intervals bootstrap validation rows with class-stratified resampling.",
     ]
@@ -483,12 +652,20 @@ def main() -> int:
     print(f"[info] building model config={args.config}", flush=True)
     model = build_model(cfg.model).cuda().eval()
     load_weight(model, (repo_root / args.weight).resolve() if not args.weight.is_absolute() else args.weight)
+    linear_model = None
+    if not args.no_linear_stage:
+        linear_cfg_path = (repo_root / args.linear_config).resolve() if not Path(args.linear_config).is_absolute() else Path(args.linear_config)
+        linear_weight_path = (repo_root / args.linear_weight).resolve() if not args.linear_weight.is_absolute() else args.linear_weight
+        print(f"[info] building linear stage config={linear_cfg_path}", flush=True)
+        linear_cfg = load_config(linear_cfg_path)
+        linear_model = build_model(linear_cfg.model).cuda().eval()
+        load_state_dict(linear_model, linear_weight_path)
     torch.cuda.empty_cache()
 
     train_loader = build_loader(cfg, args.data_root, args.train_split, args.batch_size, args.num_worker)
     val_loader = build_loader(cfg, args.data_root, args.val_split, args.batch_size, args.num_worker)
-    train = collect_split(args, model, train_loader, args.train_split, args.max_train_batches, target_classes)
-    val = collect_split(args, model, val_loader, args.val_split, args.max_val_batches, target_classes)
+    train = collect_split(args, model, linear_model, train_loader, args.train_split, args.max_train_batches, target_classes)
+    val = collect_split(args, model, linear_model, val_loader, args.val_split, args.max_val_batches, target_classes)
     rows: list[dict] = []
     for pair in pairs:
         rows.extend(evaluate_pair(pair, train, val, args))

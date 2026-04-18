@@ -54,6 +54,12 @@ investigation.
     ARKit/ScanNet battery. ARKit cross-scene targets are not closer to the
     original targets than cross-image targets, so the lower ARKit cross-scene
     loss is not explained by `cos(t_original, t_corrupted)` alone.
+  - SR-LoRA v5 Phase A implementation is integrated for the released
+    large-video full checkpoint with a six-indoor-dataset mix and the frozen
+    coord-only rival from Step 0.5. A 2-iteration `rt_QF=1` smoke completed as
+    `133093.qjcm`, confirming config dump, checkpoint load, LoRA-only optimizer
+    groups, coord-rival margin metrics, teacher-anchor distillation, backward,
+    and checkpoint save.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -160,8 +166,12 @@ Acceptance:
   `data/runs/main_variant_coord_mlp_rival/main-origin-six-step05/results_official_coord_mlp_rival.md`.
 - Main-variant target-corruption distance:
   `data/runs/main_variant_target_corruption_distance/main-origin-six-step05/results_target_corruption_distance.md`.
-- SR-LoRA Phase A remains blocked for the coord-only rival. The next reasonable
-  Step 0.5 variant is `coord+normal` or another local-context rival.
+- SR-LoRA Phase A code smoke:
+  `exp/concerto/sr-lora-v5-smoke3-r4-d03/model/model_last.pth`;
+  log `data/logs/abciq/sr_lora_phasea_133093.qjcm.log`.
+- SR-LoRA Phase A is no longer blocked at the implementation level. The next
+  decision is whether to launch the 4-condition matrix immediately or first run
+  a short single-condition pilot beyond 2 iterations.
 
 ## ARKit Full Causal Branch
 

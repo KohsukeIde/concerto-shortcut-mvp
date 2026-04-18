@@ -9,6 +9,7 @@ from itertools import chain
 from packaging import version
 from functools import partial
 import os
+import re
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -110,6 +111,30 @@ class CoordPrior(nn.Module):
         if self.coord_indices is not None:
             coord = coord[..., self.coord_indices]
         return self.net(coord)
+
+
+class LoRALinear(nn.Module):
+    def __init__(self, linear, r=8, lora_alpha=16, lora_dropout=0.0):
+        super().__init__()
+        if r <= 0:
+            raise ValueError(f"LoRA rank must be positive, got {r}")
+        self.in_features = linear.in_features
+        self.out_features = linear.out_features
+        self.weight = nn.Parameter(linear.weight.detach().clone(), requires_grad=False)
+        if linear.bias is None:
+            self.bias = None
+        else:
+            self.bias = nn.Parameter(linear.bias.detach().clone(), requires_grad=False)
+        self.lora_A = nn.Linear(self.in_features, r, bias=False)
+        self.lora_B = nn.Linear(r, self.out_features, bias=False)
+        self.dropout = nn.Dropout(float(lora_dropout))
+        self.scaling = float(lora_alpha) / float(r)
+        nn.init.kaiming_uniform_(self.lora_A.weight, a=5**0.5)
+        nn.init.zeros_(self.lora_B.weight)
+
+    def forward(self, x):
+        base = F.linear(x, self.weight, self.bias)
+        return base + self.lora_B(self.lora_A(self.dropout(x))) * self.scaling
 
 
 @MODELS.register_module("Concerto-v1m1")
@@ -329,6 +354,16 @@ class Concerto(PointModel):
             "coord_projection_alpha": 0.05,
             "coord_projection_beta": 1.0,
             "shuffle_correspondence": False,
+            "coord_rival_path": None,
+            "sr_margin_alpha": 1.0,
+            "sr_margin_value": 0.1,
+            "sr_distill_weight": 0.3,
+            "sr_lora_enable": False,
+            "sr_lora_r": 8,
+            "sr_lora_alpha": 16,
+            "sr_lora_dropout": 0.05,
+            "sr_train_patch_proj": False,
+            "sr_train_student_heads": False,
         }
         if shortcut_probe is not None:
             self.shortcut_probe.update(shortcut_probe)
@@ -365,6 +400,16 @@ class Concerto(PointModel):
             self.coord_projection_prior = self._load_coord_projection_prior(
                 self.shortcut_probe["coord_prior_path"]
             )
+
+        if (
+            self.enc2d_loss_weight > 0
+            and self.shortcut_probe["mode"] == "coord_margin_rival"
+        ):
+            self.coord_rival = self._load_coord_rival(
+                self.shortcut_probe["coord_rival_path"]
+            )
+            self.coord_rival.requires_grad_(False)
+            self._enable_sr_lora_phase_a()
 
         if self.shortcut_probe["freeze_student_backbone"]:
             self.student.backbone.requires_grad_(False)
@@ -407,6 +452,182 @@ class Concerto(PointModel):
         model.eval()
         model.requires_grad_(False)
         return model
+
+    def _load_coord_rival(self, rival_path):
+        if not rival_path:
+            raise ValueError(
+                "shortcut_probe.coord_rival_path is required for "
+                "mode='coord_margin_rival'."
+            )
+        checkpoint = torch.load(rival_path, map_location="cpu", weights_only=False)
+        metadata = checkpoint.get("metadata", {})
+        arch = checkpoint.get("arch", metadata.get("arch", "mlp"))
+        target_dim = int(
+            checkpoint.get("target_dim", metadata.get("target_dim", self._num_channels))
+        )
+        if target_dim != self._num_channels:
+            raise ValueError(
+                f"Coord rival target_dim={target_dim} does not match "
+                f"enc2d target dim={self._num_channels}."
+            )
+        hidden_channels = int(
+            checkpoint.get(
+                "hidden_channels",
+                metadata.get(
+                    "hidden_channels",
+                    self.shortcut_probe["coord_probe_hidden_channels"],
+                ),
+            )
+        )
+        model = CoordPrior(arch, target_dim, hidden_channels=hidden_channels)
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        cleaned = {}
+        prefixes = (
+            "coord_rival.",
+            "coord_probe.",
+            "model.coord_probe.",
+            "module.coord_probe.",
+            "module.model.coord_probe.",
+            "student.coord_probe.",
+        )
+        for key, value in state_dict.items():
+            key_ = key[7:] if key.startswith("module.") else key
+            for prefix in prefixes:
+                if key_.startswith(prefix):
+                    key_ = key_[len(prefix) :]
+                    break
+            cleaned[key_] = value
+        model.load_state_dict(cleaned, strict=True)
+        model.eval()
+        model.requires_grad_(False)
+        self._load_coord_rival_stats(checkpoint)
+        print(
+            f"[sr_lora_phase_a] loaded coord rival from {rival_path} "
+            f"arch={arch} target_dim={target_dim} hidden={hidden_channels}"
+        )
+        return model
+
+    def _load_coord_rival_stats(self, checkpoint):
+        dataset_to_id = checkpoint.get("dataset_to_id", {})
+        coord_stats = checkpoint.get("coord_stats", {})
+        self.coord_rival_dataset_to_id = dict(dataset_to_id)
+        if not dataset_to_id or not coord_stats:
+            self.register_buffer(
+                "coord_rival_mean",
+                torch.empty((0, 3), dtype=torch.float32),
+                persistent=False,
+            )
+            self.register_buffer(
+                "coord_rival_std",
+                torch.empty((0, 3), dtype=torch.float32),
+                persistent=False,
+            )
+            return
+        num_datasets = max(int(v) for v in dataset_to_id.values()) + 1
+        means = torch.zeros((num_datasets, 3), dtype=torch.float32)
+        stds = torch.ones((num_datasets, 3), dtype=torch.float32)
+        for name, idx in dataset_to_id.items():
+            if name not in coord_stats:
+                continue
+            item = coord_stats[name]
+            means[int(idx)] = item["mean"].float()
+            stds[int(idx)] = item["std"].float().clamp_min(1e-6)
+        self.register_buffer("coord_rival_mean", means, persistent=False)
+        self.register_buffer("coord_rival_std", stds, persistent=False)
+
+    def _enable_sr_lora_phase_a(self):
+        if not self.shortcut_probe.get("sr_lora_enable", False):
+            return
+        replaced = self._replace_qkv_with_lora(
+            self.student.backbone.enc,
+            r=int(self.shortcut_probe["sr_lora_r"]),
+            lora_alpha=int(self.shortcut_probe["sr_lora_alpha"]),
+            lora_dropout=float(self.shortcut_probe["sr_lora_dropout"]),
+        )
+        if replaced == 0:
+            raise RuntimeError("SR-LoRA expected at least one qkv module under student.backbone.enc.")
+        for param in self.parameters():
+            param.requires_grad = False
+        for name, param in self.student.backbone.named_parameters():
+            if "lora_" in name:
+                param.requires_grad = True
+        if self.shortcut_probe.get("sr_train_patch_proj", False):
+            self.patch_proj.requires_grad_(True)
+        if self.shortcut_probe.get("sr_train_student_heads", False):
+            for name, param in self.student.named_parameters():
+                if "head" in name:
+                    param.requires_grad = True
+        self.coord_rival.requires_grad_(False)
+        trainable = [name for name, param in self.named_parameters() if param.requires_grad]
+        print(
+            f"[sr_lora_phase_a] lora_qkv_modules={replaced} "
+            f"trainable_tensors={len(trainable)}"
+        )
+        for name in trainable[:16]:
+            print(f"  - {name}")
+        if len(trainable) > 16:
+            print(f"  ... (+{len(trainable) - 16} more)")
+
+    def _replace_qkv_with_lora(self, module, r, lora_alpha, lora_dropout):
+        replaced = 0
+        for name, child in list(module.named_children()):
+            if name == "qkv" and isinstance(child, nn.Linear):
+                setattr(
+                    module,
+                    name,
+                    LoRALinear(
+                        child,
+                        r=r,
+                        lora_alpha=lora_alpha,
+                        lora_dropout=lora_dropout,
+                    ),
+                )
+                replaced += 1
+            else:
+                replaced += self._replace_qkv_with_lora(
+                    child,
+                    r=r,
+                    lora_alpha=lora_alpha,
+                    lora_dropout=lora_dropout,
+                )
+        return replaced
+
+    def _coord_rival_dataset_id_from_name(self, name):
+        text = str(name)
+        mapping = getattr(self, "coord_rival_dataset_to_id", {})
+        if not mapping:
+            return 0
+        if text.startswith("scene_"):
+            dataset = "structured3d"
+        elif text.startswith("scene"):
+            dataset = "scannet"
+        elif re.match(r"^\d{5}_", text):
+            dataset = "hm3d"
+        elif re.match(r"^\d+_\d+$", text):
+            dataset = "arkit"
+        elif re.match(r"^[0-9a-f]{10}_", text):
+            dataset = "scannetpp"
+        else:
+            dataset = "s3dis"
+        return int(mapping.get(dataset, 0))
+
+    def _normalize_coord_for_rival(self, coord, data_dict, feature_batch_index):
+        if (
+            not hasattr(self, "coord_rival_mean")
+            or self.coord_rival_mean.numel() == 0
+            or "name" not in data_dict
+        ):
+            return coord
+        names = data_dict["name"]
+        if not isinstance(names, (list, tuple)) or len(names) == 0:
+            return coord
+        sample_ids = torch.tensor(
+            [self._coord_rival_dataset_id_from_name(name) for name in names],
+            device=coord.device,
+            dtype=torch.long,
+        )
+        row_ids = sample_ids[feature_batch_index.clamp(min=0, max=len(names) - 1)]
+        return (coord - self.coord_rival_mean[row_ids]) / self.coord_rival_std[row_ids]
 
     def _apply_shortcut_probe_to_inputs(self, data_dict):
         if self.shortcut_probe is None:
@@ -580,6 +801,15 @@ class Concerto(PointModel):
                 )
             if self.shortcut_probe["mode"] == "coord_residual_target":
                 key_order.append("coord_prior_loss")
+            if self.shortcut_probe["mode"] == "coord_margin_rival":
+                key_order.extend(
+                    [
+                        "sr_margin_loss",
+                        "sr_distill_loss",
+                        "sr_full_sim",
+                        "sr_rival_sim",
+                    ]
+                )
 
         extras = [key for key in result_dict.keys() if key not in key_order]
         return key_order + extras
@@ -931,6 +1161,8 @@ class Concerto(PointModel):
     def after_step(self):
         # pass
         # EMA update teacher
+        if self.shortcut_probe["mode"] == "coord_margin_rival":
+            return
         with torch.no_grad():
             m = self.momentum
             if self.sonata_model_type == "online":
@@ -1640,6 +1872,45 @@ class Concerto(PointModel):
                     self.patch_h * self.patch_w,
                     rounding_mode="floor",
                 )
+                sr_rival_pred_mask = None
+                sr_teacher_anchor_mask = None
+                if self.shortcut_probe["mode"] == "coord_margin_rival":
+                    with torch.no_grad():
+                        coord_rival_input = self._normalize_coord_for_rival(
+                            feature_coord_mask,
+                            data_dict,
+                            feature_batch_index,
+                        )
+                        sr_rival_pred_mask = self.coord_rival(coord_rival_input)
+                    if float(self.shortcut_probe["sr_distill_weight"]) > 0:
+                        with torch.no_grad():
+                            self._trace_forward("sr_teacher_anchor_start")
+                            sr_teacher_point = self.teacher.backbone(mask_global_point)
+                            sr_teacher_point = self.up_cast(sr_teacher_point)
+                            sr_teacher_point = self.up_cast(
+                                sr_teacher_point,
+                                upcast_level=self.enc2d_upcast_level - self.up_cast_level,
+                            )
+                            sr_teacher_to_feature = self.pool_corr(
+                                sr_teacher_point, major_view_correspondence
+                            )
+                            sr_teacher_feature3d = sr_teacher_to_feature["feat"][
+                                enc2d_mask
+                            ][valid_index[0]]
+                            sr_teacher_feature3d = torch_scatter.scatter_mean(
+                                sr_teacher_feature3d,
+                                inverse_index,
+                                dim=0,
+                                dim_size=feature_index.shape[0],
+                            )
+                            sr_teacher_anchor_mask = self.patch_proj(
+                                sr_teacher_feature3d
+                            )
+                            self._trace_forward(
+                                "sr_teacher_anchor_end",
+                                sync=True,
+                                anchor=self._trace_shape(sr_teacher_anchor_mask),
+                            )
                 feature2d_mask = feature2d_mask[feature_index]
                 if self.shortcut_probe["mode"] == "cross_scene_target_swap":
                     feature2d_mask = self._apply_cross_scene_target_swap(
@@ -1691,6 +1962,15 @@ class Concerto(PointModel):
                         coord_projection_pred = (
                             coord_projection_pred
                             - coord_projection_pred.mean(dim=-1, keepdim=True)
+                        )
+                    if sr_rival_pred_mask is not None:
+                        sr_rival_pred_mask = sr_rival_pred_mask - sr_rival_pred_mask.mean(
+                            dim=-1, keepdim=True
+                        )
+                    if sr_teacher_anchor_mask is not None:
+                        sr_teacher_anchor_mask = (
+                            sr_teacher_anchor_mask
+                            - sr_teacher_anchor_mask.mean(dim=-1, keepdim=True)
                         )
                     self._trace_forward("enc2d_cos_shift_end", sync=True)
                 cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
@@ -1746,11 +2026,29 @@ class Concerto(PointModel):
                 ).mean() * 10
                 self._trace_forward("enc2d_alignment_loss_end", sync=True)
                 loss = enc2d_alignment_loss
+                sr_margin_loss = None
+                sr_distill_loss = None
+                sr_rival_sim = None
                 if coord_alignment_loss is not None:
                     loss = (
                         loss
                         + coord_projection_alpha * coord_alignment_loss
                     )
+                if self.shortcut_probe["mode"] == "coord_margin_rival":
+                    if sr_rival_pred_mask is None:
+                        raise RuntimeError("coord_margin_rival expected rival prediction")
+                    sr_rival_sim = cos(feature2d_mask.detach(), sr_rival_pred_mask.detach())
+                    sr_margin_loss = F.relu(
+                        float(self.shortcut_probe["sr_margin_value"])
+                        + sr_rival_sim
+                        - cos(feature2d_mask, feature3d_mask)
+                    ).mean()
+                    loss = loss + float(self.shortcut_probe["sr_margin_alpha"]) * sr_margin_loss
+                    if sr_teacher_anchor_mask is not None:
+                        sr_distill_loss = F.mse_loss(
+                            feature3d_mask, sr_teacher_anchor_mask.detach()
+                        )
+                        loss = loss + float(self.shortcut_probe["sr_distill_weight"]) * sr_distill_loss
 
                 result_dict["enc2d_loss"] = loss
                 result_dict["loss"].append(loss * self.enc2d_loss_weight)
@@ -1768,6 +2066,12 @@ class Concerto(PointModel):
                             + coord_projection_alpha * coord_alignment_loss
                         )
                     ).abs().detach()
+                if sr_margin_loss is not None:
+                    result_dict["sr_margin_loss"] = sr_margin_loss
+                    result_dict["sr_full_sim"] = cos(feature2d_mask, feature3d_mask).mean().detach()
+                    result_dict["sr_rival_sim"] = sr_rival_sim.mean().detach()
+                    if sr_distill_loss is not None:
+                        result_dict["sr_distill_loss"] = sr_distill_loss
                 if coord_prior_pred is not None:
                     coord_prior_loss = (1 - cos(raw_feature2d_mask, coord_prior_pred)).mean() * 10
                     result_dict["coord_prior_loss"] = coord_prior_loss

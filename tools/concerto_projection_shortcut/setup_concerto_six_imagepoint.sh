@@ -65,6 +65,7 @@ extract_dataset() {
   local dataset="$1"
   local compressed="$2"
   local target="$3"
+  local extract_threads
   mkdir -p "${target}"
   if [ "${EXTRACT_MISSING}" != "1" ]; then
     echo "[skip] extract disabled: ${dataset}"
@@ -88,8 +89,16 @@ extract_dataset() {
   fi
   printf '%s\n' "${parts[@]}" | sort -u > "${target}/.archive_parts"
   echo "[extract] ${dataset}: $(wc -l < "${target}/.archive_parts") parts -> ${target}"
-  # shellcheck disable=SC2046
-  cat $(cat "${target}/.archive_parts") | tar --skip-old-files -xzf - -C "${target}"
+  extract_threads="${EXTRACT_THREADS:-$(nproc)}"
+  if command -v pigz >/dev/null 2>&1; then
+    echo "[extract] ${dataset}: using pigz with ${extract_threads} threads"
+    # shellcheck disable=SC2046
+    cat $(cat "${target}/.archive_parts") | pigz -dc -p "${extract_threads}" | tar --skip-old-files -xf - -C "${target}"
+  else
+    echo "[extract] ${dataset}: pigz not found, falling back to single-thread gzip"
+    # shellcheck disable=SC2046
+    cat $(cat "${target}/.archive_parts") | tar --skip-old-files -xzf - -C "${target}"
+  fi
 }
 
 rewrite_dataset() {
@@ -151,5 +160,12 @@ if contains_dataset structured3d; then
   rewrite_dataset "structured3d" "${STRUCTURED3D_IMAGEPOINT_ROOT}" "${STRUCTURED3D_IMAGEPOINT_META_ROOT}"
 fi
 
+VERIFY_ARGS=()
+if [ -n "${ALLOW_MISSING_VERIFY:-}" ]; then
+  VERIFY_ARGS+=(--allow-missing)
+elif [ "${DATASET_FILTER}" != "arkit,scannet,scannetpp,s3dis,hm3d,structured3d" ]; then
+  VERIFY_ARGS+=(--allow-missing)
+fi
+
 "${PYTHON_BIN}" tools/concerto_projection_shortcut/verify_concerto_six_datasets.py \
-  ${ALLOW_MISSING_VERIFY:+--allow-missing}
+  "${VERIFY_ARGS[@]}"

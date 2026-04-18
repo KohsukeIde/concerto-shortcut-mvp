@@ -1,0 +1,7 @@
+dataset,coord_mlp_loss,full_baseline_loss,target_swap_mean_loss,distance_to_baseline,distance_to_swap_mean,relative_position,gate_hint
+arkit,6.695971,6.026655,6.853404,0.669316,0.157433,0.809576,no_go
+scannet,6.735274,5.615395,7.397524,1.119879,0.662249,0.628394,partial
+scannetpp,6.342475,,,,,,no_reference
+s3dis,6.395551,,,,,,no_reference
+hm3d,6.372810,,,,,,no_reference
+structured3d,6.382244,,,,,,no_reference

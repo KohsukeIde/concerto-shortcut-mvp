@@ -1,0 +1,9 @@
+dataset,mode,batches,enc2d_loss_mean,delta_vs_baseline
+arkit,none,32,6.026655,0.000000
+arkit,global_target_permutation,32,6.940444,0.913789
+arkit,cross_image_target_swap,32,7.002146,0.975491
+arkit,cross_scene_target_swap,32,6.617621,0.590967
+scannet,none,32,5.615395,0.000000
+scannet,global_target_permutation,32,7.338930,1.723535
+scannet,cross_image_target_swap,32,7.392500,1.777106
+scannet,cross_scene_target_swap,32,7.461141,1.845746

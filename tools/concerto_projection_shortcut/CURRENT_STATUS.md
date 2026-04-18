@@ -126,6 +126,9 @@ Current implementation:
   - `setup_concerto_six_imagepoint.sh`
   - `prepare_concerto_imagepoint_splits.py`
   - `verify_concerto_six_datasets.py`
+  - `download_hf_dataset_shard.py`
+  - `submit_hf_dataset_download_shard_abciq_qc.sh`
+  - `launch_structured3d_parallel_download.sh`
 - Main-variant diagnostics:
   - `fit_main_variant_enc2d_head.py`
   - `fit_main_variant_coord_mlp_rival.py`

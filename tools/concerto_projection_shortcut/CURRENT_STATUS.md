@@ -90,11 +90,13 @@ investigation.
    - [results_posthoc_nuisance_surgery.md](./results_posthoc_nuisance_surgery.md)
 7. SR-LoRA v5 Phase A:
    - [results_sr_lora_phasea.md](./results_sr_lora_phasea.md)
-8. Coordinate projection residual handoff:
+8. DINO patch-bias Step A':
+   - [results_dino_patch_bias_stepA.md](./results_dino_patch_bias_stepA.md)
+9. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-9. Short narrative summary:
+10. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-10. Reproduction / runner overview:
+11. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -198,6 +200,15 @@ Acceptance:
     This suggests downstream dependence is more about relative vertical
     scale/shape than absolute coordinate offset. See
     `tools/concerto_projection_shortcut/results_scannet_counterfactual_downstream.md`.
+  - DINO patch-bias Step A' is complete on Concerto-preprocessed ScanNet
+    images. DINOv2 patch features separate `picture` vs `wall` patches
+    reasonably well and expose patch position very strongly: `raw_dino`
+    picture/wall balanced accuracy `0.7797`, AUC `0.8827`, position R2 mean
+    `0.8787`. A minimal rank-2 RASA-lite position removal barely reduces
+    position R2 (`0.8651`) and does not hurt picture/wall separation. This
+    supports a teacher-side positional-bias diagnostic, but not a DINO-only
+    failure claim; the 2D teacher carries semantics and position together. See
+    `tools/concerto_projection_shortcut/results_dino_patch_bias_stepA.md`.
 
 ## ARKit Full Causal Branch
 

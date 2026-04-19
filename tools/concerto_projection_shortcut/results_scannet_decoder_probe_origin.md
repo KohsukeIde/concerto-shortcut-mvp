@@ -59,7 +59,9 @@ Class-wise outputs computed from the saved validation predictions:
 - `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_class_metrics.csv`
 - `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_top_confusions.csv`
 - `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_confusion_long.csv`
-- `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_vs_large_video_linear.csv`
+- `data/runs/scannet_decoder_probe_origin/stagewise_trace_best/scannet_point_stagewise_trace.md`
+- `data/runs/scannet_decoder_probe_origin/stagewise_trace_best/scannet_point_stagewise_trace.csv`
+- `data/runs/scannet_decoder_probe_origin/stagewise_trace_best/scannet_point_stagewise_trace_confusion.csv`
 
 ## Final 100 Epoch Result
 
@@ -144,17 +146,24 @@ did not move into a high-IoU regime:
   does not prove that full FT cannot improve `picture`, but it makes the
   decoder/readout-only explanation much weaker.
 
-Relative to the earlier large-video linear class-wise diagnostic, this origin
-decoder probe improves many weak classes but does not change the qualitative
-failure ranking. The comparison is not a strict same-checkpoint ablation, but
-it is useful as a diagnostic:
+## Origin Decoder Stage-Wise Trace
 
-| class | large-video linear IoU | origin decoder IoU | delta |
-| --- | ---: | ---: | ---: |
-| picture | 0.3962 | 0.4217 | +0.0254 |
-| counter | 0.6543 | 0.7044 | +0.0501 |
-| desk | 0.6790 | 0.7096 | +0.0306 |
-| sink | 0.6859 | 0.7199 | +0.0340 |
-| cabinet | 0.6992 | 0.7318 | +0.0327 |
-| shower curtain | 0.7179 | 0.8055 | +0.0876 |
-| door | 0.7579 | 0.7715 | +0.0136 |
+The origin decoder point-stage trace was run separately with no large-video
+checkpoint involved:
+
+- Job: `133330.qjcm`, `rt_QF=1`, walltime used `00:02:26`.
+- Config:
+  `data/runs/scannet_decoder_probe_origin/exp/scannet-dec-origin-e100/config.py`.
+- Weight:
+  `data/runs/scannet_decoder_probe_origin/exp/scannet-dec-origin-e100/model/model_best.pth`.
+- Result file:
+  `tools/concerto_projection_shortcut/results_scannet_decoder_probe_origin_stagewise.md`.
+
+For `picture_vs_wall`, a binary probe on the decoder point feature reaches
+`0.8376` balanced accuracy, and a binary probe on the 20-way logits reaches
+`0.8247`. However, the fixed direct class margin
+`logit(picture) - logit(wall)` reaches only `0.7203`, and `54.96%` of sampled
+target `picture` points are predicted as `wall`.
+
+This means the origin decoder features do contain useful `picture/wall`
+information, but the trained 20-way readout still underuses it for `picture`.

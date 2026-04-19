@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Point-level ScanNet stage-wise trace for weak class pairs. "
-            "Uses the official ScanNet linear-probe checkpoint and measures "
+            "Uses a ScanNet semseg checkpoint and measures "
             "separability at backbone feature and linear-logit stages."
         )
     )
@@ -360,7 +360,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict], confusion_rows: li
     lines += [
         "",
         "## Interpretation Guide",
-        "- `point_feature` is the frozen Concerto backbone feature returned by the official ScanNet linear-probe model before the segmentation head.",
+        "- `point_feature` is the Concerto backbone/decoder point feature returned by the ScanNet semseg model before the segmentation head.",
         "- `linear_logits` with `unweighted`/`balanced`/`weighted` fits a binary probe on the 20-way linear logits.",
         "- `linear_logits` with `direct_pair_margin` uses the fixed logit margin `logit(positive_class) - logit(negative_class)` without refitting a pair probe.",
         "- The companion confusion CSV reports full 20-way predictions for the validation rows belonging to each class pair.",

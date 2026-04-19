@@ -81,7 +81,11 @@ investigation.
     `0.4217` IoU and `43.1%` of target `picture` points are still predicted
     as `wall`. This weakens the cheapest explanation that the `picture -> wall`
     bottleneck is solved by simply replacing the linear probe with the Concerto
-    decoder probe. Full FT per-class remains a separate check.
+    decoder probe. A follow-up origin-only stage-wise trace on the decoder
+    checkpoint shows `picture_vs_wall` is separable in point features
+    (`0.8376` balanced accuracy), but the direct 20-way class margin is much
+    weaker (`0.7203`) and sampled target `picture` points still go to `wall`
+    `54.96%` of the time. Full FT per-class remains a separate check.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -103,31 +107,35 @@ investigation.
    - [results_arkit_full_stress_corrected.md](./results_arkit_full_stress_corrected.md)
 3. Official checkpoint large-video ARKit/ScanNet causal battery:
    - [results_official_causal_battery.md](./results_official_causal_battery.md)
-4. ScanNet continuation proxy:
+4. Large-video checkpoint reference / cross-variant evidence:
+   - [results_large_video_reference.md](./results_large_video_reference.md)
+5. ScanNet continuation proxy:
    - [results_scannet_proxy_lin.md](./results_scannet_proxy_lin.md)
-5. ProjRes v1 gate:
+6. ProjRes v1 gate:
    - [results_projres_v1.md](./results_projres_v1.md)
-6. Frozen post-training nuisance surgery:
+7. Frozen post-training nuisance surgery:
    - [results_posthoc_nuisance_surgery.md](./results_posthoc_nuisance_surgery.md)
-7. SR-LoRA v5 Phase A:
+8. SR-LoRA v5 Phase A:
    - [results_sr_lora_phasea.md](./results_sr_lora_phasea.md)
-8. DINO patch-bias Step A':
+9. DINO patch-bias Step A':
    - [results_dino_patch_bias_stepA.md](./results_dino_patch_bias_stepA.md)
-9. Concerto 3D patch-separation Step A:
+10. Concerto 3D patch-separation Step A:
    - [results_concerto3d_patch_separation_stepA.md](./results_concerto3d_patch_separation_stepA.md)
-10. Concerto 3D / DINO exact-patch controls:
+11. Concerto 3D / DINO exact-patch controls:
    - [results_concerto3d_dino_exact_controls_stepA.md](./results_concerto3d_dino_exact_controls_stepA.md)
-11. Concerto 3D stage-wise patch trace:
+12. Concerto 3D stage-wise patch trace:
    - [results_concerto3d_stagewise_trace_stepA.md](./results_concerto3d_stagewise_trace_stepA.md)
-12. ScanNet point-level stage-wise trace:
+13. ScanNet point-level stage-wise trace:
    - [results_scannet_point_stagewise_trace.md](./results_scannet_point_stagewise_trace.md)
-13. ScanNet decoder-probe per-class check:
+14. ScanNet decoder-probe per-class check:
    - [results_scannet_decoder_probe_origin.md](./results_scannet_decoder_probe_origin.md)
-14. Coordinate projection residual handoff:
+15. ScanNet origin decoder stage-wise trace:
+   - [results_scannet_decoder_probe_origin_stagewise.md](./results_scannet_decoder_probe_origin_stagewise.md)
+16. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-15. Short narrative summary:
+17. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-16. Reproduction / runner overview:
+18. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

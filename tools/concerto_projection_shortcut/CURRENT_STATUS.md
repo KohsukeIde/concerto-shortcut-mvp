@@ -130,6 +130,17 @@ investigation.
     `+0.00167642`. Current CoDA is no-go as a paper-relevant positive. The
     oracle headroom is still real, but cached-feature post-hoc adapters are not
     recovering it.
+  - CoDA transfer-failure analysis completed. It shows why heldout selection
+    fails: heldout `picture` is easy and train-like (`GT top1=0.9259`,
+    `picture-wall margin=+4.08`), while val `picture` is shifted and
+    wall-dominated (`GT top1=0.5357`, `picture-wall margin=-0.342`). The
+    aggressive adapter moves val target `picture` in the intended direction
+    (`picture->wall 0.4388 -> 0.3486`) but overpredicts `picture` and hurts
+    other classes, so `picture` IoU drops (`0.4022 -> 0.3776`) and mIoU drops.
+    Conclusion: the class-balanced cached heldout objective is not a
+    representative selection criterion. Do not broaden diagnosis further; next
+    method must change the protocol, e.g. in-loop decoder adaptation with real
+    augmentation or stricter full-distribution calibration.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -185,11 +196,13 @@ investigation.
    - [results_constrained_topk_set_decoder.md](./results_constrained_topk_set_decoder.md)
 20. CoDA decoder adapter:
    - [results_coda_decoder_adapter.md](./results_coda_decoder_adapter.md)
-21. Coordinate projection residual handoff:
+21. CoDA transfer-failure analysis:
+   - [results_coda_transfer_failure_analysis.md](./results_coda_transfer_failure_analysis.md)
+22. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-22. Short narrative summary:
+23. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-23. Reproduction / runner overview:
+24. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

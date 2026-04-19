@@ -153,7 +153,7 @@ class DefaultLORASegmentorV2(nn.Module):
             for name, param in self.backbone.named_parameters():
                 if "lora_" in name:
                     param.requires_grad = True
-        self.backbone.enc.print_trainable_parameters()
+            self.backbone.enc.print_trainable_parameters()
 
     def backbone_load(self, checkpoint):
         weight = OrderedDict()

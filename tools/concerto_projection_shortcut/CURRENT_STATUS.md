@@ -153,19 +153,21 @@ investigation.
     slightly (`~0.439 -> ~0.430`) but damage the broader weak-class decision
     surface. Do not continue this exact pair-emphasis CIDA line without a new
     full-multiclass preservation constraint.
-  - Plain same-checkpoint origin LoRA per-class control completed. This uses
-    `concerto_base_origin.pth` through `DefaultLORASegmentorV2` with PTv3 base
-    encoder-mode LoRA (`rank=8`, global batch `64`, 100 epochs, 2 nodes / 8
-    H100). Best checkpoint full val gives mIoU `0.7749`, below the origin
-    decoder-probe reference `0.7888`. However, it moves the target failure in
-    the intended direction: `picture` IoU improves `0.4217 -> 0.4303`, and
-    `picture -> wall` drops `0.4310 -> 0.3867`. This is the first control in
-    this sequence where encoder-side adaptation substantially changes the
-    `picture/wall` confusion, but it is not class-safe: `counter`, `sink`,
-    `shower curtain`, `door`, `wall`, and other weak classes degrade. Treat it
-    as evidence that encoder geometry can move the target confusion, not as a
-    positive method. Details are in
-    `tools/concerto_projection_shortcut/results_scannet_lora_origin_perclass.md`.
+  - Plain same-checkpoint origin LoRA per-class control completed, and the
+    matched no-LoRA same-head baseline has now also completed. Both use
+    `concerto_base_origin.pth` through `DefaultLORASegmentorV2` with the same
+    PTv3 base encoder-mode linear-head family. The no-LoRA linear-head baseline
+    gives mIoU `0.7617`; the LoRA run gives `0.7749`, so LoRA is positive in
+    the matched head family (`+0.0132` mIoU). It also moves the target failure
+    in the intended direction relative to same-head no-LoRA: `picture` IoU
+    improves `0.4078 -> 0.4303`, and `picture -> wall` drops
+    `0.4151 -> 0.3867`. The earlier comparison against decoder probe
+    (`0.7888`) was head-capacity confounded; LoRA remains below that stronger
+    decoder-probe reference, but it should no longer be described as simply
+    damaging aggregate performance. Details are in
+    `tools/concerto_projection_shortcut/results_scannet_lora_origin_perclass.md`
+    and
+    `tools/concerto_projection_shortcut/results_scannet_lora_origin_same_head_perclass.csv`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -882,13 +884,16 @@ Expected next stage:
 1. Treat the current pair-emphasis decoder-family pilots (CoDA/CIDA) as no-go.
    The useful signal is diagnostic: moving `picture` away from `wall` is
    possible, but the current losses damage the full weak-class decision surface.
-2. Treat plain origin LoRA as a control, not a positive method. It confirms that
-   encoder-side adaptation can reduce `picture -> wall`, but it loses aggregate
-   mIoU and damages several weak classes. Do not continue plain LoRA as-is.
-3. Before another method run, require a new hypothesis that explicitly protects
-   the full multiclass decision geometry while repairing the target confusion.
-   Candidate directions should be judged against the oracle/actionability
-   headroom and the CoDA/CIDA/plain-LoRA class-safety failures.
+2. Treat plain origin LoRA as a matched-head positive control: it improves over
+   the same-head no-LoRA baseline and reduces `picture -> wall`. The remaining
+   gap is against the stronger decoder-probe family, not against the matched
+   linear-head baseline.
+3. Before another method run, keep comparisons within a matched family. The next
+   useful job should either make the LoRA setup more faithful to the official
+   LoRA/decoder setting, or add decoder-capacity matching so the LoRA-vs-decoder
+   gap is not confounded by head capacity. Class-safety constraints should be
+   added only after a matched LoRA setting shows which weak classes still move
+   in the wrong direction.
 4. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.

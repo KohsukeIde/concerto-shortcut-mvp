@@ -110,6 +110,16 @@ investigation.
     post-hoc readout methods are miscalibrated; the next positive method needs
     held-out-train validation or a lightweight decoder adaptation, not another
     free reranker.
+  - Validation-aware constrained Top-K set decoder completed on the same origin
+    decoder checkpoint. The first capped run is invalid for selection because
+    heldout rare classes were missing. The full-scan run is valid and selects
+    `k2_lam0p2_tau0p5_gap999` on heldout train. On ScanNet val it gives only a
+    weak positive: mIoU `0.77865983 -> 0.77878256` (`+0.00012274`),
+    `picture` IoU `0.40257231 -> 0.40386984` (`+0.00129753`), and
+    `picture -> wall` `0.43864309 -> 0.42774366`. This is directionally
+    consistent with the oracle/actionability diagnosis but far below gate. Do
+    not spend more runs on offline fixed-logit reranking without a stronger
+    new constraint or adaptation hypothesis.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -161,11 +171,13 @@ investigation.
    - [results_topk_pairwise_rerank_decoder.md](./results_topk_pairwise_rerank_decoder.md)
 18. Oracle/actionability analysis:
    - [results_oracle_actionability_analysis.md](./results_oracle_actionability_analysis.md)
-19. Coordinate projection residual handoff:
+19. Constrained Top-K set decoder:
+   - [results_constrained_topk_set_decoder.md](./results_constrained_topk_set_decoder.md)
+20. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-20. Short narrative summary:
+21. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-21. Reproduction / runner overview:
+22. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

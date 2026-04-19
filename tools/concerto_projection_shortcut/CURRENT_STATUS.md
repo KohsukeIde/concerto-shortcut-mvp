@@ -73,6 +73,15 @@ investigation.
     `picture -> wall` still present at the final 20-way readout. This
     supersedes the earlier raw comparison of DINO `0.7797` against Concerto
     `0.5381/0.5547` as an immediate semantic-transfer-bottleneck claim.
+  - ScanNet decoder-probe per-class Stage 1 completed on
+    `concerto_base_origin.pth` with the frozen encoder and trainable decoder
+    config family. The 100 epoch run finished successfully (`133217.qjcm`,
+    `rt_QF=2`, `00:34:04`) with final precise eval
+    `mIoU/mAcc/allAcc = 0.7888/0.8813/0.9243`, but `picture` remains low at
+    `0.4217` IoU. This weakens the cheapest explanation that the
+    `picture -> wall` bottleneck is solved by simply replacing the linear probe
+    with the Concerto decoder probe. Full FT per-class remains a separate
+    check.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -112,11 +121,13 @@ investigation.
    - [results_concerto3d_stagewise_trace_stepA.md](./results_concerto3d_stagewise_trace_stepA.md)
 12. ScanNet point-level stage-wise trace:
    - [results_scannet_point_stagewise_trace.md](./results_scannet_point_stagewise_trace.md)
-13. Coordinate projection residual handoff:
+13. ScanNet decoder-probe per-class check:
+   - [results_scannet_decoder_probe_origin.md](./results_scannet_decoder_probe_origin.md)
+14. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-14. Short narrative summary:
+15. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-15. Reproduction / runner overview:
+16. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

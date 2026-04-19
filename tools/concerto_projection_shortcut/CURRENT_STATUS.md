@@ -168,6 +168,28 @@ investigation.
     `tools/concerto_projection_shortcut/results_scannet_lora_origin_perclass.md`
     and
     `tools/concerto_projection_shortcut/results_scannet_lora_origin_same_head_perclass.csv`.
+  - Decoder-capacity-matched origin LoRA control completed. This uses the
+    same origin decoder-probe family as `scannet-dec-origin-e100` and adds
+    rank-8 qkv LoRA, with the plain decoder-probe semseg objective and no
+    weak-class or pairwise losses. The result is near-tie but not positive
+    against the decoder baseline: mIoU `0.7888 -> 0.7860`,
+    `picture` IoU `0.4217 -> 0.4204`, and `picture -> wall`
+    `0.4310 -> 0.4387`. Therefore, the matched-head linear LoRA gain does not
+    clearly survive decoder-capacity matching in this plain setup. Details are
+    in
+    `tools/concerto_projection_shortcut/results_scannet_dec_lora_origin_perclass.md`
+    and
+    `tools/concerto_projection_shortcut/results_scannet_dec_lora_origin_perclass.csv`.
+  - Official Concerto LoRA recipe check completed. The upstream Pointcept
+    recipe `semseg-ptv3-large-v1m1-0f-scannet-ft-lora.py` is materially
+    different from the local decoder+LoRA control: it is a PTv3 large
+    encoder-mode linear-head LoRA recipe (`backbone_out_channels=1728`,
+    `enc_mode=True`, no decoder branch, 800 epochs, batch size 24, AdamW
+    lr `0.002`). The local decoder+LoRA no-go therefore should not be reported
+    as an official Concerto LoRA no-go. The required upstream checkpoint
+    `exp/concerto/pretrain-concerto-v1m1-0-large-base/model/model_last.pth`
+    is not currently present locally. Details are in
+    `tools/concerto_projection_shortcut/results_official_lora_recipe_check.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -227,11 +249,16 @@ investigation.
    - [results_coda_transfer_failure_analysis.md](./results_coda_transfer_failure_analysis.md)
 22. CIDA in-loop decoder adaptation:
    - [results_cida_inloop_decoder_adaptation.md](./results_cida_inloop_decoder_adaptation.md)
-23. Coordinate projection residual handoff:
+23. Origin plain LoRA and decoder-capacity-matched LoRA controls:
+   - [results_scannet_lora_origin_perclass.md](./results_scannet_lora_origin_perclass.md)
+   - [results_scannet_dec_lora_origin_perclass.md](./results_scannet_dec_lora_origin_perclass.md)
+24. Official Concerto LoRA recipe check:
+   - [results_official_lora_recipe_check.md](./results_official_lora_recipe_check.md)
+25. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-24. Short narrative summary:
+26. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-25. Reproduction / runner overview:
+27. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -876,6 +903,10 @@ Expected next stage:
   - [scannet_pipeline_status.md](./scannet_pipeline_status.md)
 - Origin plain LoRA per-class control:
   - [results_scannet_lora_origin_perclass.md](./results_scannet_lora_origin_perclass.md)
+- Origin decoder-capacity-matched LoRA control:
+  - [results_scannet_dec_lora_origin_perclass.md](./results_scannet_dec_lora_origin_perclass.md)
+- Official Concerto LoRA recipe check:
+  - [results_official_lora_recipe_check.md](./results_official_lora_recipe_check.md)
 - Projection residual handoff:
   - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
 
@@ -884,16 +915,17 @@ Expected next stage:
 1. Treat the current pair-emphasis decoder-family pilots (CoDA/CIDA) as no-go.
    The useful signal is diagnostic: moving `picture` away from `wall` is
    possible, but the current losses damage the full weak-class decision surface.
-2. Treat plain origin LoRA as a matched-head positive control: it improves over
-   the same-head no-LoRA baseline and reduces `picture -> wall`. The remaining
-   gap is against the stronger decoder-probe family, not against the matched
-   linear-head baseline.
-3. Before another method run, keep comparisons within a matched family. The next
-   useful job should either make the LoRA setup more faithful to the official
-   LoRA/decoder setting, or add decoder-capacity matching so the LoRA-vs-decoder
-   gap is not confounded by head capacity. Class-safety constraints should be
-   added only after a matched LoRA setting shows which weak classes still move
-   in the wrong direction.
+2. Treat plain origin LoRA as a matched-head positive control only in the
+   linear-head family: it improves over same-head no-LoRA and reduces
+   `picture -> wall`.
+3. The decoder-capacity-matched LoRA control is complete and is not positive
+   against the decoder baseline. Do not launch weak-class or class-safety
+   variants of this exact decoder+LoRA setup without a new hypothesis. The
+   official Concerto LoRA recipe does differ materially, but it requires the
+   main-variant large pretraining checkpoint. Obtain that checkpoint before
+   claiming or testing official LoRA reproduction; otherwise treat the current
+   local base-origin LoRA lines as diagnostic rather than a positive method
+   path.
 4. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.
@@ -908,4 +940,5 @@ Expected next stage:
    - `data/runs/posthoc_surgery_e025pilot`
    - `data/runs/cida_inloop_decoder_adaptation/cida-base-i1200-eval-b1`
    - `data/runs/cida_inloop_decoder_adaptation/cida-strong-i1200-eval-b1`
+   - `data/runs/scannet_dec_lora_origin/classwise`
    - `data/runs/scannet_lora_origin/classwise/`

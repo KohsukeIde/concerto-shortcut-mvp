@@ -81,6 +81,25 @@ The earlier decoder-probe comparison was head-capacity confounded: decoder probe
 
 Decision: do not use the decoder-probe gap alone to call plain LoRA damaging. The next job should compare within a matched family: either a more faithful official LoRA setup or a decoder-capacity-matched LoRA/control, then add class-safety only if the matched LoRA still damages specific weak classes.
 
+## Decoder-Capacity-Matched Follow-Up
+
+The decoder-capacity-matched LoRA control has now completed. It uses the origin
+decoder-probe family with trainable decoder/head and adds the same rank-8 qkv
+LoRA to the frozen origin backbone. The result is recorded in
+`results_scannet_dec_lora_origin_perclass.md`.
+
+The matched decoder-family result is not positive:
+
+- origin decoder probe: `0.7888` mIoU, `picture` IoU `0.4217`,
+  `picture -> wall` `0.4310`
+- origin decoder+LoRA: `0.7860` mIoU, `picture` IoU `0.4204`,
+  `picture -> wall` `0.4387`
+
+This means the linear-head LoRA gain does not clearly survive when decoder
+capacity is matched in this plain setup. Do not proceed directly to weak-class
+or class-safety variants of this exact decoder+LoRA line without a new
+hypothesis.
+
 ## Artifacts
 
 - Training log: `data/logs/abciq/scannet_semseg_133383.qjcm.log`

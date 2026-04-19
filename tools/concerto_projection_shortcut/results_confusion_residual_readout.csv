@@ -1,0 +1,3 @@
+run,job_id,variant,mIoU,delta_mIoU,picture_iou,delta_picture_iou,picture_to_wall_frac,status
+multi_pair,133346.qjcm,residual_lam0p1_top1_pair,0.77815015,0.00020794,0.40378303,-0.00013035,0.42790756,no_meaningful_positive
+picture_only,133347.qjcm,residual_lam0p02_top2_both,0.77795288,0.00001014,0.40447369,0.00055232,0.42317853,no_meaningful_positive

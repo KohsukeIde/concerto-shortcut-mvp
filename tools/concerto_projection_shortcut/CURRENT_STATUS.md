@@ -86,6 +86,12 @@ investigation.
     (`0.8376` balanced accuracy), but the direct 20-way class margin is much
     weaker (`0.7203`) and sampled target `picture` points still go to `wall`
     `54.96%` of the time. Full FT per-class remains a separate check.
+  - Same-checkpoint confusion-graph residual readout pilot completed on the
+    origin decoder checkpoint. The implementation works, but the naive
+    antisymmetric logit correction is no-go: multi-pair best mIoU delta is only
+    `+0.0002`, and a refined `picture:wall` only sweep improves `picture` IoU
+    by only `+0.00055`. This supports readout/calibration as a bottleneck, but
+    the simple post-hoc residual expert is not a sufficient positive method.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -131,11 +137,13 @@ investigation.
    - [results_scannet_decoder_probe_origin.md](./results_scannet_decoder_probe_origin.md)
 15. ScanNet origin decoder stage-wise trace:
    - [results_scannet_decoder_probe_origin_stagewise.md](./results_scannet_decoder_probe_origin_stagewise.md)
-16. Coordinate projection residual handoff:
+16. Confusion-graph residual readout pilot:
+   - [results_confusion_residual_readout.md](./results_confusion_residual_readout.md)
+17. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-17. Short narrative summary:
+18. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-18. Reproduction / runner overview:
+19. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

@@ -120,6 +120,16 @@ investigation.
     consistent with the oracle/actionability diagnosis but far below gate. Do
     not spend more runs on offline fixed-logit reranking without a stronger
     new constraint or adaptation hypothesis.
+  - CoDA decoder-adapter pilot completed on the same origin decoder checkpoint.
+    This changes the family from fixed-logit reranking to a trainable residual
+    feature-to-logit map `z = z0 + A(h)` with weighted CE, confusion-pair CE,
+    KL-to-base, and residual L2. It trains successfully and improves heldout
+    train, but the heldout-selected aggressive variant overcorrects ScanNet val
+    (`mIoU -0.0114`, `picture -0.0283`). An all-variant val sweep finds only a
+    tiny safe positive: best mIoU `+0.00023654`, best safe `picture` delta
+    `+0.00167642`. Current CoDA is no-go as a paper-relevant positive. The
+    oracle headroom is still real, but cached-feature post-hoc adapters are not
+    recovering it.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -173,11 +183,13 @@ investigation.
    - [results_oracle_actionability_analysis.md](./results_oracle_actionability_analysis.md)
 19. Constrained Top-K set decoder:
    - [results_constrained_topk_set_decoder.md](./results_constrained_topk_set_decoder.md)
-20. Coordinate projection residual handoff:
+20. CoDA decoder adapter:
+   - [results_coda_decoder_adapter.md](./results_coda_decoder_adapter.md)
+21. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-21. Short narrative summary:
+22. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-22. Reproduction / runner overview:
+23. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

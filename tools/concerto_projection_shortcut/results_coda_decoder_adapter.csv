@@ -1,0 +1,4 @@
+run,job,resource,walltime_used,status,selection,variant,mIoU,delta_mIoU,picture_iou,picture_delta_iou,picture_to_wall,counter_delta_iou,desk_delta_iou,sink_delta_iou,cabinet_delta_iou,decision
+fullscan_train_select,133361.qjcm,rt_QF=1,00:03:02,Exit_status=0,heldout_selected,lam1_tau1,0.76740619,-0.01135168,0.38097393,-0.02828339,0.34302118,0.00317946,-0.02593388,-0.01831498,-0.00790069,heldout-selection-overfits-val-no-go
+val_all_sweep_best_miou,133362.qjcm,rt_QF=1,00:00:57,Exit_status=0,val_best_miou,lam0p1_tau1,0.77793617,0.00023654,0.40478069,0.00118973,0.43346092,0.00300409,0.00017769,-0.00116240,0.00026436,weak-positive-below-gate
+val_all_sweep_best_picture_safe,133362.qjcm,rt_QF=1,00:00:57,Exit_status=0,val_best_picture_with_positive_miou,lam0p2_tau1,0.77788432,0.00018469,0.40526737,0.00167642,0.42317853,0.00555226,-0.00051758,-0.00192295,0.00025724,weak-positive-below-gate

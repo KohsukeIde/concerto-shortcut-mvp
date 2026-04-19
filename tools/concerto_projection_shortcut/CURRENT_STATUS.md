@@ -141,6 +141,18 @@ investigation.
     representative selection criterion. Do not broaden diagnosis further; next
     method must change the protocol, e.g. in-loop decoder adaptation with real
     augmentation or stricter full-distribution calibration.
+  - CIDA in-loop decoder adaptation completed on the same origin decoder
+    checkpoint. This moves from cached-feature post-hoc correction to training
+    the decoder/head inside the real ScanNet augmentation loop with frozen
+    encoder, weak-class CE, confusion-pair CE, KL-to-base, and prediction
+    distribution anchoring. The train path is stable after matching Pointcept's
+    standard decoder-probe train-mode behavior. However, batch-size-1 full val
+    is no-go: CIDA-base gives mIoU `0.7752` (`-0.0031`) and `picture` IoU
+    `0.3856` (`-0.0203`); CIDA-strong gives mIoU `0.7746` (`-0.0037`) and
+    `picture` IoU `0.3863` (`-0.0196`). Both reduce `picture -> wall`
+    slightly (`~0.439 -> ~0.430`) but damage the broader weak-class decision
+    surface. Do not continue this exact pair-emphasis CIDA line without a new
+    full-multiclass preservation constraint.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -198,11 +210,13 @@ investigation.
    - [results_coda_decoder_adapter.md](./results_coda_decoder_adapter.md)
 21. CoDA transfer-failure analysis:
    - [results_coda_transfer_failure_analysis.md](./results_coda_transfer_failure_analysis.md)
-22. Coordinate projection residual handoff:
+22. CIDA in-loop decoder adaptation:
+   - [results_cida_inloop_decoder_adaptation.md](./results_cida_inloop_decoder_adaptation.md)
+23. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-23. Short narrative summary:
+24. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-24. Reproduction / runner overview:
+25. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -850,15 +864,15 @@ Expected next stage:
 
 ## Immediate Next Step
 
-1. Continue monitoring the active e050 fresh same-stage jobs:
-   - original: `132600.qjcm`
-   - v1b `combo-b075-a001`: `132602.qjcm`
-   - held follow-ups: `132601.qjcm`, `132603.qjcm`
-2. Read out the dependent ScanNet follow-ups before deciding whether to stage
-   e075/e100 or pivot to the posthoc fallback.
-3. Use the exact-resume launcher only for future staged runs that kept the same
-   target scheduler from the first stage; old target-e025 checkpoints are not
-   exact e050 resumes.
+1. Treat the current exact pair-emphasis CIDA pilot as no-go. The useful signal
+   is diagnostic: moving `picture` away from `wall` is possible, but the
+   current losses damage the full weak-class decision surface.
+2. Before another method run, require a new hypothesis that explicitly protects
+   the full multiclass decision geometry, not only the target confusion pairs.
+   Candidate directions should be judged against the oracle/actionability
+   headroom and the CoDA/CIDA overcorrection failures.
+3. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
+   `*-eval-b1` runs for reporting.
 4. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
 5. Keep the current completed artifacts:
@@ -868,3 +882,5 @@ Expected next stage:
    - `data/runs/projres_v1c/summaries/h10016x3-qf16-v1c`
    - `data/runs/projres_long/summaries/long-e025-qf32`
    - `data/runs/posthoc_surgery_e025pilot`
+   - `data/runs/cida_inloop_decoder_adaptation/cida-base-i1200-eval-b1`
+   - `data/runs/cida_inloop_decoder_adaptation/cida-strong-i1200-eval-b1`

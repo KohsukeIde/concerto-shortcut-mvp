@@ -1,0 +1,3 @@
+tag,job_id,eval_job_id,train_steps,batch_size,lambda_pair,lambda_kl,lambda_dist,val_batch_size,mIoU,delta_mIoU,weak_mIoU,weak_delta_mIoU,picture_iou,picture_delta_iou,picture_to_wall,base_picture_to_wall,picture_pred_count,base_picture_pred_count,counter_delta_iou,desk_delta_iou,sink_delta_iou,cabinet_delta_iou,decision
+cida-base-i1200,133373.qjcm,133376.qjcm,1200,8,0.2,0.05,0.05,1,0.77523273,-0.00312027,0.62908606,-0.01580261,0.38559919,-0.02025931,0.43038536,0.43941439,194821,178140,-0.02750450,-0.00849437,-0.00629000,-0.01646489,no-go
+cida-strong-i1200,133374.qjcm,133377.qjcm,1200,8,0.4,0.05,0.1,1,0.77461218,-0.00373993,0.62796145,-0.01692490,0.38626428,-0.01958329,0.43063603,0.43942885,192096,178137,-0.02837051,-0.00766817,-0.00751865,-0.02148387,no-go

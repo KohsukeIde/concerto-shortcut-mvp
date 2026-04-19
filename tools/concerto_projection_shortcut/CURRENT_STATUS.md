@@ -100,6 +100,16 @@ investigation.
     `topk2_lam0p05` gives `mIoU=0.7791` (`+0.00022`) and `picture IoU=0.4102`
     (`+0.00066`). This is below gate and not paper-relevant yet, but it shows
     the readout-side lever is real and very small.
+  - Oracle/actionability analysis completed on the same origin decoder
+    checkpoint. It shows large candidate-set headroom: `picture` top-2 hit rate
+    is `0.8929` and top-5 hit rate is `0.9599`; oracle top-2 raises mIoU from
+    `0.7778` to `0.9197` and `picture` IoU from `0.4034` to `0.8579`.
+    However, train-derived proxies fail: `pair_probe_top2` drops mIoU to
+    `0.7567` and `picture` IoU to `0.1722`, while class-prior/bias calibration
+    also hurts. Conclusion: readout headroom is real, but unconstrained
+    post-hoc readout methods are miscalibrated; the next positive method needs
+    held-out-train validation or a lightweight decoder adaptation, not another
+    free reranker.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -149,11 +159,13 @@ investigation.
    - [results_confusion_residual_readout.md](./results_confusion_residual_readout.md)
 17. Top-K pairwise reranking decoder:
    - [results_topk_pairwise_rerank_decoder.md](./results_topk_pairwise_rerank_decoder.md)
-18. Coordinate projection residual handoff:
+18. Oracle/actionability analysis:
+   - [results_oracle_actionability_analysis.md](./results_oracle_actionability_analysis.md)
+19. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-19. Short narrative summary:
+20. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-20. Reproduction / runner overview:
+21. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

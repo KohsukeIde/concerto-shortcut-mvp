@@ -78,10 +78,10 @@ investigation.
     config family. The 100 epoch run finished successfully (`133217.qjcm`,
     `rt_QF=2`, `00:34:04`) with final precise eval
     `mIoU/mAcc/allAcc = 0.7888/0.8813/0.9243`, but `picture` remains low at
-    `0.4217` IoU. This weakens the cheapest explanation that the
-    `picture -> wall` bottleneck is solved by simply replacing the linear probe
-    with the Concerto decoder probe. Full FT per-class remains a separate
-    check.
+    `0.4217` IoU and `43.1%` of target `picture` points are still predicted
+    as `wall`. This weakens the cheapest explanation that the `picture -> wall`
+    bottleneck is solved by simply replacing the linear probe with the Concerto
+    decoder probe. Full FT per-class remains a separate check.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps

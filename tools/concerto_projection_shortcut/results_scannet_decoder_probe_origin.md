@@ -53,6 +53,14 @@ Checkpoints:
 - `data/runs/scannet_decoder_probe_origin/exp/scannet-dec-origin-e100/model/model_last.pth`
 - `data/runs/scannet_decoder_probe_origin/exp/scannet-dec-origin-e100/model/model_best.pth`
 
+Class-wise outputs computed from the saved validation predictions:
+
+- `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_summary.json`
+- `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_class_metrics.csv`
+- `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_top_confusions.csv`
+- `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_confusion_long.csv`
+- `data/runs/scannet_decoder_probe_origin/classwise/scannet_dec_origin_e100_vs_large_video_linear.csv`
+
 ## Final 100 Epoch Result
 
 Final precise eval:
@@ -88,6 +96,29 @@ Per-class final IoU:
 | bathtub | 0.8481 | 0.9662 |
 | otherfurniture | 0.7117 | 0.8069 |
 
+Weakest classes after decoder probe:
+
+| rank | class | IoU | accuracy | main non-self confusion |
+| ---: | --- | ---: | ---: | --- |
+| 1 | picture | 0.4217 | 0.5472 | wall, 43.1% of target picture |
+| 2 | counter | 0.7044 | 0.8209 | cabinet, 9.0% |
+| 3 | desk | 0.7096 | 0.8676 | table, 6.1% |
+| 4 | otherfurniture | 0.7117 | 0.8069 | wall, 6.4% |
+| 5 | sink | 0.7199 | 0.8594 | counter, 5.0% |
+| 6 | cabinet | 0.7318 | 0.8337 | otherfurniture, 4.8% |
+| 7 | window | 0.7630 | 0.8637 | wall, 9.0% |
+| 8 | refridgerator | 0.7647 | 0.9031 | cabinet, 3.3% |
+
+Top confusions for `picture`:
+
+| target | predicted | fraction of target |
+| --- | --- | ---: |
+| picture | wall | 0.4310 |
+| picture | sofa | 0.0068 |
+| picture | bookshelf | 0.0037 |
+| picture | otherfurniture | 0.0031 |
+| picture | bed | 0.0022 |
+
 ## Intermediate Readout
 
 The decoder probe already reached strong aggregate mIoU early, but `picture`
@@ -105,9 +136,25 @@ did not move into a high-IoU regime:
 - Decoder capacity improves aggregate validation performance relative to the
   previous linear-probe diagnostic regime, as expected.
 - The main weak class from the class-wise diagnosis remains weak: `picture`
-  is only `0.4217` IoU after the 100 epoch decoder probe.
+  is only `0.4217` IoU after the 100 epoch decoder probe, and `43.1%` of
+  target `picture` points are still predicted as `wall`.
 - Therefore, the `picture -> wall` issue is not explained away by the cheapest
   "linear probe is too weak; a frozen-encoder decoder probe fixes it" scenario.
 - A full-FT per-class check is still a separate question. The decoder result
   does not prove that full FT cannot improve `picture`, but it makes the
   decoder/readout-only explanation much weaker.
+
+Relative to the earlier large-video linear class-wise diagnostic, this origin
+decoder probe improves many weak classes but does not change the qualitative
+failure ranking. The comparison is not a strict same-checkpoint ablation, but
+it is useful as a diagnostic:
+
+| class | large-video linear IoU | origin decoder IoU | delta |
+| --- | ---: | ---: | ---: |
+| picture | 0.3962 | 0.4217 | +0.0254 |
+| counter | 0.6543 | 0.7044 | +0.0501 |
+| desk | 0.6790 | 0.7096 | +0.0306 |
+| sink | 0.6859 | 0.7199 | +0.0340 |
+| cabinet | 0.6992 | 0.7318 | +0.0327 |
+| shower curtain | 0.7179 | 0.8055 | +0.0876 |
+| door | 0.7579 | 0.7715 | +0.0136 |

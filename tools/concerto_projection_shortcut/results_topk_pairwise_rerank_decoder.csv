@@ -1,0 +1,3 @@
+run,job,resource,walltime_used,status,base_mIoU,base_picture_iou,base_picture_to_wall,best_nonbase_variant,best_nonbase_mIoU,best_nonbase_delta_mIoU,best_nonbase_picture_iou,best_nonbase_delta_picture_iou,best_nonbase_picture_to_wall,decision
+topk_pairwise_rerank_decoder,133349.qjcm,rt_QF=1,00:02:17,Exit_status=0,0.77887412,0.40956599,0.43236664,topk2_lam0p25,0.77413200,-0.00474212,0.39477202,-0.01479397,0.36404875,no-go-overcorrects
+topk_pairwise_rerank_decoder_small_lambda,133350.qjcm,rt_QF=1,00:03:00,Exit_status=0,0.77887417,0.40956748,0.43236664,topk2_lam0p05,0.77909529,0.00022112,0.41022297,0.00065549,0.41810241,weak-positive-below-gate

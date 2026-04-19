@@ -92,6 +92,14 @@ investigation.
     `+0.0002`, and a refined `picture:wall` only sweep improves `picture` IoU
     by only `+0.00055`. This supports readout/calibration as a bottleneck, but
     the simple post-hoc residual expert is not a sufficient positive method.
+  - Same-checkpoint top-K pairwise reranking decoder completed on the origin
+    decoder checkpoint. The reranker fits the train candidate problem
+    (`candidate base acc 0.9600` to `rerank acc 0.9868` at step 2000). Large
+    lambdas overcorrect, but a small-lambda follow-up finds a tiny positive:
+    deterministic offline base `mIoU=0.7789`, `picture IoU=0.4096`;
+    `topk2_lam0p05` gives `mIoU=0.7791` (`+0.00022`) and `picture IoU=0.4102`
+    (`+0.00066`). This is below gate and not paper-relevant yet, but it shows
+    the readout-side lever is real and very small.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -139,11 +147,13 @@ investigation.
    - [results_scannet_decoder_probe_origin_stagewise.md](./results_scannet_decoder_probe_origin_stagewise.md)
 16. Confusion-graph residual readout pilot:
    - [results_confusion_residual_readout.md](./results_confusion_residual_readout.md)
-17. Coordinate projection residual handoff:
+17. Top-K pairwise reranking decoder:
+   - [results_topk_pairwise_rerank_decoder.md](./results_topk_pairwise_rerank_decoder.md)
+18. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-18. Short narrative summary:
+19. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-19. Reproduction / runner overview:
+20. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

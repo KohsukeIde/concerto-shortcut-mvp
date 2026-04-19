@@ -51,7 +51,7 @@ EXP_MIRROR_ROOT="${EXP_MIRROR_ROOT:-${POINTCEPT_DATA_ROOT}/runs/scannet_semseg_o
 LOG_DIR="${LOG_DIR:-${EXP_MIRROR_ROOT}/logs}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-0}"
 
-if [ ! -f "${WEIGHT_PATH}" ] && [ "${TRAIN_RESUME}" != "true" ]; then
+if [ "${WEIGHT_PATH}" != "None" ] && [ ! -f "${WEIGHT_PATH}" ] && [ "${TRAIN_RESUME}" != "true" ]; then
   echo "[error] missing weight: ${WEIGHT_PATH}" >&2
   exit 2
 fi

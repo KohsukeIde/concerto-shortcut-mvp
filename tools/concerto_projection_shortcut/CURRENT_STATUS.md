@@ -153,6 +153,19 @@ investigation.
     slightly (`~0.439 -> ~0.430`) but damage the broader weak-class decision
     surface. Do not continue this exact pair-emphasis CIDA line without a new
     full-multiclass preservation constraint.
+  - Plain same-checkpoint origin LoRA per-class control completed. This uses
+    `concerto_base_origin.pth` through `DefaultLORASegmentorV2` with PTv3 base
+    encoder-mode LoRA (`rank=8`, global batch `64`, 100 epochs, 2 nodes / 8
+    H100). Best checkpoint full val gives mIoU `0.7749`, below the origin
+    decoder-probe reference `0.7888`. However, it moves the target failure in
+    the intended direction: `picture` IoU improves `0.4217 -> 0.4303`, and
+    `picture -> wall` drops `0.4310 -> 0.3867`. This is the first control in
+    this sequence where encoder-side adaptation substantially changes the
+    `picture/wall` confusion, but it is not class-safe: `counter`, `sink`,
+    `shower curtain`, `door`, `wall`, and other weak classes degrade. Treat it
+    as evidence that encoder geometry can move the target confusion, not as a
+    positive method. Details are in
+    `tools/concerto_projection_shortcut/results_scannet_lora_origin_perclass.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -859,23 +872,29 @@ Expected next stage:
   - historical path: `exp/concerto/scannet-proxy-official-origin-lin-safe-smoke/train.log`
 - Pipeline status:
   - [scannet_pipeline_status.md](./scannet_pipeline_status.md)
+- Origin plain LoRA per-class control:
+  - [results_scannet_lora_origin_perclass.md](./results_scannet_lora_origin_perclass.md)
 - Projection residual handoff:
   - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
 
 ## Immediate Next Step
 
-1. Treat the current exact pair-emphasis CIDA pilot as no-go. The useful signal
-   is diagnostic: moving `picture` away from `wall` is possible, but the
-   current losses damage the full weak-class decision surface.
-2. Before another method run, require a new hypothesis that explicitly protects
-   the full multiclass decision geometry, not only the target confusion pairs.
+1. Treat the current pair-emphasis decoder-family pilots (CoDA/CIDA) as no-go.
+   The useful signal is diagnostic: moving `picture` away from `wall` is
+   possible, but the current losses damage the full weak-class decision surface.
+2. Treat plain origin LoRA as a control, not a positive method. It confirms that
+   encoder-side adaptation can reduce `picture -> wall`, but it loses aggregate
+   mIoU and damages several weak classes. Do not continue plain LoRA as-is.
+3. Before another method run, require a new hypothesis that explicitly protects
+   the full multiclass decision geometry while repairing the target confusion.
    Candidate directions should be judged against the oracle/actionability
-   headroom and the CoDA/CIDA overcorrection failures.
-3. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
-   `*-eval-b1` runs for reporting.
-4. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+   headroom and the CoDA/CIDA/plain-LoRA class-safety failures.
+4. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
+   `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
+   `data/runs/scannet_lora_origin/classwise/`.
+5. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-5. Keep the current completed artifacts:
+6. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`
@@ -884,3 +903,4 @@ Expected next stage:
    - `data/runs/posthoc_surgery_e025pilot`
    - `data/runs/cida_inloop_decoder_adaptation/cida-base-i1200-eval-b1`
    - `data/runs/cida_inloop_decoder_adaptation/cida-strong-i1200-eval-b1`
+   - `data/runs/scannet_lora_origin/classwise/`

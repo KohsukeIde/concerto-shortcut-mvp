@@ -140,7 +140,11 @@ class DefaultLORASegmentorV2(nn.Module):
                 lora_dropout=lora_dropout,
                 bias="none",
             )
-            self.backbone.enc = get_peft_model(self.backbone.enc, lora_config)
+            self.backbone.enc = get_peft_model(
+                self.backbone.enc,
+                lora_config,
+                autocast_adapter_dtype=False,
+            )
 
         if self.freeze_backbone:
             for p in self.backbone.parameters():

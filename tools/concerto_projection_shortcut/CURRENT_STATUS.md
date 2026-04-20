@@ -295,19 +295,24 @@ investigation.
     The next region-family method would need point-mask assignment or a
     proposal-native classifier, not scalar logit boosting. Details are in
     `tools/concerto_projection_shortcut/results_proposal_verify_decoder.md`.
-  - Masking battery pilot completed for the same origin decoder checkpoint in
-    voxel-level evaluation space. Random sparsity is surprisingly mild for
-    overall mIoU: clean voxel mIoU is `0.7874`, random keep `0.5` is `0.7839`,
-    keep `0.3` is `0.7773`, keep `0.2` is `0.7636`, and keep `0.1` is
-    `0.7121`. Structured block keep `0.2` is also high at `0.7569`, but the
-    class behavior is not monotonic (`picture` rises to `0.4623`, likely due to
-    changed voxel subset composition). Crucially, feature-zero with all points
-    kept collapses to mIoU `0.0680`, weak mean `0.0015`, `picture=0`, while
-    wall/floor still carry layout priors. Interpretation: high random/structured
-    sparsity tolerance is real and should be expanded into a ranking-shift
-    evaluation, but this pilot does not support a pure coordinate-only shortcut
-    story; feature/color/normal input is still essential. Details are in
-    `tools/concerto_projection_shortcut/results_masking_battery_full.md`.
+  - Masking ranking battery completed for the same origin decoder and linear
+    checkpoints, plus train-majority, coord-only, and class-balanced coord-only
+    baselines in the same voxel-level evaluation space. Concerto decoder and
+    linear readouts both keep high mIoU under heavy sparsity: decoder
+    `0.7874 -> 0.7636` and linear `0.7691 -> 0.7589` under random keep `0.2`;
+    structured block keep `0.2` is also high at decoder `0.7569` and linear
+    `0.7551`. Feature-zero still collapses both (`0.0680` decoder, `0.0390`
+    linear), so this is not a pure coordinate-only story. The explicit
+    coord-only baselines also rule that out as a sufficient explanation:
+    ordinary coord MLP clean mIoU is only `0.0726`, class-balanced coord MLP is
+    `0.0707`, and train-majority wall is `0.0151`. Clean-to-masked ranking
+    shift is weak with the available comparators: decoder stays above linear
+    for clean, random keep `0.2`, and structured keep `0.2`, while linear only
+    overtakes under extreme random keep `0.1`. Current interpretation: strong
+    sparsity-tolerance evaluation signal and anti coord-only-baseline evidence,
+    but still not shortcut-proof task-level evidence without supervised PTv3
+    and an external SSL comparator. Details are in
+    `tools/concerto_projection_shortcut/results_masking_ranking_battery.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -389,8 +394,12 @@ investigation.
 31. Proposal-first / mask-lite region gates:
    - [results_proposal_recall_analysis.md](./results_proposal_recall_analysis.md)
    - [results_proposal_verify_decoder.md](./results_proposal_verify_decoder.md)
-32. Masking battery pilot:
+32. Masking ranking battery:
+   - [results_masking_ranking_battery.md](./results_masking_ranking_battery.md)
    - [results_masking_battery_full.md](./results_masking_battery_full.md)
+   - [results_masking_linear_origin_full.md](./results_masking_linear_origin_full.md)
+   - [results_masking_coord_baselines_full.md](./results_masking_coord_baselines_full.md)
+   - [results_masking_coord_baselines_balanced_full.md](./results_masking_coord_baselines_balanced_full.md)
    - [results_masking_battery_smoke.md](./results_masking_battery_smoke.md)
 33. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
@@ -1086,12 +1095,13 @@ Expected next stage:
    reduce `picture -> wall` while lowering `picture` IoU. Do not continue this
    exact PVD boost family. If region-family work continues, change the protocol
    to proposal-native classification or learned point-mask assignment.
-8. Treat the first masking battery as a promising evaluation-pilot, not yet a
-   shortcut proof. Concerto decoder keeps high mIoU under heavy random/block
-   input sparsity, but feature-zero collapses, so the next mask work must add
-   same-protocol baselines/ranking: coord-only, majority/layout, supervised PTv3,
-   and at least one SSL comparator. Do not claim shortcut-specific task-level
-   evidence from Concerto-only masking.
+8. Treat the masking ranking battery as a promising evaluation-pilot, not yet a
+   shortcut proof. Concerto decoder and linear readouts keep high mIoU under
+   heavy random/block input sparsity, while feature-zero collapses and
+   coord-only/majority baselines are far too weak to explain the Concerto
+   numbers. The next mask work should add supervised PTv3 and at least one
+   external SSL comparator under the same protocol; do not claim
+   shortcut-specific task-level evidence from the current Concerto-only ranking.
 9. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.

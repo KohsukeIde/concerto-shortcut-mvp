@@ -24,7 +24,6 @@ from tools.concerto_projection_shortcut.eval_concerto3d_dino_exact_controls_step
 )
 from tools.concerto_projection_shortcut.eval_retrieval_prototype_readout import (  # noqa: E402
     build_model,
-    forward_features,
     load_config,
     move_to_cuda,
     summarize_confusion,
@@ -210,6 +209,34 @@ def make_variant_batch(batch: dict, variant: Variant, seed: int) -> tuple[dict, 
     raise ValueError(f"unknown variant kind: {variant.kind}")
 
 
+def inference_batch(batch: dict) -> dict:
+    """Drop supervision-only tensors so eval forward does not compute losses."""
+    skip = {"segment", "origin_segment", "inverse"}
+    out = {}
+    for key, value in batch.items():
+        if key in skip:
+            continue
+        out[key] = value
+    return out
+
+
+@torch.no_grad()
+def forward_logits_labels(model, batch: dict) -> tuple[torch.Tensor, torch.Tensor]:
+    labels = batch["segment"].long()
+    model_input = inference_batch(batch)
+    try:
+        out = model(model_input, return_point=True)
+    except TypeError as exc:
+        # PPT-v1m1 does not accept return_point; masking battery only needs logits.
+        if "return_point" not in str(exc):
+            raise
+        out = model(model_input)
+    logits = out["seg_logits"].float()
+    if logits.shape[0] != labels.shape[0]:
+        raise RuntimeError(f"shape mismatch logits={logits.shape} labels={labels.shape}")
+    return logits, labels
+
+
 def picture_to_wall_from_conf(conf: np.ndarray) -> float:
     pic = NAME_TO_ID["picture"]
     wall = NAME_TO_ID["wall"]
@@ -264,7 +291,7 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
                     masked_batch, keep_frac = make_variant_batch(batch, variant, seed)
                     if input_point_count(masked_batch) <= 0:
                         continue
-                    _, logits, labels, _ = forward_features(model, masked_batch)
+                    logits, labels = forward_logits_labels(model, masked_batch)
                     pred = logits.argmax(dim=1)
                     update_confusion(confs[variant.name], pred.cpu(), labels.cpu(), num_classes, -1)
                     keep_sums[variant.name] += keep_frac

@@ -313,6 +313,19 @@ investigation.
     but still not shortcut-proof task-level evidence without supervised PTv3
     and an external SSL comparator. Details are in
     `tools/concerto_projection_shortcut/results_masking_ranking_battery.md`.
+  - Downloaded comparator check completed for released PTv3 supervised,
+    PTv3-PPT, Sonata, Concerto-head, and Utonia-head weights. The PTv3
+    checkpoints download and load with `missing=0/unexpected=0`, but their clean
+    mIoU under the current repo/data protocol is far below expected supervised
+    levels (`0.1496` for PTv3 base, `0.0422` for PTv3-PPT). The downloaded
+    original PTv3 config also fails in the current code due the removed
+    `cls_mode` argument, supporting a version/protocol mismatch interpretation.
+    The released Sonata backbone and ScanNet linear head can be merged into a
+    usable external SSL comparator: clean `0.7169`, random keep `0.2` `0.6942`,
+    structured keep `0.2` `0.6752`, feature-zero `0.0607`. This adds an
+    external SSL row but still shows weak clean-to-masked ranking shift. Details
+    are in
+    `tools/concerto_projection_shortcut/results_masking_downloaded_comparators.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -396,6 +409,7 @@ investigation.
    - [results_proposal_verify_decoder.md](./results_proposal_verify_decoder.md)
 32. Masking ranking battery:
    - [results_masking_ranking_battery.md](./results_masking_ranking_battery.md)
+   - [results_masking_downloaded_comparators.md](./results_masking_downloaded_comparators.md)
    - [results_masking_battery_full.md](./results_masking_battery_full.md)
    - [results_masking_linear_origin_full.md](./results_masking_linear_origin_full.md)
    - [results_masking_coord_baselines_full.md](./results_masking_coord_baselines_full.md)
@@ -1095,13 +1109,15 @@ Expected next stage:
    reduce `picture -> wall` while lowering `picture` IoU. Do not continue this
    exact PVD boost family. If region-family work continues, change the protocol
    to proposal-native classification or learned point-mask assignment.
-8. Treat the masking ranking battery as a promising evaluation-pilot, not yet a
-   shortcut proof. Concerto decoder and linear readouts keep high mIoU under
-   heavy random/block input sparsity, while feature-zero collapses and
-   coord-only/majority baselines are far too weak to explain the Concerto
-   numbers. The next mask work should add supervised PTv3 and at least one
-   external SSL comparator under the same protocol; do not claim
-   shortcut-specific task-level evidence from the current Concerto-only ranking.
+8. Treat the masking/ranking pilot as useful but not yet a supervised-comparator
+   result. The merged released Sonata linear checkpoint is a valid external SSL
+   comparator and shows the same qualitative sparsity tolerance/feature-zero
+   collapse pattern, but no decisive ranking shift. Downloaded released PTv3
+   supervised/PPT checkpoints are not valid comparators under the current
+   repo/data protocol despite clean key loading; their clean mIoU collapses.
+   The next valid supervised comparator requires either training PTv3 on the
+   current ScanNet protocol or reproducing the old released-checkpoint protocol
+   exactly.
 9. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.

@@ -1,0 +1,10 @@
+method,variant,mIoU,delta_mIoU,picture_iou,delta_picture_iou,wall_iou,floor_iou,picture_to_wall,source
+concerto_decoder_origin,clean_voxel,0.7865,0.0000,0.4246,0.0000,0.8840,0.9666,0.4105,results_masking_classwise_concerto_decoder.csv
+concerto_decoder_origin,random_keep0p2,0.7626,-0.0239,0.3137,-0.1110,0.8765,0.9574,0.6098,results_masking_classwise_concerto_decoder.csv
+concerto_decoder_origin,classwise_keep0p2,0.7629,-0.0236,0.2916,-0.1330,0.8762,0.9575,0.6327,results_masking_classwise_concerto_decoder.csv
+concerto_linear_origin,clean_voxel,0.7689,0.0000,0.4212,0.0000,0.8738,0.9577,0.4082,results_masking_classwise_concerto_linear.csv
+concerto_linear_origin,random_keep0p2,0.7602,-0.0087,0.3498,-0.0714,0.8694,0.9538,0.5603,results_masking_classwise_concerto_linear.csv
+concerto_linear_origin,classwise_keep0p2,0.7603,-0.0086,0.3569,-0.0643,0.8694,0.9536,0.5408,results_masking_classwise_concerto_linear.csv
+sonata_linear_scannet_downloaded,clean_voxel,0.7169,0.0000,0.3711,0.0000,0.8581,0.9595,0.4523,results_masking_classwise_sonata_linear.csv
+sonata_linear_scannet_downloaded,random_keep0p2,0.6951,-0.0218,0.2285,-0.1426,0.8483,0.9455,0.6900,results_masking_classwise_sonata_linear.csv
+sonata_linear_scannet_downloaded,classwise_keep0p2,0.6951,-0.0218,0.2248,-0.1463,0.8486,0.9456,0.6911,results_masking_classwise_sonata_linear.csv

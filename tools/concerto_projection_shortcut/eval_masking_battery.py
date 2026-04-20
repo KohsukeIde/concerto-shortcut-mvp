@@ -64,8 +64,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-worker", type=int, default=8)
     parser.add_argument("--max-val-batches", type=int, default=-1)
     parser.add_argument("--random-keep-ratios", default="0.2")
+    parser.add_argument("--classwise-keep-ratios", default="")
     parser.add_argument("--structured-keep-ratios", default="")
     parser.add_argument("--feature-zero-ratios", default="")
+    parser.add_argument(
+        "--color-feat-space",
+        choices=("current_0_1", "legacy_minus1_1"),
+        default="current_0_1",
+        help=(
+            "Feature color convention after the repo transform. Current repo "
+            "NormalizeColor maps RGB to [0, 1]. Pointcept v1.5.1 released "
+            "PTv3 checkpoints used RGB / 127.5 - 1; use legacy_minus1_1 for "
+            "those downloaded checkpoints."
+        ),
+    )
     parser.add_argument("--structured-block-size", type=int, default=64)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--weak-classes", default="picture,counter,desk,sink,cabinet,shower curtain,door")
@@ -130,6 +142,14 @@ def build_variants(args: argparse.Namespace) -> list[Variant]:
     variants = [Variant("clean_voxel", "clean")]
     for keep in parse_float_list(args.random_keep_ratios):
         variants.append(Variant(f"random_keep{str(keep).replace('.', 'p')}", "random_drop", keep_ratio=keep))
+    for keep in parse_float_list(args.classwise_keep_ratios):
+        variants.append(
+            Variant(
+                f"classwise_keep{str(keep).replace('.', 'p')}",
+                "classwise_random_drop",
+                keep_ratio=keep,
+            )
+        )
     for keep in parse_float_list(args.structured_keep_ratios):
         variants.append(
             Variant(
@@ -155,6 +175,25 @@ def clone_batch(batch: dict) -> dict:
     return out
 
 
+def adapt_color_feat_space(batch: dict, color_feat_space: str) -> dict:
+    """Adjust concatenated color/normal features to the checkpoint convention.
+
+    The local repo's NormalizeColor produces color in [0, 1]. Older released
+    Pointcept v1.5.1 PTv3 checkpoints were trained with color in [-1, 1].
+    The first three feature channels are RGB because ScanNet configs collect
+    feat_keys=("color", "normal").
+    """
+    if color_feat_space == "current_0_1":
+        return batch
+    if color_feat_space != "legacy_minus1_1":
+        raise ValueError(f"unknown color feature space: {color_feat_space}")
+    out = clone_batch(batch)
+    if "feat" in out:
+        out["feat"] = out["feat"].clone()
+        out["feat"][:, :3] = out["feat"][:, :3] * 2.0 - 1.0
+    return out
+
+
 def filter_batch(batch: dict, mask: torch.Tensor) -> dict:
     n = input_point_count(batch)
     out = {}
@@ -177,6 +216,25 @@ def random_drop_mask(n: int, keep_ratio: float, device: torch.device, generator:
     return keep
 
 
+def classwise_drop_mask(labels: torch.Tensor, keep_ratio: float, generator: torch.Generator) -> torch.Tensor:
+    keep = torch.zeros(labels.shape[0], dtype=torch.bool, device=labels.device)
+    for cls in labels.unique(sorted=True):
+        cls_value = int(cls.item())
+        cls_mask = labels == cls
+        if cls_value < 0:
+            cls_keep = torch.rand(int(cls_mask.sum().item()), device=labels.device, generator=generator) < keep_ratio
+            keep[cls_mask] = cls_keep
+            continue
+        idx = torch.where(cls_mask)[0]
+        cls_keep = torch.rand(idx.shape[0], device=labels.device, generator=generator) < keep_ratio
+        if not bool(cls_keep.any()):
+            cls_keep[torch.randint(idx.shape[0], (1,), device=labels.device, generator=generator)] = True
+        keep[idx] = cls_keep
+    if not bool(keep.any()):
+        keep[torch.randint(labels.shape[0], (1,), device=labels.device, generator=generator)] = True
+    return keep
+
+
 def structured_drop_mask(grid: torch.Tensor, keep_ratio: float, block_size: int, generator: torch.Generator) -> torch.Tensor:
     keys = torch.div(grid.long(), block_size, rounding_mode="floor")
     _, inv = torch.unique(keys, dim=0, return_inverse=True)
@@ -196,6 +254,9 @@ def make_variant_batch(batch: dict, variant: Variant, seed: int) -> tuple[dict, 
         return clone_batch(batch), 1.0
     if variant.kind == "random_drop":
         mask = random_drop_mask(n, variant.keep_ratio, device, generator)
+        return filter_batch(batch, mask), float(mask.float().mean().item())
+    if variant.kind == "classwise_random_drop":
+        mask = classwise_drop_mask(batch["segment"].long(), variant.keep_ratio, generator)
         return filter_batch(batch, mask), float(mask.float().mean().item())
     if variant.kind == "structured_drop":
         mask = structured_drop_mask(batch["grid_coord"], variant.keep_ratio, variant.block_size, generator)
@@ -284,8 +345,13 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
             if args.max_val_batches >= 0 and batch_idx >= args.max_val_batches:
                 break
             batch = move_to_cuda(batch)
+            batch = adapt_color_feat_space(batch, args.color_feat_space)
             for variant in variants:
-                repeat_count = args.repeats if variant.kind in {"random_drop", "structured_drop", "feature_zero"} else 1
+                repeat_count = (
+                    args.repeats
+                    if variant.kind in {"random_drop", "classwise_random_drop", "structured_drop", "feature_zero"}
+                    else 1
+                )
                 for repeat_idx in range(repeat_count):
                     seed = args.seed + batch_idx * 1009 + repeat_idx * 9176 + abs(hash(variant.name)) % 1000
                     masked_batch, keep_frac = make_variant_batch(batch, variant, seed)
@@ -344,8 +410,10 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
     lines.append(f"- Config: `{args.config}`")
     lines.append(f"- Weight: `{args.weight}`")
     lines.append(f"- Random keep ratios: `{args.random_keep_ratios}`")
+    lines.append(f"- Class-wise keep ratios: `{args.classwise_keep_ratios}`")
     lines.append(f"- Structured keep ratios: `{args.structured_keep_ratios}`")
     lines.append(f"- Feature-zero ratios: `{args.feature_zero_ratios}`")
+    lines.append(f"- Color feature space: `{args.color_feat_space}`")
     lines.append(f"- Repeats: `{args.repeats}`")
     lines.append("")
     lines.append("## Results\n")
@@ -373,6 +441,7 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
         "method_name": args.method_name,
         "config": str(args.config),
         "weight": str(args.weight),
+        "color_feat_space": args.color_feat_space,
         "variants": [v.__dict__ for v in variants],
         "outputs": {"summary_csv": str(csv_path), "summary_md": str(md)},
     }

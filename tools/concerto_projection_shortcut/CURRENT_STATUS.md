@@ -306,12 +306,15 @@ investigation.
     coord-only baselines also rule that out as a sufficient explanation:
     ordinary coord MLP clean mIoU is only `0.0726`, class-balanced coord MLP is
     `0.0707`, and train-majority wall is `0.0151`. Clean-to-masked ranking
-    shift is weak with the available comparators: decoder stays above linear
-    for clean, random keep `0.2`, and structured keep `0.2`, while linear only
-    overtakes under extreme random keep `0.1`. Current interpretation: strong
+    shift is now measurable with the supervised comparator but still not a full
+    protocol critique. The valid PTv3 v1.5.1 compatibility row gives clean
+    `0.7697`, random keep `0.2` `0.7143`, structured keep `0.2` `0.6521`, and
+    feature-zero `0.0269`. Concerto decoder/linear retain more mIoU under
+    random/structured sparsity than this supervised PTv3 row, while feature-zero
+    still collapses all model rows. Current interpretation: strong
     sparsity-tolerance evaluation signal and anti coord-only-baseline evidence,
-    but still not shortcut-proof task-level evidence without supervised PTv3
-    and an external SSL comparator. Details are in
+    plus a supervised-comparator ranking signal, but still not shortcut-proof
+    task-level evidence by itself. Details are in
     `tools/concerto_projection_shortcut/results_masking_ranking_battery.md`.
   - Downloaded comparator check completed for released PTv3 supervised,
     PTv3-PPT, Sonata, Concerto-head, and Utonia-head weights. The PTv3
@@ -326,6 +329,25 @@ investigation.
     external SSL row but still shows weak clean-to-masked ranking shift. Details
     are in
     `tools/concerto_projection_shortcut/results_masking_downloaded_comparators.md`.
+  - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
+    were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
+    to released Pointcept v1.5.1 protocol differences. Two concrete mismatches
+    were confirmed: v1.5.1 uses `cls_mode` and color normalization
+    `color / 127.5 - 1`, while the current repo uses `enc_mode` and
+    `color / 255`. Using the official v1.5.1 model/transform code path with the
+    current `.npy` ScanNet scenes recovers a valid supervised row: clean
+    `0.7697`, random keep `0.2` `0.7143`, class-wise keep `0.2` `0.7107`,
+    structured keep `0.2` `0.6521`, feature-zero `0.0269`. Details are in
+    `tools/concerto_projection_shortcut/results_ptv3_v151_masking_compat_full.md`.
+  - Class-wise keep control completed for Concerto decoder, Concerto linear,
+    and Sonata linear. Keeping 20% within each GT class gives nearly the same
+    overall mIoU as global random keep 20%: Concerto decoder `0.7626` random vs
+    `0.7629` class-wise, Concerto linear `0.7602` vs `0.7603`, Sonata linear
+    `0.6951` vs `0.6951`. Thus the retained-subset robustness is not mainly due
+    to class-composition drift. `picture` remains fragile and still shifts
+    toward `wall`, so the core interpretation stays: overall retained-subset
+    robustness hides weak-class fragility. Details are in
+    `tools/concerto_projection_shortcut/results_masking_classwise_keep.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -410,6 +432,8 @@ investigation.
 32. Masking ranking battery:
    - [results_masking_ranking_battery.md](./results_masking_ranking_battery.md)
    - [results_masking_downloaded_comparators.md](./results_masking_downloaded_comparators.md)
+   - [results_masking_classwise_keep.md](./results_masking_classwise_keep.md)
+   - [results_ptv3_v151_masking_compat_full.md](./results_ptv3_v151_masking_compat_full.md)
    - [results_masking_battery_full.md](./results_masking_battery_full.md)
    - [results_masking_linear_origin_full.md](./results_masking_linear_origin_full.md)
    - [results_masking_coord_baselines_full.md](./results_masking_coord_baselines_full.md)
@@ -1109,15 +1133,20 @@ Expected next stage:
    reduce `picture -> wall` while lowering `picture` IoU. Do not continue this
    exact PVD boost family. If region-family work continues, change the protocol
    to proposal-native classification or learned point-mask assignment.
-8. Treat the masking/ranking pilot as useful but not yet a supervised-comparator
-   result. The merged released Sonata linear checkpoint is a valid external SSL
-   comparator and shows the same qualitative sparsity tolerance/feature-zero
-   collapse pattern, but no decisive ranking shift. Downloaded released PTv3
-   supervised/PPT checkpoints are not valid comparators under the current
-   repo/data protocol despite clean key loading; their clean mIoU collapses.
-   The next valid supervised comparator requires either training PTv3 on the
-   current ScanNet protocol or reproducing the old released-checkpoint protocol
-   exactly.
+8. Treat the masking/ranking pilot as useful and now supervised-comparator
+   backed, but still not shortcut-proof by itself. The merged released Sonata
+   linear checkpoint is a valid external SSL comparator and shows the same
+   qualitative sparsity tolerance/feature-zero collapse pattern. The class-wise
+   keep control shows that random-mask class-composition drift is not the main
+   driver of high retained-subset mIoU. The downloaded PTv3 supervised/PPT rows
+   under the current repo/data protocol remain invalid, but a v1.5.1-compatible
+   evaluation path for the released PTv3 supervised checkpoint now recovers a
+   valid supervised row (`0.7697` clean, `0.7143` random keep `0.2`, `0.6521`
+   structured keep `0.2`). This introduces a real ranking signal: Concerto
+   decoder/linear are more retained-sparsity robust than supervised PTv3 in this
+   protocol, while all methods collapse under feature-zero. Do not overclaim it
+   as coordinate-shortcut proof; use it as retained-subset redundancy /
+   weak-class fragility evidence.
 9. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.

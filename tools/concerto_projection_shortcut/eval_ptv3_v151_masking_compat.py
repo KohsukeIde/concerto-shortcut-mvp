@@ -1,0 +1,467 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import random
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+import torch
+
+
+SCANNET20_CLASS_NAMES = [
+    "wall",
+    "floor",
+    "cabinet",
+    "bed",
+    "chair",
+    "sofa",
+    "table",
+    "door",
+    "window",
+    "bookshelf",
+    "picture",
+    "counter",
+    "desk",
+    "curtain",
+    "refridgerator",
+    "shower curtain",
+    "toilet",
+    "sink",
+    "bathtub",
+    "otherfurniture",
+]
+NAME_TO_ID = {name: idx for idx, name in enumerate(SCANNET20_CLASS_NAMES)}
+
+
+@dataclass(frozen=True)
+class Variant:
+    name: str
+    kind: str
+    keep_ratio: float = 1.0
+    feature_zero_ratio: float = 0.0
+    block_size: int = 64
+
+
+def repo_root_from_here() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Evaluate released PTv3 v1.5.1 checkpoints with the official v1.5.1 "
+            "model/transform code while reading the current npy ScanNet root. "
+            "This isolates code/protocol mismatch from retraining."
+        )
+    )
+    parser.add_argument("--repo-root", type=Path, default=repo_root_from_here())
+    parser.add_argument("--official-root", type=Path, default=Path("data/tmp/Pointcept-v1.5.1"))
+    parser.add_argument("--config", default="configs/scannet/semseg-pt-v3m1-0-base.py")
+    parser.add_argument("--weight", type=Path, required=True)
+    parser.add_argument("--method-name", default="ptv3_supervised_v151_compat")
+    parser.add_argument("--data-root", type=Path, default=Path("data/scannet"))
+    parser.add_argument("--split", default="val")
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--max-val-batches", type=int, default=-1)
+    parser.add_argument("--random-keep-ratios", default="0.2")
+    parser.add_argument("--classwise-keep-ratios", default="")
+    parser.add_argument("--structured-keep-ratios", default="")
+    parser.add_argument("--feature-zero-ratios", default="")
+    parser.add_argument("--structured-block-size", type=int, default=64)
+    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--num-classes", type=int, default=20)
+    parser.add_argument("--seed", type=int, default=20260421)
+    parser.add_argument(
+        "--summary-prefix",
+        type=Path,
+        default=Path("tools/concerto_projection_shortcut/results_ptv3_v151_masking_compat"),
+    )
+    parser.add_argument("--dry-run", action="store_true")
+    return parser.parse_args()
+
+
+def parse_float_list(text: str) -> list[float]:
+    return [float(x) for x in text.split(",") if x.strip()]
+
+
+def seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def setup_official_imports(official_root: Path):
+    sys.path.insert(0, str(official_root.resolve()))
+    from pointcept.datasets.transform import Compose  # noqa: PLC0415
+    from pointcept.models.builder import build_model  # noqa: PLC0415
+    from pointcept.utils.config import Config  # noqa: PLC0415
+
+    return Config, Compose, build_model
+
+
+def load_config(config_cls, config_path: Path):
+    return config_cls.fromfile(str(config_path))
+
+
+def build_official_model(build_model_fn, cfg, weight_path: Path):
+    model = build_model_fn(cfg.model).cuda().eval()
+    checkpoint = torch.load(weight_path, map_location="cpu", weights_only=False)
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    cleaned = {}
+    for key, value in state_dict.items():
+        if key.startswith("module."):
+            key = key[7:]
+        cleaned[key] = value
+    info = model.load_state_dict(cleaned, strict=False)
+    print(
+        f"[load] weight={weight_path} missing={len(info.missing_keys)} unexpected={len(info.unexpected_keys)}",
+        flush=True,
+    )
+    if info.missing_keys:
+        print(f"[load] first missing={info.missing_keys[:8]}", flush=True)
+    if info.unexpected_keys:
+        print(f"[load] first unexpected={info.unexpected_keys[:8]}", flush=True)
+    return model
+
+
+def build_variants(args: argparse.Namespace) -> list[Variant]:
+    variants = [Variant("clean_voxel", "clean")]
+    for keep in parse_float_list(args.random_keep_ratios):
+        variants.append(Variant(f"random_keep{str(keep).replace('.', 'p')}", "random_drop", keep_ratio=keep))
+    for keep in parse_float_list(args.classwise_keep_ratios):
+        variants.append(Variant(f"classwise_keep{str(keep).replace('.', 'p')}", "classwise_random_drop", keep_ratio=keep))
+    for keep in parse_float_list(args.structured_keep_ratios):
+        variants.append(
+            Variant(
+                f"structured_b{args.structured_block_size}_keep{str(keep).replace('.', 'p')}",
+                "structured_drop",
+                keep_ratio=keep,
+                block_size=args.structured_block_size,
+            )
+        )
+    for ratio in parse_float_list(args.feature_zero_ratios):
+        variants.append(Variant(f"feature_zero{str(ratio).replace('.', 'p')}", "feature_zero", feature_zero_ratio=ratio))
+    return variants
+
+
+def scene_paths(data_root: Path, split: str) -> list[Path]:
+    split_path = data_root / split
+    return sorted(p for p in split_path.iterdir() if p.is_dir())
+
+
+def load_scene(path: Path) -> dict:
+    data = {
+        "coord": np.load(path / "coord.npy").astype(np.float32),
+        "color": np.load(path / "color.npy").astype(np.float32),
+        "normal": np.load(path / "normal.npy").astype(np.float32),
+        "segment": np.load(path / "segment20.npy").reshape([-1]).astype(np.int32),
+        "instance": np.load(path / "instance.npy").reshape([-1]).astype(np.int32)
+        if (path / "instance.npy").exists()
+        else np.ones(np.load(path / "segment20.npy").shape[0], dtype=np.int32) * -1,
+        "scene_id": path.name,
+    }
+    return data
+
+
+def move_to_cuda(batch: dict) -> dict:
+    out = {}
+    for key, value in batch.items():
+        out[key] = value.cuda(non_blocking=True) if isinstance(value, torch.Tensor) else value
+    return out
+
+
+def clone_batch(batch: dict) -> dict:
+    return {key: value.clone() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
+
+
+def input_point_count(batch: dict) -> int:
+    return int(batch["segment"].shape[0])
+
+
+def filter_batch(batch: dict, mask: torch.Tensor) -> dict:
+    n = input_point_count(batch)
+    out = {}
+    for key, value in batch.items():
+        if isinstance(value, torch.Tensor) and value.shape[:1] == (n,):
+            out[key] = value[mask]
+        elif key == "offset" and isinstance(value, torch.Tensor):
+            out[key] = torch.tensor([int(mask.sum().item())], dtype=value.dtype, device=value.device)
+        else:
+            out[key] = value.clone() if isinstance(value, torch.Tensor) else value
+    return out
+
+
+def random_drop_mask(n: int, keep_ratio: float, device: torch.device, generator: torch.Generator) -> torch.Tensor:
+    keep = torch.rand(n, device=device, generator=generator) < keep_ratio
+    if not bool(keep.any()):
+        keep[torch.randint(n, (1,), device=device, generator=generator)] = True
+    return keep
+
+
+def classwise_drop_mask(labels: torch.Tensor, keep_ratio: float, generator: torch.Generator) -> torch.Tensor:
+    keep = torch.zeros(labels.shape[0], dtype=torch.bool, device=labels.device)
+    for cls in labels.unique(sorted=True):
+        cls_value = int(cls.item())
+        cls_mask = labels == cls
+        idx = torch.where(cls_mask)[0]
+        cls_keep = torch.rand(idx.shape[0], device=labels.device, generator=generator) < keep_ratio
+        if cls_value >= 0 and not bool(cls_keep.any()):
+            cls_keep[torch.randint(idx.shape[0], (1,), device=labels.device, generator=generator)] = True
+        keep[idx] = cls_keep
+    if not bool(keep.any()):
+        keep[torch.randint(labels.shape[0], (1,), device=labels.device, generator=generator)] = True
+    return keep
+
+
+def structured_drop_mask(grid: torch.Tensor, keep_ratio: float, block_size: int, generator: torch.Generator) -> torch.Tensor:
+    keys = torch.div(grid.long(), block_size, rounding_mode="floor")
+    _, inv = torch.unique(keys, dim=0, return_inverse=True)
+    n_region = int(inv.max().item()) + 1
+    region_keep = torch.rand(n_region, device=grid.device, generator=generator) < keep_ratio
+    if not bool(region_keep.any()):
+        region_keep[torch.randint(n_region, (1,), device=grid.device, generator=generator)] = True
+    return region_keep[inv]
+
+
+def make_variant_batch(batch: dict, variant: Variant, seed: int) -> tuple[dict, float]:
+    n = input_point_count(batch)
+    device = batch["segment"].device
+    generator = torch.Generator(device=device)
+    generator.manual_seed(seed)
+    if variant.kind == "clean":
+        return clone_batch(batch), 1.0
+    if variant.kind == "random_drop":
+        mask = random_drop_mask(n, variant.keep_ratio, device, generator)
+        return filter_batch(batch, mask), float(mask.float().mean().item())
+    if variant.kind == "classwise_random_drop":
+        mask = classwise_drop_mask(batch["segment"].long(), variant.keep_ratio, generator)
+        return filter_batch(batch, mask), float(mask.float().mean().item())
+    if variant.kind == "structured_drop":
+        mask = structured_drop_mask(batch["grid_coord"], variant.keep_ratio, variant.block_size, generator)
+        return filter_batch(batch, mask), float(mask.float().mean().item())
+    if variant.kind == "feature_zero":
+        out = clone_batch(batch)
+        zero = random_drop_mask(n, variant.feature_zero_ratio, device, generator)
+        if "feat" in out:
+            out["feat"][zero] = 0
+        return out, 1.0
+    raise ValueError(f"unknown variant kind: {variant.kind}")
+
+
+def inference_batch(batch: dict) -> dict:
+    return {key: value for key, value in batch.items() if key not in {"segment"}}
+
+
+@torch.no_grad()
+def forward_logits_labels(model, batch: dict) -> tuple[torch.Tensor, torch.Tensor]:
+    labels = batch["segment"].long()
+    out = model(inference_batch(batch))
+    logits = out["seg_logits"].float()
+    if logits.shape[0] != labels.shape[0]:
+        raise RuntimeError(f"shape mismatch logits={logits.shape} labels={labels.shape}")
+    return logits, labels
+
+
+def update_confusion(confusion: torch.Tensor, pred: torch.Tensor, target: torch.Tensor, num_classes: int, ignore_index: int):
+    valid = target != ignore_index
+    pred = pred[valid].long()
+    target = target[valid].long()
+    in_range = (target >= 0) & (target < num_classes) & (pred >= 0) & (pred < num_classes)
+    pred = pred[in_range]
+    target = target[in_range]
+    flat = target * num_classes + pred
+    confusion += torch.bincount(flat, minlength=num_classes * num_classes).reshape(num_classes, num_classes)
+
+
+def summarize_confusion(conf: np.ndarray):
+    inter = np.diag(conf).astype(np.float64)
+    target_sum = conf.sum(axis=1).astype(np.float64)
+    pred_sum = conf.sum(axis=0).astype(np.float64)
+    union = target_sum + pred_sum - inter
+    iou = inter / (union + 1e-10)
+    acc = inter / (target_sum + 1e-10)
+    return {
+        "mIoU": float(iou.mean()),
+        "mAcc": float(acc.mean()),
+        "allAcc": float(inter.sum() / (target_sum.sum() + 1e-10)),
+        "iou": iou,
+        "acc": acc,
+        "conf": conf,
+    }
+
+
+def picture_to_wall_from_conf(conf: np.ndarray) -> float:
+    pic = NAME_TO_ID["picture"]
+    wall = NAME_TO_ID["wall"]
+    denom = conf[pic].sum()
+    return float(conf[pic, wall] / denom) if denom else float("nan")
+
+
+def eval_masking(args: argparse.Namespace, model, transform, scene_list: list[Path], variants: list[Variant]):
+    confs = {v.name: torch.zeros((args.num_classes, args.num_classes), dtype=torch.long) for v in variants}
+    keep_sums = {v.name: 0.0 for v in variants}
+    keep_counts = {v.name: 0 for v in variants}
+    with torch.inference_mode():
+        for scene_idx, scene_path in enumerate(scene_list):
+            if args.max_val_batches >= 0 and scene_idx >= args.max_val_batches:
+                break
+            batch = transform(load_scene(scene_path))
+            batch = move_to_cuda(batch)
+            for variant in variants:
+                repeat_count = args.repeats if variant.kind in {"random_drop", "classwise_random_drop", "structured_drop", "feature_zero"} else 1
+                for repeat_idx in range(repeat_count):
+                    seed = args.seed + scene_idx * 1009 + repeat_idx * 9176 + abs(hash(variant.name)) % 1000
+                    masked_batch, keep_frac = make_variant_batch(batch, variant, seed)
+                    logits, labels = forward_logits_labels(model, masked_batch)
+                    update_confusion(
+                        confs[variant.name],
+                        logits.argmax(dim=1).cpu(),
+                        labels.cpu(),
+                        args.num_classes,
+                        -1,
+                    )
+                    keep_sums[variant.name] += keep_frac
+                    keep_counts[variant.name] += 1
+            if (scene_idx + 1) % 25 == 0:
+                clean = summarize_confusion(confs["clean_voxel"].numpy())
+                print(f"[val] scene={scene_idx+1} clean_voxel_mIoU={clean['mIoU']:.4f}", flush=True)
+    return {
+        "conf": {k: v.numpy() for k, v in confs.items()},
+        "keep_sums": keep_sums,
+        "keep_counts": keep_counts,
+    }
+
+
+def summary_row(method: str, variant: Variant, repeat_count: int, mean_keep: float, conf: np.ndarray, base: dict) -> dict:
+    s = summarize_confusion(conf)
+    pic = NAME_TO_ID["picture"]
+    wall = NAME_TO_ID["wall"]
+    floor = NAME_TO_ID["floor"]
+    return {
+        "method": method,
+        "variant": variant.name,
+        "kind": variant.kind,
+        "keep_ratio": variant.keep_ratio,
+        "feature_zero_ratio": variant.feature_zero_ratio,
+        "block_size": variant.block_size,
+        "repeats": repeat_count,
+        "observed_keep_frac": mean_keep,
+        "mIoU": s["mIoU"],
+        "delta_mIoU": s["mIoU"] - base["mIoU"],
+        "mAcc": s["mAcc"],
+        "allAcc": s["allAcc"],
+        "picture_iou": float(s["iou"][pic]),
+        "delta_picture_iou": float(s["iou"][pic] - base["iou"][pic]),
+        "wall_iou": float(s["iou"][wall]),
+        "floor_iou": float(s["iou"][floor]),
+        "picture_to_wall": picture_to_wall_from_conf(conf),
+        "delta_picture_to_wall": picture_to_wall_from_conf(conf) - picture_to_wall_from_conf(base["conf"]),
+    }
+
+
+def write_results(args: argparse.Namespace, results: dict, variants: list[Variant]) -> None:
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    base = summarize_confusion(results["conf"]["clean_voxel"])
+    rows = []
+    for variant in variants:
+        rows.append(
+            summary_row(
+                args.method_name,
+                variant,
+                results["keep_counts"][variant.name],
+                results["keep_sums"][variant.name] / max(results["keep_counts"][variant.name], 1),
+                results["conf"][variant.name],
+                base,
+            )
+        )
+    csv_path = args.output_dir / "masking_battery_summary.csv"
+    with csv_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    prefix = args.summary_prefix
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    with prefix.with_suffix(".csv").open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    lines = [
+        "# PTv3 v1.5.1 Compatibility Masking Eval",
+        "",
+        "Uses the official Pointcept v1.5.1 model and transform implementation, while reading current `.npy` ScanNet scenes.",
+        "",
+        "## Setup",
+        "",
+        f"- Method: `{args.method_name}`",
+        f"- Official root: `{args.official_root}`",
+        f"- Config: `{args.config}`",
+        f"- Weight: `{args.weight}`",
+        f"- Data root: `{args.data_root}`",
+        "",
+        "## Results",
+        "",
+        "| variant | keep | mIoU | ΔmIoU | allAcc | picture | Δpicture | wall | floor | p->wall |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| `{row['variant']}` | {float(row['observed_keep_frac']):.4f} | "
+            f"{float(row['mIoU']):.4f} | {float(row['delta_mIoU']):+.4f} | "
+            f"{float(row['allAcc']):.4f} | {float(row['picture_iou']):.4f} | "
+            f"{float(row['delta_picture_iou']):+.4f} | {float(row['wall_iou']):.4f} | "
+            f"{float(row['floor_iou']):.4f} | {float(row['picture_to_wall']):.4f} |"
+        )
+    lines += ["", "## Files", "", f"- Summary CSV: `{csv_path.resolve()}`"]
+    md_path = prefix.with_suffix(".md")
+    md_path.write_text("\n".join(lines) + "\n")
+    (args.output_dir / "masking_battery.md").write_text("\n".join(lines) + "\n")
+    (args.output_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "method_name": args.method_name,
+                "official_root": str(args.official_root),
+                "config": str(args.config),
+                "weight": str(args.weight),
+                "variants": [v.__dict__ for v in variants],
+                "outputs": {"summary_csv": str(csv_path), "summary_md": str(md_path)},
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    print(f"[done] wrote {md_path}", flush=True)
+
+
+def main() -> None:
+    args = parse_args()
+    seed_everything(args.seed)
+    args.repo_root = args.repo_root.resolve()
+    args.official_root = (args.repo_root / args.official_root).resolve() if not args.official_root.is_absolute() else args.official_root
+    args.data_root = (args.repo_root / args.data_root).resolve() if not args.data_root.is_absolute() else args.data_root
+    args.weight = (args.repo_root / args.weight).resolve() if not args.weight.is_absolute() else args.weight
+    args.output_dir = (args.repo_root / args.output_dir).resolve() if not args.output_dir.is_absolute() else args.output_dir
+    args.summary_prefix = (args.repo_root / args.summary_prefix).resolve() if not args.summary_prefix.is_absolute() else args.summary_prefix
+    if args.dry_run:
+        print(f"[dry-run] official_root={args.official_root}")
+        print(f"[dry-run] data_root={args.data_root}")
+        print(f"[dry-run] variants={[v.name for v in build_variants(args)]}")
+        return
+    config_cls, compose_cls, build_model_fn = setup_official_imports(args.official_root)
+    cfg = load_config(config_cls, args.official_root / args.config)
+    transform = compose_cls(cfg.data.val.transform)
+    model = build_official_model(build_model_fn, cfg, args.weight)
+    scenes = scene_paths(args.data_root, args.split)
+    results = eval_masking(args, model, transform, scenes, build_variants(args))
+    write_results(args, results, build_variants(args))
+
+
+if __name__ == "__main__":
+    main()

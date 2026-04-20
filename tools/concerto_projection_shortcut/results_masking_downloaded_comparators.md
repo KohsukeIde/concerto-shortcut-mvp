@@ -56,6 +56,11 @@ comparator, either train supervised PTv3 on the current `data/scannet` protocol
 with the current repo, or reproduce the old released-checkpoint protocol
 exactly.
 
+Update: the released-checkpoint protocol path was reproduced with the official
+Pointcept v1.5.1 model / transform code while reading the current `.npy`
+ScanNet scenes. That recovers a valid supervised PTv3 row; see
+`tools/concerto_projection_shortcut/results_ptv3_v151_masking_compat_full.md`.
+
 ## Files
 
 - Summary CSV:

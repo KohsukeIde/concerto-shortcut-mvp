@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch_scatter
 import torch_cluster
 from peft import LoraConfig, get_peft_model
@@ -198,6 +199,181 @@ class DefaultLORASegmentorV2(nn.Module):
         if self.training:
             loss = self.criteria(seg_logits, input_dict["segment"])
             return_dict["loss"] = loss
+        elif "segment" in input_dict.keys():
+            loss = self.criteria(seg_logits, input_dict["segment"])
+            return_dict["loss"] = loss
+            return_dict["seg_logits"] = seg_logits
+        else:
+            return_dict["seg_logits"] = seg_logits
+        return return_dict
+
+
+@MODELS.register_module()
+class DefaultClassSafeLORASegmentorV2(DefaultLORASegmentorV2):
+    def __init__(
+        self,
+        num_classes,
+        backbone_out_channels,
+        backbone=None,
+        criteria=None,
+        freeze_backbone=False,
+        use_lora=True,
+        lora_r=8,
+        lora_alpha=16,
+        lora_dropout=0.1,
+        backbone_path=None,
+        keywords=None,
+        replacements=None,
+        anchor_path=None,
+        anchor_keywords="module",
+        anchor_replacements="module",
+        weak_classes=(10, 11, 17, 15, 7),
+        weak_loss_weight=0.2,
+        safe_kl_weight=0.05,
+        dist_kl_weight=0.02,
+        kl_temperature=2.0,
+    ):
+        super().__init__(
+            num_classes=num_classes,
+            backbone_out_channels=backbone_out_channels,
+            backbone=backbone,
+            criteria=criteria,
+            freeze_backbone=freeze_backbone,
+            use_lora=use_lora,
+            lora_r=lora_r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            backbone_path=backbone_path,
+            keywords=keywords,
+            replacements=replacements,
+        )
+        self.weak_loss_weight = float(weak_loss_weight)
+        self.safe_kl_weight = float(safe_kl_weight)
+        self.dist_kl_weight = float(dist_kl_weight)
+        self.kl_temperature = float(kl_temperature)
+        self.register_buffer("weak_classes", torch.tensor(tuple(weak_classes), dtype=torch.long), persistent=False)
+
+        self.anchor_backbone = None
+        self.anchor_seg_head = None
+        if anchor_path is not None:
+            self.anchor_backbone = build_model(backbone)
+            self.anchor_seg_head = (
+                nn.Linear(backbone_out_channels, num_classes)
+                if num_classes > 0
+                else nn.Identity()
+            )
+            self.anchor_load(
+                torch.load(anchor_path, map_location="cpu", weights_only=False),
+                keywords=anchor_keywords,
+                replacements=anchor_replacements,
+            )
+            self.anchor_backbone.eval()
+            self.anchor_seg_head.eval()
+            for p in self.anchor_backbone.parameters():
+                p.requires_grad = False
+            for p in self.anchor_seg_head.parameters():
+                p.requires_grad = False
+
+    def anchor_load(self, checkpoint, keywords="", replacements=""):
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        backbone_weight = OrderedDict()
+        head_weight = OrderedDict()
+        for key, value in state_dict.items():
+            if not key.startswith("module."):
+                key = "module." + key
+            if keywords and keywords in key:
+                key = key.replace(keywords, replacements, 1)
+            key = key[7:]
+            if key.startswith("backbone."):
+                backbone_weight[key[9:]] = value
+            elif key.startswith("seg_head."):
+                head_weight[key[9:]] = value
+        load_backbone_info = self.anchor_backbone.load_state_dict(backbone_weight, strict=False)
+        load_head_info = self.anchor_seg_head.load_state_dict(head_weight, strict=False)
+        print(f"Anchor backbone missing keys: {load_backbone_info[0]}")
+        print(f"Anchor backbone unexpected keys: {load_backbone_info[1]}")
+        print(f"Anchor head missing keys: {load_head_info[0]}")
+        print(f"Anchor head unexpected keys: {load_head_info[1]}")
+
+    def encode_logits(self, input_dict, backbone, seg_head, no_grad=False):
+        def _forward():
+            point = Point(input_dict)
+            point = backbone(point)
+            if isinstance(point, Point):
+                while "pooling_parent" in point.keys():
+                    assert "pooling_inverse" in point.keys()
+                    parent = point.pop("pooling_parent")
+                    inverse = point.pop("pooling_inverse")
+                    parent.feat = torch.cat([parent.feat, point.feat[inverse]], dim=-1)
+                    point = parent
+                feat = point.feat
+            else:
+                feat = point
+            return seg_head(feat), point
+
+        if no_grad:
+            with torch.no_grad():
+                return _forward()
+        return _forward()
+
+    def weak_mask(self, target):
+        valid = target != -1
+        mask = torch.zeros_like(valid, dtype=torch.bool)
+        for cls in self.weak_classes.to(target.device):
+            mask |= target == cls
+        return valid & mask, valid & (~mask)
+
+    def classsafe_loss(self, logits, anchor_logits, target):
+        loss = logits.new_tensor(0.0)
+        logs = {}
+        weak, nonweak = self.weak_mask(target)
+        if self.weak_loss_weight > 0 and weak.any():
+            weak_ce = F.cross_entropy(logits[weak], target[weak], ignore_index=-1)
+            loss = loss + self.weak_loss_weight * weak_ce
+            logs["loss_weak_ce"] = weak_ce.detach()
+        if anchor_logits is not None and self.safe_kl_weight > 0 and nonweak.any():
+            temp = self.kl_temperature
+            logp = F.log_softmax(logits[nonweak] / temp, dim=1)
+            p0 = F.softmax(anchor_logits[nonweak] / temp, dim=1)
+            safe_kl = F.kl_div(logp, p0, reduction="batchmean") * (temp * temp)
+            loss = loss + self.safe_kl_weight * safe_kl
+            logs["loss_safe_kl"] = safe_kl.detach()
+        if anchor_logits is not None and self.dist_kl_weight > 0:
+            valid = target != -1
+            if valid.any():
+                p = F.softmax(logits[valid], dim=1).mean(dim=0).clamp_min(1e-8)
+                p0 = F.softmax(anchor_logits[valid], dim=1).mean(dim=0).clamp_min(1e-8)
+                dist_kl = F.kl_div(p.log(), p0, reduction="sum")
+                loss = loss + self.dist_kl_weight * dist_kl
+                logs["loss_dist_kl"] = dist_kl.detach()
+        return loss, logs
+
+    def forward(self, input_dict, return_point=False):
+        seg_logits, point = self.encode_logits(
+            input_dict,
+            self.backbone,
+            self.seg_head,
+            no_grad=self.freeze_backbone and not self.use_lora,
+        )
+        return_dict = dict()
+        if return_point:
+            return_dict["point"] = point
+
+        anchor_logits = None
+        if self.training and self.anchor_backbone is not None:
+            anchor_logits, _ = self.encode_logits(
+                input_dict,
+                self.anchor_backbone,
+                self.anchor_seg_head,
+                no_grad=True,
+            )
+
+        if self.training:
+            base_loss = self.criteria(seg_logits, input_dict["segment"])
+            extra_loss, logs = self.classsafe_loss(seg_logits, anchor_logits, input_dict["segment"])
+            return_dict["loss"] = base_loss + extra_loss
+            return_dict["loss_base"] = base_loss.detach()
+            return_dict.update(logs)
         elif "segment" in input_dict.keys():
             loss = self.criteria(seg_logits, input_dict["segment"])
             return_dict["loss"] = loss

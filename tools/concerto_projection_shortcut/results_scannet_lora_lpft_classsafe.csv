@@ -1,0 +1,5 @@
+method,train_job,eval_job,eval_type,mIoU,mAcc,allAcc,picture_iou,picture_acc,picture_to_wall,counter_iou,sink_iou,shower_curtain_iou,door_iou,notes
+origin_same_head_no_lora,133386,133387,batch_size_1,0.7617,0.8646,0.9124,0.4078,,0.4151,0.6554,0.6821,0.7402,0.7330,Matched linear-head baseline from results_scannet_lora_origin_perclass.md
+origin_plain_lora_r8,133383,133384,batch_size_1,0.7749,0.8766,0.9174,0.4303,,0.3867,0.6522,0.6850,0.7624,0.7428,Matched linear-head plain LoRA from results_scannet_lora_origin_perclass.md
+origin_lpft_plain_r8,133397,133399,batch_size_1,0.77714095,0.87184737,0.91884135,0.42753875,0.55853202,0.42220476,0.66438711,0.69100155,0.75260489,0.75104682,LP-FT warm-start from same-head no-LoRA checkpoint; plain CE only
+origin_lpft_classsafe_r8,133395,133400,batch_size_1,0.77064176,0.87792066,0.91480448,0.40767285,0.62300788,0.35541983,0.63559375,0.67610201,0.76702703,0.71964748,LP-FT warm-start plus weak CE/non-weak KL/distribution KL

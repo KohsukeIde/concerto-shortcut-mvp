@@ -190,6 +190,27 @@ investigation.
     `exp/concerto/pretrain-concerto-v1m1-0-large-base/model/model_last.pth`
     is not currently present locally. Details are in
     `tools/concerto_projection_shortcut/results_official_lora_recipe_check.md`.
+  - Retrieval/prototype readout follow-up completed on the same origin decoder
+    checkpoint. Prototype and multi-prototype variants slightly reduce
+    `picture -> wall` but do not recover oracle headroom: best mIoU is only
+    `+0.0002` and best safe `picture` gain is only `+0.0008`. A small kNN
+    retrieval pass is also no-go: best mIoU is `+0.0002`, best `picture` gain
+    is `+0.0003`, and `picture -> wall` drops by only `0.0052`. Treat
+    retrieval/prototype as no-go under this protocol. Details are in
+    `tools/concerto_projection_shortcut/results_prototype_readout.md` and
+    `tools/concerto_projection_shortcut/results_knn_readout_small.md`.
+  - LP-FT / class-safe LoRA follow-up completed in the origin linear-head
+    family. LP-FT plain warm-starts from the same-head linear probe and is a
+    tiny mIoU positive over the prior plain LoRA control (`0.7749 -> 0.7771`),
+    but it does not improve the central `picture -> wall` failure
+    (`0.3867 -> 0.4222`) and `picture` IoU is slightly lower
+    (`0.4303 -> 0.4275`). Class-safe LoRA reduces `picture -> wall` to
+    `0.3554`, but hurts mIoU (`0.7706`) and `picture` IoU (`0.4077`), so it is
+    no-go with the current weights. Current decision: retrieval/prototype
+    no-go, class-safe no-go, LP-FT warm start only a weak positive control; do
+    not launch more broad method sweeps without a sharper hypothesis. Details
+    are in
+    `tools/concerto_projection_shortcut/results_scannet_lora_lpft_classsafe.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -254,11 +275,16 @@ investigation.
    - [results_scannet_dec_lora_origin_perclass.md](./results_scannet_dec_lora_origin_perclass.md)
 24. Official Concerto LoRA recipe check:
    - [results_official_lora_recipe_check.md](./results_official_lora_recipe_check.md)
-25. Coordinate projection residual handoff:
+25. Retrieval/prototype readout:
+   - [results_prototype_readout.md](./results_prototype_readout.md)
+   - [results_knn_readout_small.md](./results_knn_readout_small.md)
+26. LP-FT / class-safe LoRA follow-up:
+   - [results_scannet_lora_lpft_classsafe.md](./results_scannet_lora_lpft_classsafe.md)
+27. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-26. Short narrative summary:
+28. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-27. Reproduction / runner overview:
+29. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

@@ -211,6 +211,18 @@ investigation.
     not launch more broad method sweeps without a sharper hypothesis. Details
     are in
     `tools/concerto_projection_shortcut/results_scannet_lora_lpft_classsafe.md`.
+  - Decoupled classifier readout pilot completed on the same origin decoder
+    checkpoint. This tests the long-tail / classifier-retraining family that
+    had not been covered by prior post-hoc, retrieval, LoRA, CoDA, or CIDA
+    runs. The corrected run uses a class-balanced feature bank for cRT but
+    raw train priors from 256 ScanNet train batches for logit adjustment and
+    Balanced Softmax. Result: no-go. `tau` normalization moves mIoU by only
+    `+0.0002` and worsens `picture`; direct cRT / Balanced Softmax severely
+    overcorrect (`mIoU ~0.666`, `picture ~0.104`); small trust-region mixing
+    reduces `picture -> wall` by about `0.026` but does not improve `picture`
+    IoU or weak-class mean. Treat offline decoupled classifier learning as
+    another negative under this protocol. Details are in
+    `tools/concerto_projection_shortcut/results_decoupled_classifier_readout.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -280,11 +292,13 @@ investigation.
    - [results_knn_readout_small.md](./results_knn_readout_small.md)
 26. LP-FT / class-safe LoRA follow-up:
    - [results_scannet_lora_lpft_classsafe.md](./results_scannet_lora_lpft_classsafe.md)
-27. Coordinate projection residual handoff:
+27. Decoupled classifier readout:
+   - [results_decoupled_classifier_readout.md](./results_decoupled_classifier_readout.md)
+28. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-28. Short narrative summary:
+29. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-29. Reproduction / runner overview:
+30. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

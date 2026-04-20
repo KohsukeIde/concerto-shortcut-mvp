@@ -295,6 +295,19 @@ investigation.
     The next region-family method would need point-mask assignment or a
     proposal-native classifier, not scalar logit boosting. Details are in
     `tools/concerto_projection_shortcut/results_proposal_verify_decoder.md`.
+  - Masking battery pilot completed for the same origin decoder checkpoint in
+    voxel-level evaluation space. Random sparsity is surprisingly mild for
+    overall mIoU: clean voxel mIoU is `0.7874`, random keep `0.5` is `0.7839`,
+    keep `0.3` is `0.7773`, keep `0.2` is `0.7636`, and keep `0.1` is
+    `0.7121`. Structured block keep `0.2` is also high at `0.7569`, but the
+    class behavior is not monotonic (`picture` rises to `0.4623`, likely due to
+    changed voxel subset composition). Crucially, feature-zero with all points
+    kept collapses to mIoU `0.0680`, weak mean `0.0015`, `picture=0`, while
+    wall/floor still carry layout priors. Interpretation: high random/structured
+    sparsity tolerance is real and should be expanded into a ranking-shift
+    evaluation, but this pilot does not support a pure coordinate-only shortcut
+    story; feature/color/normal input is still essential. Details are in
+    `tools/concerto_projection_shortcut/results_masking_battery_full.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -376,11 +389,14 @@ investigation.
 31. Proposal-first / mask-lite region gates:
    - [results_proposal_recall_analysis.md](./results_proposal_recall_analysis.md)
    - [results_proposal_verify_decoder.md](./results_proposal_verify_decoder.md)
-32. Coordinate projection residual handoff:
+32. Masking battery pilot:
+   - [results_masking_battery_full.md](./results_masking_battery_full.md)
+   - [results_masking_battery_smoke.md](./results_masking_battery_smoke.md)
+33. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-33. Short narrative summary:
+34. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-34. Reproduction / runner overview:
+35. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -1070,12 +1086,18 @@ Expected next stage:
    reduce `picture -> wall` while lowering `picture` IoU. Do not continue this
    exact PVD boost family. If region-family work continues, change the protocol
    to proposal-native classification or learned point-mask assignment.
-8. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
+8. Treat the first masking battery as a promising evaluation-pilot, not yet a
+   shortcut proof. Concerto decoder keeps high mIoU under heavy random/block
+   input sparsity, but feature-zero collapses, so the next mask work must add
+   same-protocol baselines/ranking: coord-only, majority/layout, supervised PTv3,
+   and at least one SSL comparator. Do not claim shortcut-specific task-level
+   evidence from Concerto-only masking.
+9. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.
-9. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+10. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-10. Keep the current completed artifacts:
+11. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`

@@ -271,6 +271,30 @@ investigation.
     in `tools/concerto_projection_shortcut/results_purity_aware_region_readout.md`
     and
     `tools/concerto_projection_shortcut/results_purity_aware_region_readout_lowgate.md`.
+  - Proposal recall analysis completed as a minimal gate for proposal-first /
+    mask-lite methods. Fine voxel proposals preserve high-purity candidate
+    recall: for `picture`, `voxel s4` at purity `>=0.9` covers `0.8055` of
+    `picture` points while touching only `0.0142` of all val points; `voxel s8`
+    still covers `0.6677`. However, connected same-base-prediction components
+    collapse for `picture` (`pred_cc s4` recall `0.3188`, `s8` `0.2077`) and
+    show high wall contamination (`0.3965/0.4265`). Interpretation: proposal
+    candidates exist at fine granularity, but base-pred connected components
+    already merge hard `picture` into `wall`; any PVD-style method needs a
+    learned object-quality verifier/mask, not base-pred region merging. Details
+    are in
+    `tools/concerto_projection_shortcut/results_proposal_recall_analysis.md`.
+  - Proposal-then-Verify Decoder (PVD) pilot completed on the same origin
+    decoder checkpoint. A lightweight MLP verifier trained on `s4` proposals
+    gets reasonable proposal-level accuracy on val (`picture` proposal acc
+    `0.6587`, most other hard/counterpart classes `0.87-0.94`), but logit
+    fusion is no-go. Best mIoU remains the base decoder (`0.7789`); the safest
+    PVD variant (`thr=0.9,beta=0.25`) reduces `picture -> wall`
+    `0.4401 -> 0.4024` but lowers `picture` IoU `0.4061 -> 0.3952` and weak
+    mean. Interpretation: a verifier can find some hard-class proposals, but
+    class-level proposal boosts still damage the multiclass decision geometry.
+    The next region-family method would need point-mask assignment or a
+    proposal-native classifier, not scalar logit boosting. Details are in
+    `tools/concerto_projection_shortcut/results_proposal_verify_decoder.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -349,11 +373,14 @@ investigation.
 30. Purity-aware hybrid region decoder gate:
    - [results_purity_aware_region_readout.md](./results_purity_aware_region_readout.md)
    - [results_purity_aware_region_readout_lowgate.md](./results_purity_aware_region_readout_lowgate.md)
-31. Coordinate projection residual handoff:
+31. Proposal-first / mask-lite region gates:
+   - [results_proposal_recall_analysis.md](./results_proposal_recall_analysis.md)
+   - [results_proposal_verify_decoder.md](./results_proposal_verify_decoder.md)
+32. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-32. Short narrative summary:
+33. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-33. Reproduction / runner overview:
+34. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -1037,12 +1064,18 @@ Expected next stage:
    identify confidently wall-dominated regions. Do not continue thresholded
    point/region logit mixing without a class-specific learned mask/proposal
    mechanism.
-7. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
+7. Treat proposal-first as diagnostic-positive but current PVD fusion as no-go.
+   Fine `s4` proposals have enough high-purity recall for `picture`, but
+   base-pred connected components collapse and scalar proposal logit boosts
+   reduce `picture -> wall` while lowering `picture` IoU. Do not continue this
+   exact PVD boost family. If region-family work continues, change the protocol
+   to proposal-native classification or learned point-mask assignment.
+8. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.
-8. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+9. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-9. Keep the current completed artifacts:
+10. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`

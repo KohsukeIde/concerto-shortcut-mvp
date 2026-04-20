@@ -254,6 +254,23 @@ investigation.
     future region-level method would need object-mask-quality regions or
     learned region proposals rather than coarse smoothing. Details are in
     `tools/concerto_projection_shortcut/results_region_superpoint_analysis.md`.
+  - Purity-aware hybrid region decoder (PHRD) zero-train gate completed on the
+    same origin decoder checkpoint. Label-free proxies are useful for general
+    region purity (`AUC purity>=0.9` around `0.87-0.89`), but they are not a
+    safe positive gate for `picture`: at fine scale (`s4`), confidence/entropy
+    proxies strongly identify hard `picture->wall` regions (`AUC hard
+    picture-wall` up to `0.93`) and have negative correlation with
+    picture-specific purity. The high-proxy mixing sweep is no-go (best
+    mIoU only `+0.0002`, picture does not improve). The inverse low-proxy
+    follow-up is also no-go (best mIoU `+0.0008`, best safe picture
+    `+0.0019`). Conclusion: purity-aware coarse-region logit mixing is not a
+    positive method. The useful finding is mechanistic: generic confidence
+    proxies are anti-aligned with the hard wall-adjacent `picture` subgroup, so
+    a serious region method needs learned/object-quality proposals or
+    class-specific masks rather than label-free region averaging. Details are
+    in `tools/concerto_projection_shortcut/results_purity_aware_region_readout.md`
+    and
+    `tools/concerto_projection_shortcut/results_purity_aware_region_readout_lowgate.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -329,11 +346,14 @@ investigation.
    - [results_latent_subgroup_decoder.md](./results_latent_subgroup_decoder.md)
 29. Region / superpoint diagnostic:
    - [results_region_superpoint_analysis.md](./results_region_superpoint_analysis.md)
-30. Coordinate projection residual handoff:
+30. Purity-aware hybrid region decoder gate:
+   - [results_purity_aware_region_readout.md](./results_purity_aware_region_readout.md)
+   - [results_purity_aware_region_readout_lowgate.md](./results_purity_aware_region_readout_lowgate.md)
+31. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-31. Short narrative summary:
+32. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-32. Reproduction / runner overview:
+33. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -1012,12 +1032,17 @@ Expected next stage:
    smoothing hurts and coarse regions merge `picture` into `wall`. A serious
    region method should use object-mask-quality regions / learned proposals,
    not coarse voxel averaging.
-6. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
+6. Treat PHRD zero-train as no-go. Label-free purity proxies are too generic:
+   they detect confident/pure regions overall, but for `picture` they often
+   identify confidently wall-dominated regions. Do not continue thresholded
+   point/region logit mixing without a class-specific learned mask/proposal
+   mechanism.
+7. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.
-7. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+8. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-8. Keep the current completed artifacts:
+9. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`
@@ -1030,3 +1055,5 @@ Expected next stage:
    - `data/runs/scannet_lora_origin/classwise/`
    - `data/runs/scannet_decoder_probe_origin/latent_subgroup_decoder/`
    - `data/runs/scannet_decoder_probe_origin/region_superpoint_analysis/`
+   - `data/runs/scannet_decoder_probe_origin/purity_aware_region_readout/`
+   - `data/runs/scannet_decoder_probe_origin/purity_aware_region_readout_lowgate/`

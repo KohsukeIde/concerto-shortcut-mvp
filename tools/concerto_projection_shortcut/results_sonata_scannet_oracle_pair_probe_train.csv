@@ -1,0 +1,7 @@
+pair,positive_class,negative_class,train_bal_acc
+picture_vs_wall,picture,wall,1.0
+counter_vs_cabinet,counter,cabinet,0.9993083477020264
+desk_vs_table,desk,table,1.0
+sink_vs_cabinet,sink,cabinet,0.9992223381996155
+door_vs_wall,door,wall,0.9988333284854889
+shower_curtain_vs_wall,shower curtain,wall,1.0

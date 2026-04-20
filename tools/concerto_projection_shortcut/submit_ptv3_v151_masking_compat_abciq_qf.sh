@@ -23,6 +23,8 @@ CONFIG="${CONFIG:-configs/scannet/semseg-pt-v3m1-0-base.py}"
 WEIGHT="${WEIGHT:-data/weights/ptv3/scannet-semseg-pt-v3m1-0-base/model/model_best.pth}"
 METHOD_NAME="${METHOD_NAME:-ptv3_supervised_v151_compat}"
 DATA_ROOT="${DATA_ROOT:-data/scannet}"
+SPLIT="${SPLIT:-val}"
+SEGMENT_KEY="${SEGMENT_KEY:-segment20}"
 OUTPUT_DIR="${OUTPUT_DIR:-data/runs/masking_ranking/ptv3_v151_compat}"
 MAX_VAL_BATCHES="${MAX_VAL_BATCHES:--1}"
 MASK_PRESET="${MASK_PRESET:-}"
@@ -39,6 +41,10 @@ else
 fi
 STRUCTURED_BLOCK_SIZE="${STRUCTURED_BLOCK_SIZE:-64}"
 REPEATS="${REPEATS:-1}"
+NUM_CLASSES="${NUM_CLASSES:-20}"
+CLASS_NAMES="${CLASS_NAMES:-}"
+FOCUS_CLASS="${FOCUS_CLASS:-picture}"
+CONFUSION_CLASS="${CONFUSION_CLASS:-wall}"
 SUMMARY_PREFIX="${SUMMARY_PREFIX:-tools/concerto_projection_shortcut/results_ptv3_v151_masking_compat}"
 
 echo "=== PTv3 v1.5.1 masking compatibility eval ==="
@@ -49,6 +55,9 @@ echo "official_root=${OFFICIAL_ROOT}"
 echo "config=${CONFIG}"
 echo "weight=${WEIGHT}"
 echo "method_name=${METHOD_NAME}"
+echo "data_root=${DATA_ROOT}"
+echo "split=${SPLIT}"
+echo "segment_key=${SEGMENT_KEY}"
 echo "output_dir=${OUTPUT_DIR}"
 echo "max_val_batches=${MAX_VAL_BATCHES}"
 nvidia-smi -L || true
@@ -59,6 +68,8 @@ python tools/concerto_projection_shortcut/eval_ptv3_v151_masking_compat.py \
   --weight "${WEIGHT}" \
   --method-name "${METHOD_NAME}" \
   --data-root "${DATA_ROOT}" \
+  --split "${SPLIT}" \
+  --segment-key "${SEGMENT_KEY}" \
   --output-dir "${OUTPUT_DIR}" \
   --max-val-batches "${MAX_VAL_BATCHES}" \
   --random-keep-ratios "${RANDOM_KEEP_RATIOS}" \
@@ -67,6 +78,10 @@ python tools/concerto_projection_shortcut/eval_ptv3_v151_masking_compat.py \
   --feature-zero-ratios "${FEATURE_ZERO_RATIOS}" \
   --structured-block-size "${STRUCTURED_BLOCK_SIZE}" \
   --repeats "${REPEATS}" \
+  --num-classes "${NUM_CLASSES}" \
+  --class-names "${CLASS_NAMES}" \
+  --focus-class "${FOCUS_CLASS}" \
+  --confusion-class "${CONFUSION_CLASS}" \
   --summary-prefix "${SUMMARY_PREFIX}"
 
 echo "[done] ptv3 v1.5.1 masking compatibility eval"

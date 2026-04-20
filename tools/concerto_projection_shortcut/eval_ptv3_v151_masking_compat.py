@@ -35,7 +35,6 @@ SCANNET20_CLASS_NAMES = [
     "bathtub",
     "otherfurniture",
 ]
-NAME_TO_ID = {name: idx for idx, name in enumerate(SCANNET20_CLASS_NAMES)}
 
 
 @dataclass(frozen=True)
@@ -66,6 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--method-name", default="ptv3_supervised_v151_compat")
     parser.add_argument("--data-root", type=Path, default=Path("data/scannet"))
     parser.add_argument("--split", default="val")
+    parser.add_argument("--segment-key", default="segment20")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--max-val-batches", type=int, default=-1)
     parser.add_argument("--random-keep-ratios", default="0.2")
@@ -75,6 +75,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--structured-block-size", type=int, default=64)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--num-classes", type=int, default=20)
+    parser.add_argument(
+        "--class-names",
+        default="",
+        help="Optional comma-separated class names. Defaults to cfg.data.names, then ScanNet20 names.",
+    )
+    parser.add_argument("--focus-class", default="picture")
+    parser.add_argument("--confusion-class", default="wall")
     parser.add_argument("--seed", type=int, default=20260421)
     parser.add_argument(
         "--summary-prefix",
@@ -156,15 +163,31 @@ def scene_paths(data_root: Path, split: str) -> list[Path]:
     return sorted(p for p in split_path.iterdir() if p.is_dir())
 
 
-def load_scene(path: Path) -> dict:
+def class_names_from_cfg(cfg, args: argparse.Namespace) -> list[str]:
+    if args.class_names.strip():
+        names = [name.strip() for name in args.class_names.split(",") if name.strip()]
+    elif hasattr(cfg, "data") and hasattr(cfg.data, "names"):
+        names = list(cfg.data.names)
+    else:
+        names = SCANNET20_CLASS_NAMES
+    if len(names) != args.num_classes:
+        raise ValueError(f"class name count {len(names)} does not match num_classes={args.num_classes}")
+    return names
+
+
+def load_scene(path: Path, segment_key: str) -> dict:
+    segment_path = path / f"{segment_key}.npy"
+    if not segment_path.exists():
+        raise FileNotFoundError(f"missing segment file: {segment_path}")
+    segment = np.load(segment_path).reshape([-1]).astype(np.int32)
     data = {
         "coord": np.load(path / "coord.npy").astype(np.float32),
         "color": np.load(path / "color.npy").astype(np.float32),
         "normal": np.load(path / "normal.npy").astype(np.float32),
-        "segment": np.load(path / "segment20.npy").reshape([-1]).astype(np.int32),
+        "segment": segment,
         "instance": np.load(path / "instance.npy").reshape([-1]).astype(np.int32)
         if (path / "instance.npy").exists()
-        else np.ones(np.load(path / "segment20.npy").shape[0], dtype=np.int32) * -1,
+        else np.ones(segment.shape[0], dtype=np.int32) * -1,
         "scene_id": path.name,
     }
     return data
@@ -297,11 +320,11 @@ def summarize_confusion(conf: np.ndarray):
     }
 
 
-def picture_to_wall_from_conf(conf: np.ndarray) -> float:
-    pic = NAME_TO_ID["picture"]
-    wall = NAME_TO_ID["wall"]
-    denom = conf[pic].sum()
-    return float(conf[pic, wall] / denom) if denom else float("nan")
+def focus_to_confusion_from_conf(conf: np.ndarray, focus_id: int | None, confusion_id: int | None) -> float:
+    if focus_id is None or confusion_id is None:
+        return float("nan")
+    denom = conf[focus_id].sum()
+    return float(conf[focus_id, confusion_id] / denom) if denom else float("nan")
 
 
 def eval_masking(args: argparse.Namespace, model, transform, scene_list: list[Path], variants: list[Variant]):
@@ -312,7 +335,7 @@ def eval_masking(args: argparse.Namespace, model, transform, scene_list: list[Pa
         for scene_idx, scene_path in enumerate(scene_list):
             if args.max_val_batches >= 0 and scene_idx >= args.max_val_batches:
                 break
-            batch = transform(load_scene(scene_path))
+            batch = transform(load_scene(scene_path, args.segment_key))
             batch = move_to_cuda(batch)
             for variant in variants:
                 repeat_count = args.repeats if variant.kind in {"random_drop", "classwise_random_drop", "structured_drop", "feature_zero"} else 1
@@ -339,11 +362,22 @@ def eval_masking(args: argparse.Namespace, model, transform, scene_list: list[Pa
     }
 
 
-def summary_row(method: str, variant: Variant, repeat_count: int, mean_keep: float, conf: np.ndarray, base: dict) -> dict:
+def summary_row(
+    method: str,
+    variant: Variant,
+    repeat_count: int,
+    mean_keep: float,
+    conf: np.ndarray,
+    base: dict,
+    focus_id: int | None,
+    confusion_id: int | None,
+) -> dict:
     s = summarize_confusion(conf)
-    pic = NAME_TO_ID["picture"]
-    wall = NAME_TO_ID["wall"]
-    floor = NAME_TO_ID["floor"]
+    focus_iou = float(s["iou"][focus_id]) if focus_id is not None else float("nan")
+    base_focus_iou = float(base["iou"][focus_id]) if focus_id is not None else float("nan")
+    confusion_iou = float(s["iou"][confusion_id]) if confusion_id is not None else float("nan")
+    base_focus_to_conf = focus_to_confusion_from_conf(base["conf"], focus_id, confusion_id)
+    focus_to_conf = focus_to_confusion_from_conf(conf, focus_id, confusion_id)
     return {
         "method": method,
         "variant": variant.name,
@@ -357,18 +391,24 @@ def summary_row(method: str, variant: Variant, repeat_count: int, mean_keep: flo
         "delta_mIoU": s["mIoU"] - base["mIoU"],
         "mAcc": s["mAcc"],
         "allAcc": s["allAcc"],
-        "picture_iou": float(s["iou"][pic]),
-        "delta_picture_iou": float(s["iou"][pic] - base["iou"][pic]),
-        "wall_iou": float(s["iou"][wall]),
-        "floor_iou": float(s["iou"][floor]),
-        "picture_to_wall": picture_to_wall_from_conf(conf),
-        "delta_picture_to_wall": picture_to_wall_from_conf(conf) - picture_to_wall_from_conf(base["conf"]),
+        "focus_iou": focus_iou,
+        "delta_focus_iou": focus_iou - base_focus_iou,
+        "confusion_iou": confusion_iou,
+        "focus_to_confusion": focus_to_conf,
+        "delta_focus_to_confusion": focus_to_conf - base_focus_to_conf,
     }
 
 
-def write_results(args: argparse.Namespace, results: dict, variants: list[Variant]) -> None:
+def write_results(args: argparse.Namespace, results: dict, variants: list[Variant], class_names: list[str]) -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     base = summarize_confusion(results["conf"]["clean_voxel"])
+    name_to_id = {name: idx for idx, name in enumerate(class_names)}
+    focus_id = name_to_id.get(args.focus_class)
+    confusion_id = name_to_id.get(args.confusion_class)
+    if focus_id is None:
+        print(f"[warn] focus class not found: {args.focus_class}", flush=True)
+    if confusion_id is None:
+        print(f"[warn] confusion class not found: {args.confusion_class}", flush=True)
     rows = []
     for variant in variants:
         rows.append(
@@ -379,6 +419,8 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
                 results["keep_sums"][variant.name] / max(results["keep_counts"][variant.name], 1),
                 results["conf"][variant.name],
                 base,
+                focus_id,
+                confusion_id,
             )
         )
     csv_path = args.output_dir / "masking_battery_summary.csv"
@@ -405,19 +447,22 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
         f"- Config: `{args.config}`",
         f"- Weight: `{args.weight}`",
         f"- Data root: `{args.data_root}`",
+        f"- Segment key: `{args.segment_key}`",
+        f"- Focus class: `{args.focus_class}`",
+        f"- Confusion class: `{args.confusion_class}`",
         "",
         "## Results",
         "",
-        "| variant | keep | mIoU | ΔmIoU | allAcc | picture | Δpicture | wall | floor | p->wall |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| variant | keep | mIoU | ΔmIoU | allAcc | focus IoU | Δfocus | confusion IoU | focus->confusion |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
             f"| `{row['variant']}` | {float(row['observed_keep_frac']):.4f} | "
             f"{float(row['mIoU']):.4f} | {float(row['delta_mIoU']):+.4f} | "
-            f"{float(row['allAcc']):.4f} | {float(row['picture_iou']):.4f} | "
-            f"{float(row['delta_picture_iou']):+.4f} | {float(row['wall_iou']):.4f} | "
-            f"{float(row['floor_iou']):.4f} | {float(row['picture_to_wall']):.4f} |"
+            f"{float(row['allAcc']):.4f} | {float(row['focus_iou']):.4f} | "
+            f"{float(row['delta_focus_iou']):+.4f} | {float(row['confusion_iou']):.4f} | "
+            f"{float(row['focus_to_confusion']):.4f} |"
         )
     lines += ["", "## Files", "", f"- Summary CSV: `{csv_path.resolve()}`"]
     md_path = prefix.with_suffix(".md")
@@ -430,6 +475,10 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
                 "official_root": str(args.official_root),
                 "config": str(args.config),
                 "weight": str(args.weight),
+                "segment_key": args.segment_key,
+                "class_names": class_names,
+                "focus_class": args.focus_class,
+                "confusion_class": args.confusion_class,
                 "variants": [v.__dict__ for v in variants],
                 "outputs": {"summary_csv": str(csv_path), "summary_md": str(md_path)},
             },
@@ -456,11 +505,12 @@ def main() -> None:
         return
     config_cls, compose_cls, build_model_fn = setup_official_imports(args.official_root)
     cfg = load_config(config_cls, args.official_root / args.config)
+    class_names = class_names_from_cfg(cfg, args)
     transform = compose_cls(cfg.data.val.transform)
     model = build_official_model(build_model_fn, cfg, args.weight)
     scenes = scene_paths(args.data_root, args.split)
     results = eval_masking(args, model, transform, scenes, build_variants(args))
-    write_results(args, results, build_variants(args))
+    write_results(args, results, build_variants(args), class_names)
 
 
 if __name__ == "__main__":

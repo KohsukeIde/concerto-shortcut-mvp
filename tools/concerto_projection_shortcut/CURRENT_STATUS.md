@@ -348,6 +348,48 @@ investigation.
     toward `wall`, so the core interpretation stays: overall retained-subset
     robustness hides weak-class fragility. Details are in
     `tools/concerto_projection_shortcut/results_masking_classwise_keep.md`.
+  - Sonata ScanNet downstream audit completed as the first external SSL
+    model-family anchor. The released Sonata backbone and ScanNet linear head
+    were merged into
+    `data/weights/sonata/sonata_scannet_linear_merged.pth` and evaluated with
+    the same ScanNet stage-wise / oracle-actionability protocol used for
+    Concerto. Sonata shows the same broad pattern that candidate-set headroom
+    is large while ordinary readout remains weak for wall-adjacent classes:
+    base oracle-analysis mIoU is `0.7086`, base `picture` IoU is `0.3582`,
+    and `picture -> wall` is `0.4783`; oracle top-5 raises mIoU to `0.9670`
+    and `picture` IoU to `0.8867`, while oracle graph top-5 raises `picture`
+    to `0.9922`. Stage-wise trace shows `picture_vs_wall` is present but not
+    solved by the fixed 20-way readout: point-feature balanced accuracy is
+    `0.7501`, refit binary probe on linear logits is `0.8155`, but direct
+    fixed logit margin is `0.6452`. This supports the ED framing that the
+    readout/actionability gap is not a Concerto-only artifact, although the
+    exact stage pattern differs from Concerto. Details are in
+    `tools/concerto_projection_shortcut/results_sonata_scannet_point_stagewise_trace.md`
+    and
+    `tools/concerto_projection_shortcut/results_sonata_scannet_oracle_actionability_analysis.md`.
+  - PTv3 v1.5.1 supervised masking audit was extended to ScanNet200 and S3DIS
+    as dataset-level externality checks. The v1.5.1 compatibility evaluator is
+    now generic over segment key, class names, focus class, and confusion
+    class. Official PTv3 checkpoints were downloaded from
+    `Pointcept/PointTransformerV3` and evaluated through the same retained-voxel
+    masking protocol. ScanNet200 is valid and close to the reported supervised
+    PTv3 level: clean mIoU `0.3458` vs README-reported `0.353`; random keep
+    `0.2` drops to `0.2618`, class-wise keep `0.2` to `0.2640`, structured
+    keep `0.2` to `0.2691`, and feature-zero to `0.0019`. The ScanNet200
+    `picture` focus class is fragile (`0.3771 -> 0.2442` under random keep
+    `0.2`) and shifts toward `wall` (`0.4595 -> 0.6536`). S3DIS Area-5 is also
+    valid enough for audit: clean mIoU `0.7052`, random keep `0.2` `0.4589`,
+    class-wise keep `0.2` `0.4542`, structured keep `0.2` `0.6393`, and
+    feature-zero `0.1138`. This adds cross-dataset evidence that retained-subset
+    sparsity robustness is protocol- and dataset-dependent: ScanNet200 and
+    S3DIS supervised rows degrade much more under random sparsity than Concerto
+    / Sonata ScanNet20 SSL rows, while structured sparsity can be much less
+    damaging on S3DIS. ScanNet++ is not yet run because no public compatible
+    downstream checkpoint was found in the checked Pointcept/Concerto,
+    facebook/sonata, or PointTransformerV3 HF repos. Details are in
+    `tools/concerto_projection_shortcut/results_ptv3_scannet200_v151_masking_full.md`
+    and
+    `tools/concerto_projection_shortcut/results_ptv3_s3dis_v151_masking_full.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -439,11 +481,17 @@ investigation.
    - [results_masking_coord_baselines_full.md](./results_masking_coord_baselines_full.md)
    - [results_masking_coord_baselines_balanced_full.md](./results_masking_coord_baselines_balanced_full.md)
    - [results_masking_battery_smoke.md](./results_masking_battery_smoke.md)
-33. Coordinate projection residual handoff:
+33. Sonata ScanNet external SSL audit:
+   - [results_sonata_scannet_point_stagewise_trace.md](./results_sonata_scannet_point_stagewise_trace.md)
+   - [results_sonata_scannet_oracle_actionability_analysis.md](./results_sonata_scannet_oracle_actionability_analysis.md)
+34. ScanNet200 / S3DIS supervised masking externality:
+   - [results_ptv3_scannet200_v151_masking_full.md](./results_ptv3_scannet200_v151_masking_full.md)
+   - [results_ptv3_s3dis_v151_masking_full.md](./results_ptv3_s3dis_v151_masking_full.md)
+35. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-34. Short narrative summary:
+36. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-35. Reproduction / runner overview:
+37. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

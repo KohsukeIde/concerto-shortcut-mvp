@@ -223,6 +223,19 @@ investigation.
     IoU or weak-class mean. Treat offline decoupled classifier learning as
     another negative under this protocol. Details are in
     `tools/concerto_projection_shortcut/results_decoupled_classifier_readout.md`.
+  - Latent-subgroup decoder pilot completed on the same origin decoder
+    checkpoint. The diagnostic supports a real `picture` subgroup shift:
+    the dominant val `picture` cluster has `target_top1=0.2737`,
+    `wall_top1=0.7172`, and mean `picture-wall` margin `-3.2460`, while
+    train/heldout include much easier `picture` clusters. However, targeted
+    sub-center interpolation still does not recover the oracle/actionability
+    headroom. Best variant `subcenter_tau0p1_lam0p4` gives only
+    mIoU `0.7777 -> 0.7788` (`+0.0011`) and `picture` IoU
+    `0.4043 -> 0.4060` (`+0.0017`), though it reduces `picture -> wall`
+    `0.4348 -> 0.4096`. This is below gate, so treat latent-subgroup readout
+    as diagnostic-positive but method-no-go under the current offline
+    protocol. Details are in
+    `tools/concerto_projection_shortcut/results_latent_subgroup_decoder.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -294,11 +307,13 @@ investigation.
    - [results_scannet_lora_lpft_classsafe.md](./results_scannet_lora_lpft_classsafe.md)
 27. Decoupled classifier readout:
    - [results_decoupled_classifier_readout.md](./results_decoupled_classifier_readout.md)
-28. Coordinate projection residual handoff:
+28. Latent-subgroup decoder:
+   - [results_latent_subgroup_decoder.md](./results_latent_subgroup_decoder.md)
+29. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-29. Short narrative summary:
+30. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-30. Reproduction / runner overview:
+31. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery
@@ -966,12 +981,18 @@ Expected next stage:
    claiming or testing official LoRA reproduction; otherwise treat the current
    local base-origin LoRA lines as diagnostic rather than a positive method
    path.
-4. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
+4. Treat retrieval/prototype, decoupled classifier, and latent-subgroup readout
+   as completed offline readout-family negatives. The latent-subgroup
+   diagnostic is still useful: it supports class-internal subgroup shift for
+   `picture`, but sub-center readout does not produce a paper-relevant positive.
+   Do not continue offline readout tweaks without changing the protocol or
+   obtaining a stronger validation criterion.
+5. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.
-5. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
+6. Keep monitoring through ABCI-compatible `qstat` when jobs are active:
    - `qstat | awk -v u="$USER" 'NR==1 || NR==2 || $0 ~ u {print}'`
-6. Keep the current completed artifacts:
+7. Keep the current completed artifacts:
    - `data/runs/projres_v1/summaries/h10032-qf32`
    - `data/runs/projres_v1b/summaries/h10016-qf1-v1b-pre256`
    - `data/runs/projres_v1b/summaries/h10016x4-qf16`
@@ -982,3 +1003,4 @@ Expected next stage:
    - `data/runs/cida_inloop_decoder_adaptation/cida-strong-i1200-eval-b1`
    - `data/runs/scannet_dec_lora_origin/classwise`
    - `data/runs/scannet_lora_origin/classwise/`
+   - `data/runs/scannet_decoder_probe_origin/latent_subgroup_decoder/`

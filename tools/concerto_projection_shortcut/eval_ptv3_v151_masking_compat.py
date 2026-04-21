@@ -641,6 +641,40 @@ def summary_row(
     }
 
 
+def perclass_rows(
+    method: str,
+    score_space: str,
+    variant: Variant,
+    mean_keep: float,
+    conf: np.ndarray,
+    base_conf: np.ndarray,
+    class_names: list[str],
+) -> list[dict]:
+    summary = summarize_confusion(conf)
+    base_summary = summarize_confusion(base_conf)
+    rows = []
+    for class_id, class_name in enumerate(class_names):
+        rows.append(
+            {
+                "method": method,
+                "score_space": score_space,
+                "variant": variant.name,
+                "kind": variant.kind,
+                "class_id": class_id,
+                "class_name": class_name,
+                "observed_keep_frac": mean_keep,
+                "iou": float(summary["iou"][class_id]),
+                "delta_iou": float(summary["iou"][class_id] - base_summary["iou"][class_id]),
+                "acc": float(summary["acc"][class_id]),
+                "base_iou": float(base_summary["iou"][class_id]),
+                "support": int(conf[class_id].sum()),
+                "pred_support": int(conf[:, class_id].sum()),
+                "intersection": int(conf[class_id, class_id]),
+            }
+        )
+    return rows
+
+
 def write_results(args: argparse.Namespace, results: dict, variants: list[Variant], class_names: list[str]) -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     name_to_id = {name: idx for idx, name in enumerate(class_names)}
@@ -651,14 +685,17 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
     if confusion_id is None:
         print(f"[warn] confusion class not found: {args.confusion_class}", flush=True)
     rows = []
+    perclass = []
     for score_space in results.get("score_spaces", ["retained"]):
-        base = summarize_confusion(results["conf"][f"{score_space}:clean_voxel"])
+        base_key = f"{score_space}:clean_voxel"
+        base = summarize_confusion(results["conf"][base_key])
         for variant in variants:
+            mean_keep = results["keep_sums"][variant.name] / max(results["keep_counts"][variant.name], 1)
             row = summary_row(
                     args.method_name,
                     variant,
                     results["keep_counts"][variant.name],
-                    results["keep_sums"][variant.name] / max(results["keep_counts"][variant.name], 1),
+                    mean_keep,
                     results["conf"][f"{score_space}:{variant.name}"],
                     base,
                     focus_id,
@@ -666,17 +703,38 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
             )
             row["score_space"] = score_space
             rows.append(row)
+            perclass.extend(
+                perclass_rows(
+                    args.method_name,
+                    score_space,
+                    variant,
+                    mean_keep,
+                    results["conf"][f"{score_space}:{variant.name}"],
+                    results["conf"][base_key],
+                    class_names,
+                )
+            )
     csv_path = args.output_dir / "masking_battery_summary.csv"
     with csv_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+    perclass_csv_path = args.output_dir / "masking_battery_perclass.csv"
+    with perclass_csv_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(perclass[0].keys()))
+        writer.writeheader()
+        writer.writerows(perclass)
     prefix = args.summary_prefix
     prefix.parent.mkdir(parents=True, exist_ok=True)
     with prefix.with_suffix(".csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+    perclass_prefix_csv = prefix.parent / f"{prefix.name}_perclass.csv"
+    with perclass_prefix_csv.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(perclass[0].keys()))
+        writer.writeheader()
+        writer.writerows(perclass)
 
     lines = [
         "# PTv3 v1.5.1 Compatibility Masking Eval",
@@ -708,7 +766,13 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
             f"{float(row['delta_focus_iou']):+.4f} | {float(row['confusion_iou']):.4f} | "
             f"{float(row['focus_to_confusion']):.4f} |"
         )
-    lines += ["", "## Files", "", f"- Summary CSV: `{csv_path.resolve()}`"]
+    lines += [
+        "",
+        "## Files",
+        "",
+        f"- Summary CSV: `{csv_path.resolve()}`",
+        f"- Per-class CSV: `{perclass_csv_path.resolve()}`",
+    ]
     md_path = prefix.with_suffix(".md")
     md_path.write_text("\n".join(lines) + "\n")
     (args.output_dir / "masking_battery.md").write_text("\n".join(lines) + "\n")
@@ -725,7 +789,11 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
                 "confusion_class": args.confusion_class,
                 "full_scene_scoring": args.full_scene_scoring,
                 "variants": [v.__dict__ for v in variants],
-                "outputs": {"summary_csv": str(csv_path), "summary_md": str(md_path)},
+                "outputs": {
+                    "summary_csv": str(csv_path),
+                    "perclass_csv": str(perclass_csv_path),
+                    "summary_md": str(md_path),
+                },
             },
             indent=2,
         )

@@ -68,6 +68,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fixed-point-counts", default="")
     parser.add_argument("--classwise-keep-ratios", default="")
     parser.add_argument("--structured-keep-ratios", default="")
+    parser.add_argument("--masked-model-keep-ratios", default="")
     parser.add_argument("--feature-zero-ratios", default="")
     parser.add_argument(
         "--color-feat-space",
@@ -186,6 +187,14 @@ def build_variants(args: argparse.Namespace) -> list[Variant]:
                 block_size=args.structured_block_size,
             )
         )
+    for keep in parse_float_list(args.masked_model_keep_ratios):
+        variants.append(
+            Variant(
+                f"masked_model_keep{str(keep).replace('.', 'p')}",
+                "masked_model_drop_raw",
+                keep_ratio=keep,
+            )
+        )
     for ratio in parse_float_list(args.feature_zero_ratios):
         variants.append(Variant(f"feature_zero{str(ratio).replace('.', 'p')}", "feature_zero", feature_zero_ratio=ratio))
     return variants
@@ -278,6 +287,47 @@ def structured_drop_mask(grid: torch.Tensor, keep_ratio: float, block_size: int,
     if not bool(region_keep.any()):
         region_keep[torch.randint(n_region, (1,), device=grid.device, generator=generator)] = True
     return region_keep[inv]
+
+
+def filter_scene(scene: dict, mask: np.ndarray) -> dict:
+    n = int(scene["segment"].shape[0])
+    out = {}
+    for key, value in scene.items():
+        if isinstance(value, np.ndarray) and value.shape[:1] == (n,):
+            out[key] = value[mask]
+        else:
+            out[key] = value.copy() if isinstance(value, np.ndarray) else value
+    return out
+
+
+def masked_model_scene(scene: dict, keep_ratio: float, seed: int) -> tuple[dict, float]:
+    rng = np.random.default_rng(seed)
+    instance = scene["instance"].reshape(-1)
+    n = int(instance.shape[0])
+    keep = np.zeros(n, dtype=bool)
+    stuff = instance < 0
+    if np.any(stuff):
+        keep[stuff] = rng.random(int(stuff.sum())) < keep_ratio
+    inst_ids = np.unique(instance[instance >= 0])
+    if inst_ids.size > 0:
+        inst_keep = rng.random(inst_ids.shape[0]) < keep_ratio
+        if not inst_keep.any():
+            inst_keep[rng.integers(inst_ids.shape[0])] = True
+        kept_ids = set(inst_ids[inst_keep].tolist())
+        for inst_id in kept_ids:
+            keep[instance == inst_id] = True
+    if not keep.any():
+        keep[rng.integers(n)] = True
+    return filter_scene(scene, keep), float(keep.mean())
+
+
+def raw_scene_to_batch(dataset, scene: dict, color_feat_space: str) -> dict:
+    from pointcept.datasets.utils import point_collate_fn
+
+    batch = point_collate_fn([dataset.transform(copy.deepcopy(scene))])
+    batch = move_to_cuda(batch)
+    batch = adapt_color_feat_space(batch, color_feat_space)
+    return batch
 
 
 def make_variant_batch_with_mask(batch: dict, variant: Variant, seed: int) -> tuple[dict, float, torch.Tensor]:
@@ -526,8 +576,44 @@ def summary_row(method: str, variant: Variant, repeat_count: int, mean_keep: flo
     }
 
 
+def perclass_rows(
+    method: str,
+    score_space: str,
+    variant: Variant,
+    mean_keep: float,
+    conf: np.ndarray,
+    base_conf: np.ndarray,
+    class_names: list[str],
+) -> list[dict[str, float | str | int]]:
+    summary = summarize_confusion(conf, class_names)
+    base_summary = summarize_confusion(base_conf, class_names)
+    rows = []
+    for class_id, class_name in enumerate(class_names):
+        rows.append(
+            {
+                "method": method,
+                "score_space": score_space,
+                "variant": variant.name,
+                "kind": variant.kind,
+                "class_id": class_id,
+                "class_name": class_name,
+                "observed_keep_frac": mean_keep,
+                "iou": float(summary["iou"][class_id]),
+                "delta_iou": float(summary["iou"][class_id] - base_summary["iou"][class_id]),
+                "acc": float(summary["acc"][class_id]),
+                "base_iou": float(base_summary["iou"][class_id]),
+                "support": int(conf[class_id].sum()),
+                "pred_support": int(conf[:, class_id].sum()),
+                "intersection": int(conf[class_id, class_id]),
+            }
+        )
+    return rows
+
+
 def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], weak_classes: list[int], num_classes: int):
     loader = build_loader(cfg, args.val_split, args.data_root, args.batch_size, args.num_worker)
+    if any(v.kind == "masked_model_drop_raw" for v in variants) and args.batch_size != 1:
+        raise ValueError("masked_model_drop_raw currently requires --batch-size 1")
     score_spaces = ["retained"]
     if args.full_scene_scoring:
         score_spaces.append("full_nn")
@@ -546,15 +632,22 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
             batch = move_to_cuda(batch)
             batch = adapt_color_feat_space(batch, args.color_feat_space)
             scene_name = loader.dataset.get_data_name(batch_idx)
+            raw_scene = None
             for variant in variants:
                 repeat_count = (
                     args.repeats
-                    if variant.kind in {"random_drop", "fixed_count_drop", "classwise_random_drop", "structured_drop", "feature_zero"}
+                    if variant.kind in {"random_drop", "fixed_count_drop", "classwise_random_drop", "structured_drop", "masked_model_drop_raw", "feature_zero"}
                     else 1
                 )
                 for repeat_idx in range(repeat_count):
                     seed = args.seed + batch_idx * 1009 + repeat_idx * 9176 + abs(hash(variant.name)) % 1000
-                    masked_batch, keep_frac, keep_mask = make_variant_batch_with_mask(batch, variant, seed)
+                    if variant.kind == "masked_model_drop_raw":
+                        if raw_scene is None:
+                            raw_scene = loader.dataset.get_data(batch_idx)
+                        masked_scene, keep_frac = masked_model_scene(raw_scene, variant.keep_ratio, seed)
+                        masked_batch = raw_scene_to_batch(loader.dataset, masked_scene, args.color_feat_space)
+                    else:
+                        masked_batch, keep_frac, _ = make_variant_batch_with_mask(batch, variant, seed)
                     if input_point_count(masked_batch) <= 0:
                         continue
                     if batch_idx < args.save_example_scenes and repeat_idx == 0:
@@ -587,33 +680,56 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
 def write_results(args: argparse.Namespace, results: dict, variants: list[Variant], weak_classes: list[int]) -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     rows = []
+    perclass = []
     for score_space in results.get("score_spaces", ["retained"]):
         base_key = f"{score_space}:clean_voxel"
         base = summarize_confusion(results["conf"][base_key], SCANNET20_CLASS_NAMES)
         base["conf"] = results["conf"][base_key]
         for v in variants:
+            mean_keep = results["keep_sums"][v.name] / max(results["keep_counts"][v.name], 1)
             row = summary_row(
                     args.method_name,
                     v,
                     results["keep_counts"][v.name],
-                    results["keep_sums"][v.name] / max(results["keep_counts"][v.name], 1),
+                    mean_keep,
                     results["conf"][f"{score_space}:{v.name}"],
                     base,
                     weak_classes,
             )
             row["score_space"] = score_space
             rows.append(row)
+            perclass.extend(
+                perclass_rows(
+                    args.method_name,
+                    score_space,
+                    v,
+                    mean_keep,
+                    results["conf"][f"{score_space}:{v.name}"],
+                    results["conf"][base_key],
+                    SCANNET20_CLASS_NAMES,
+                )
+            )
     csv_path = args.output_dir / "masking_battery_summary.csv"
     with csv_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+    perclass_csv_path = args.output_dir / "masking_battery_perclass.csv"
+    with perclass_csv_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(perclass[0].keys()))
+        writer.writeheader()
+        writer.writerows(perclass)
     prefix = args.summary_prefix
     prefix.parent.mkdir(parents=True, exist_ok=True)
     with prefix.with_suffix(".csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+    perclass_prefix_csv = prefix.parent / f"{prefix.name}_perclass.csv"
+    with perclass_prefix_csv.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(perclass[0].keys()))
+        writer.writeheader()
+        writer.writerows(perclass)
 
     sorted_rows = sorted(rows, key=lambda r: (r["score_space"], r["variant"] != "clean_voxel", -float(r["mIoU"])))
     lines = []
@@ -626,6 +742,7 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
     lines.append(f"- Random keep ratios: `{args.random_keep_ratios}`")
     lines.append(f"- Class-wise keep ratios: `{args.classwise_keep_ratios}`")
     lines.append(f"- Structured keep ratios: `{args.structured_keep_ratios}`")
+    lines.append(f"- Masked-model keep ratios: `{args.masked_model_keep_ratios}`")
     lines.append(f"- Feature-zero ratios: `{args.feature_zero_ratios}`")
     lines.append(f"- Color feature space: `{args.color_feat_space}`")
     lines.append(f"- Repeats: `{args.repeats}`")
@@ -649,6 +766,7 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
     lines.append("")
     lines.append("## Files\n")
     lines.append(f"- Summary CSV: `{csv_path.resolve()}`")
+    lines.append(f"- Per-class CSV: `{perclass_csv_path.resolve()}`")
     md = prefix.with_suffix(".md")
     md.write_text("\n".join(lines) + "\n")
     (args.output_dir / "masking_battery.md").write_text("\n".join(lines) + "\n")
@@ -659,7 +777,11 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
         "color_feat_space": args.color_feat_space,
         "full_scene_scoring": args.full_scene_scoring,
         "variants": [v.__dict__ for v in variants],
-        "outputs": {"summary_csv": str(csv_path), "summary_md": str(md)},
+        "outputs": {
+            "summary_csv": str(csv_path),
+            "perclass_csv": str(perclass_csv_path),
+            "summary_md": str(md),
+        },
     }
     (args.output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(f"[done] wrote {md}", flush=True)

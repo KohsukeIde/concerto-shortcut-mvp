@@ -408,6 +408,19 @@ investigation.
     effect remains incompatible with a pure coordinate-only explanation because
     feature-zero collapses all rows. Details are in
     `tools/concerto_projection_shortcut/results_masking_fullscene_scoring.md`.
+  - Object-style masked-model keep20 extension completed for the same available
+    checkpoints. This uses whole-object/stuff masking on raw scenes before the
+    normal voxel transform, then scores with the same `full_nn` protocol. It is
+    much harsher than random keep20 at similar observed keep fractions: Concerto
+    decoder drops `0.7869 -> 0.1982`, Concerto linear `0.7695 -> 0.1990`,
+    Sonata linear `0.7167 -> 0.1724`, PTv3 ScanNet20 `0.7699 -> 0.1324`,
+    PTv3 ScanNet200 `0.3447 -> 0.0441`, and PTv3 S3DIS `0.7040 -> 0.1083`.
+    The weak focus classes collapse with it (`picture` on ScanNet/ScanNet200,
+    `board` on S3DIS). This sharpens the masking interpretation: random keep20
+    is a weak sparsity regime because scene outline / partial geometry remain,
+    while object-style masking and fixed-point stress are much stronger tests of
+    missing-support robustness. Details are in
+    `tools/concerto_projection_shortcut/results_masking_maskedmodel_full.md`.
   - Masking example export was added to pin down what the new stress regimes
     actually look like on voxelized inputs. For 5 example scenes each from
     ScanNet, ScanNet200, and S3DIS, the exporter now writes
@@ -1233,9 +1246,11 @@ Expected next stage:
    valid supervised row (`0.7697` clean, `0.7143` random keep `0.2`, `0.6521`
    structured keep `0.2`). This introduces a real ranking signal: Concerto
    decoder/linear are more retained-sparsity robust than supervised PTv3 in this
-   protocol, while all methods collapse under feature-zero. Do not overclaim it
-   as coordinate-shortcut proof; use it as retained-subset redundancy /
-   weak-class fragility evidence.
+   protocol, while all methods collapse under feature-zero and drop much more
+   under object-style masked-model keep20 than under random keep20. Do not
+   overclaim it as coordinate-shortcut proof; use it as retained-subset
+   redundancy / weak-class fragility evidence, with masked-model keep20 and
+   fixed-points as the stronger stress conditions.
 9. Keep the completed CIDA artifacts and use only batch-size-1 val numbers from
    `*-eval-b1` runs for reporting. Keep the origin LoRA classwise outputs under
    `data/runs/scannet_lora_origin/classwise/`.

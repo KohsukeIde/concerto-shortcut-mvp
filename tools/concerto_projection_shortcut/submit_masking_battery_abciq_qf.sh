@@ -31,12 +31,14 @@ if [[ "${MASK_PRESET}" == "full" ]]; then
   FIXED_POINT_COUNTS="${FIXED_POINT_COUNTS-4000}"
   CLASSWISE_KEEP_RATIOS="${CLASSWISE_KEEP_RATIOS-}"
   STRUCTURED_KEEP_RATIOS="${STRUCTURED_KEEP_RATIOS-0.5,0.2}"
+  MASKED_MODEL_KEEP_RATIOS="${MASKED_MODEL_KEEP_RATIOS-0.2}"
   FEATURE_ZERO_RATIOS="${FEATURE_ZERO_RATIOS-1.0}"
 else
   RANDOM_KEEP_RATIOS="${RANDOM_KEEP_RATIOS-0.2}"
   FIXED_POINT_COUNTS="${FIXED_POINT_COUNTS-}"
   CLASSWISE_KEEP_RATIOS="${CLASSWISE_KEEP_RATIOS-}"
   STRUCTURED_KEEP_RATIOS="${STRUCTURED_KEEP_RATIOS-}"
+  MASKED_MODEL_KEEP_RATIOS="${MASKED_MODEL_KEEP_RATIOS-}"
   FEATURE_ZERO_RATIOS="${FEATURE_ZERO_RATIOS-}"
 fi
 COLOR_FEAT_SPACE="${COLOR_FEAT_SPACE-current_0_1}"
@@ -64,6 +66,7 @@ echo "random_keep_ratios=${RANDOM_KEEP_RATIOS}"
 echo "fixed_point_counts=${FIXED_POINT_COUNTS}"
 echo "classwise_keep_ratios=${CLASSWISE_KEEP_RATIOS}"
 echo "structured_keep_ratios=${STRUCTURED_KEEP_RATIOS}"
+echo "masked_model_keep_ratios=${MASKED_MODEL_KEEP_RATIOS}"
 echo "feature_zero_ratios=${FEATURE_ZERO_RATIOS}"
 echo "repeats=${REPEATS}"
 echo "full_scene_scoring=${FULL_SCENE_SCORING}"
@@ -86,6 +89,7 @@ python tools/concerto_projection_shortcut/eval_masking_battery.py \
   --fixed-point-counts "${FIXED_POINT_COUNTS}" \
   --classwise-keep-ratios "${CLASSWISE_KEEP_RATIOS}" \
   --structured-keep-ratios "${STRUCTURED_KEEP_RATIOS}" \
+  --masked-model-keep-ratios "${MASKED_MODEL_KEEP_RATIOS}" \
   --feature-zero-ratios "${FEATURE_ZERO_RATIOS}" \
   --color-feat-space "${COLOR_FEAT_SPACE}" \
   --structured-block-size "${STRUCTURED_BLOCK_SIZE}" \

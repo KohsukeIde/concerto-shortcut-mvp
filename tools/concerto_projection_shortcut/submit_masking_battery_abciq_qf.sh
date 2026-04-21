@@ -28,11 +28,13 @@ MAX_VAL_BATCHES="${MAX_VAL_BATCHES:--1}"
 MASK_PRESET="${MASK_PRESET:-}"
 if [[ "${MASK_PRESET}" == "full" ]]; then
   RANDOM_KEEP_RATIOS="${RANDOM_KEEP_RATIOS-0.5,0.3,0.2,0.1}"
+  FIXED_POINT_COUNTS="${FIXED_POINT_COUNTS-4000}"
   CLASSWISE_KEEP_RATIOS="${CLASSWISE_KEEP_RATIOS-}"
   STRUCTURED_KEEP_RATIOS="${STRUCTURED_KEEP_RATIOS-0.5,0.2}"
   FEATURE_ZERO_RATIOS="${FEATURE_ZERO_RATIOS-1.0}"
 else
   RANDOM_KEEP_RATIOS="${RANDOM_KEEP_RATIOS-0.2}"
+  FIXED_POINT_COUNTS="${FIXED_POINT_COUNTS-}"
   CLASSWISE_KEEP_RATIOS="${CLASSWISE_KEEP_RATIOS-}"
   STRUCTURED_KEEP_RATIOS="${STRUCTURED_KEEP_RATIOS-}"
   FEATURE_ZERO_RATIOS="${FEATURE_ZERO_RATIOS-}"
@@ -44,6 +46,10 @@ NUM_WORKER="${NUM_WORKER:-8}"
 SUMMARY_PREFIX="${SUMMARY_PREFIX:-tools/concerto_projection_shortcut/results_masking_battery}"
 FULL_SCENE_SCORING="${FULL_SCENE_SCORING:-0}"
 FULL_SCENE_CHUNK_SIZE="${FULL_SCENE_CHUNK_SIZE:-2048}"
+DATASET_TAG="${DATASET_TAG:-}"
+SAVE_EXAMPLE_SCENES="${SAVE_EXAMPLE_SCENES:-0}"
+EXAMPLE_OUTPUT_DIR="${EXAMPLE_OUTPUT_DIR:-data/runs/masking_examples}"
+EXAMPLE_MAX_EXPORT_POINTS="${EXAMPLE_MAX_EXPORT_POINTS:-200000}"
 
 echo "=== Masking battery ==="
 date +"date=%Y-%m-%dT%H:%M:%S%z"
@@ -55,6 +61,7 @@ echo "method_name=${METHOD_NAME}"
 echo "output_dir=${OUTPUT_DIR}"
 echo "max_val_batches=${MAX_VAL_BATCHES}"
 echo "random_keep_ratios=${RANDOM_KEEP_RATIOS}"
+echo "fixed_point_counts=${FIXED_POINT_COUNTS}"
 echo "classwise_keep_ratios=${CLASSWISE_KEEP_RATIOS}"
 echo "structured_keep_ratios=${STRUCTURED_KEEP_RATIOS}"
 echo "feature_zero_ratios=${FEATURE_ZERO_RATIOS}"
@@ -76,6 +83,7 @@ python tools/concerto_projection_shortcut/eval_masking_battery.py \
   --output-dir "${OUTPUT_DIR}" \
   --max-val-batches "${MAX_VAL_BATCHES}" \
   --random-keep-ratios "${RANDOM_KEEP_RATIOS}" \
+  --fixed-point-counts "${FIXED_POINT_COUNTS}" \
   --classwise-keep-ratios "${CLASSWISE_KEEP_RATIOS}" \
   --structured-keep-ratios "${STRUCTURED_KEEP_RATIOS}" \
   --feature-zero-ratios "${FEATURE_ZERO_RATIOS}" \
@@ -83,6 +91,10 @@ python tools/concerto_projection_shortcut/eval_masking_battery.py \
   --structured-block-size "${STRUCTURED_BLOCK_SIZE}" \
   --repeats "${REPEATS}" \
   --num-worker "${NUM_WORKER}" \
+  --dataset-tag "${DATASET_TAG}" \
+  --save-example-scenes "${SAVE_EXAMPLE_SCENES}" \
+  --example-output-dir "${EXAMPLE_OUTPUT_DIR}" \
+  --example-max-export-points "${EXAMPLE_MAX_EXPORT_POINTS}" \
   --summary-prefix "${SUMMARY_PREFIX}" \
   "${FULL_SCENE_ARGS[@]}"
 

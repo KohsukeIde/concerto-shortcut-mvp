@@ -39,6 +39,7 @@ class Variant:
     keep_ratio: float = 1.0
     feature_zero_ratio: float = 0.0
     block_size: int = 64
+    fixed_count: int = 0
 
 
 def repo_root_from_here() -> Path:
@@ -64,6 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-worker", type=int, default=8)
     parser.add_argument("--max-val-batches", type=int, default=-1)
     parser.add_argument("--random-keep-ratios", default="0.2")
+    parser.add_argument("--fixed-point-counts", default="")
     parser.add_argument("--classwise-keep-ratios", default="")
     parser.add_argument("--structured-keep-ratios", default="")
     parser.add_argument("--feature-zero-ratios", default="")
@@ -96,6 +98,10 @@ def parse_args() -> argparse.Namespace:
         help="Fallback chunk size for torch.cdist nearest-neighbor propagation.",
     )
     parser.add_argument("--weak-classes", default="picture,counter,desk,sink,cabinet,shower curtain,door")
+    parser.add_argument("--dataset-tag", default="")
+    parser.add_argument("--save-example-scenes", type=int, default=0)
+    parser.add_argument("--example-output-dir", type=Path, default=Path("data/runs/masking_examples"))
+    parser.add_argument("--example-max-export-points", type=int, default=200000)
     parser.add_argument("--seed", type=int, default=20260420)
     parser.add_argument(
         "--summary-prefix",
@@ -116,6 +122,10 @@ def seed_everything(seed: int) -> None:
 
 def parse_float_list(text: str) -> list[float]:
     return [float(x) for x in text.split(",") if x.strip()]
+
+
+def parse_int_list(text: str) -> list[int]:
+    return [int(x) for x in text.split(",") if x.strip()]
 
 
 def parse_names(text: str) -> list[int]:
@@ -157,6 +167,8 @@ def build_variants(args: argparse.Namespace) -> list[Variant]:
     variants = [Variant("clean_voxel", "clean")]
     for keep in parse_float_list(args.random_keep_ratios):
         variants.append(Variant(f"random_keep{str(keep).replace('.', 'p')}", "random_drop", keep_ratio=keep))
+    for count in parse_int_list(args.fixed_point_counts):
+        variants.append(Variant(f"fixed_points_{count}", "fixed_count_drop", fixed_count=count))
     for keep in parse_float_list(args.classwise_keep_ratios):
         variants.append(
             Variant(
@@ -231,6 +243,14 @@ def random_drop_mask(n: int, keep_ratio: float, device: torch.device, generator:
     return keep
 
 
+def fixed_count_drop_mask(n: int, fixed_count: int, device: torch.device, generator: torch.Generator) -> torch.Tensor:
+    count = max(1, min(int(fixed_count), int(n)))
+    perm = torch.randperm(n, device=device, generator=generator)
+    keep = torch.zeros(n, dtype=torch.bool, device=device)
+    keep[perm[:count]] = True
+    return keep
+
+
 def classwise_drop_mask(labels: torch.Tensor, keep_ratio: float, generator: torch.Generator) -> torch.Tensor:
     keep = torch.zeros(labels.shape[0], dtype=torch.bool, device=labels.device)
     for cls in labels.unique(sorted=True):
@@ -270,6 +290,9 @@ def make_variant_batch_with_mask(batch: dict, variant: Variant, seed: int) -> tu
         return clone_batch(batch), 1.0, keep
     if variant.kind == "random_drop":
         mask = random_drop_mask(n, variant.keep_ratio, device, generator)
+        return filter_batch(batch, mask), float(mask.float().mean().item()), mask
+    if variant.kind == "fixed_count_drop":
+        mask = fixed_count_drop_mask(n, variant.fixed_count, device, generator)
         return filter_batch(batch, mask), float(mask.float().mean().item()), mask
     if variant.kind == "classwise_random_drop":
         mask = classwise_drop_mask(batch["segment"].long(), variant.keep_ratio, generator)
@@ -320,15 +343,6 @@ def forward_logits_labels(model, batch: dict) -> tuple[torch.Tensor, torch.Tenso
     return logits, labels
 
 
-def offsets_from_keep_mask(original_offset: torch.Tensor, keep_mask: torch.Tensor) -> torch.Tensor:
-    starts = torch.cat([original_offset.new_zeros(1), original_offset[:-1]])
-    kept = []
-    for start, end in zip(starts.tolist(), original_offset.tolist()):
-        kept.append(int(keep_mask[start:end].sum().item()))
-    counts = torch.tensor(kept, dtype=original_offset.dtype, device=original_offset.device)
-    return torch.cumsum(counts, dim=0)
-
-
 def _nearest_index_fallback(
     query_coord: torch.Tensor,
     support_coord: torch.Tensor,
@@ -373,23 +387,106 @@ def nearest_retained_index(
         return _nearest_index_fallback(query_coord, support_coord, query_offset, support_offset, chunk_size)
 
 
-def full_scene_logits_from_retained(logits: torch.Tensor, batch: dict, keep_mask: torch.Tensor, chunk_size: int) -> torch.Tensor:
-    n = input_point_count(batch)
-    if logits.shape[0] == n and bool(keep_mask.all()):
+def full_scene_logits_from_support(logits: torch.Tensor, query_batch: dict, support_batch: dict, chunk_size: int) -> torch.Tensor:
+    if logits.shape[0] == input_point_count(query_batch) and input_point_count(query_batch) == input_point_count(support_batch):
         return logits
-    original_offset = batch.get("offset")
-    if original_offset is None:
-        original_offset = torch.tensor([n], dtype=torch.int32, device=logits.device)
-    kept_offset = offsets_from_keep_mask(original_offset, keep_mask)
-    support_coord = batch["coord"][keep_mask]
+    query_coord = query_batch["coord"]
+    support_coord = support_batch["coord"]
+    query_offset = query_batch.get("offset")
+    support_offset = support_batch.get("offset")
+    if query_offset is None:
+        query_offset = torch.tensor([int(query_coord.shape[0])], dtype=torch.int32, device=logits.device)
+    if support_offset is None:
+        support_offset = torch.tensor([int(support_coord.shape[0])], dtype=torch.int32, device=logits.device)
     nearest = nearest_retained_index(
-        batch["coord"],
+        query_coord,
         support_coord,
-        original_offset,
-        kept_offset,
+        query_offset,
+        support_offset,
         chunk_size,
     )
     return logits[nearest]
+
+
+def infer_rgb_from_batch(batch: dict) -> np.ndarray:
+    if "feat" in batch:
+        feat = batch["feat"].detach().cpu().numpy()
+        if feat.shape[1] >= 3:
+            rgb = feat[:, :3]
+            if float(rgb.min()) < 0.0:
+                rgb = (rgb + 1.0) / 2.0
+            return np.clip(rgb, 0.0, 1.0)
+    coord = batch["coord"].detach().cpu().numpy()
+    return np.ones_like(coord, dtype=np.float32)
+
+
+def write_ascii_ply(path: Path, coord: np.ndarray, color: np.ndarray) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    coord = np.asarray(coord, dtype=np.float32)
+    color = np.asarray(color, dtype=np.float32)
+    if color.shape[0] != coord.shape[0]:
+        raise ValueError("coord/color size mismatch")
+    rgb = np.clip(np.round(color * 255.0), 0, 255).astype(np.uint8)
+    with path.open("w") as f:
+        f.write("ply\n")
+        f.write("format ascii 1.0\n")
+        f.write(f"element vertex {coord.shape[0]}\n")
+        f.write("property float x\nproperty float y\nproperty float z\n")
+        f.write("property uchar red\nproperty uchar green\nproperty uchar blue\n")
+        f.write("end_header\n")
+        for xyz, c in zip(coord, rgb):
+            f.write(f"{xyz[0]:.6f} {xyz[1]:.6f} {xyz[2]:.6f} {int(c[0])} {int(c[1])} {int(c[2])}\n")
+
+
+def maybe_save_example_scene(
+    args: argparse.Namespace,
+    scene_name: str,
+    variant: Variant,
+    base_batch: dict,
+    masked_batch: dict,
+    keep_frac: float,
+) -> None:
+    if args.save_example_scenes <= 0:
+        return
+    out_dir = args.example_output_dir / args.dataset_tag / scene_name / variant.name
+    meta = {
+        "dataset": args.dataset_tag,
+        "scene": scene_name,
+        "variant": variant.name,
+        "kind": variant.kind,
+        "keep_ratio": variant.keep_ratio,
+        "feature_zero_ratio": variant.feature_zero_ratio,
+        "block_size": variant.block_size,
+        "fixed_count": variant.fixed_count,
+        "base_points": int(input_point_count(base_batch)),
+        "masked_points": int(input_point_count(masked_batch)),
+        "observed_keep_frac": float(keep_frac),
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    base_coord = base_batch["coord"].detach().cpu().numpy()
+    masked_coord = masked_batch["coord"].detach().cpu().numpy()
+    base_color = infer_rgb_from_batch(base_batch)
+    masked_color = infer_rgb_from_batch(masked_batch)
+    rng = np.random.default_rng(args.seed)
+    for stem, coord, color in [
+        ("input_clean", base_coord, base_color),
+        ("input_masked", masked_coord, masked_color),
+    ]:
+        np.savez_compressed(
+            out_dir / f"{stem}.npz",
+            coord=coord.astype(np.float32),
+            color=color.astype(np.float32),
+        )
+        if coord.shape[0] > args.example_max_export_points:
+            idx = rng.choice(coord.shape[0], size=args.example_max_export_points, replace=False)
+            idx = np.sort(idx)
+            coord_view = coord[idx]
+            color_view = color[idx]
+        else:
+            coord_view = coord
+            color_view = color
+        write_ascii_ply(out_dir / f"{stem}_preview.ply", coord_view, color_view)
 
 
 def picture_to_wall_from_conf(conf: np.ndarray) -> float:
@@ -409,6 +506,7 @@ def summary_row(method: str, variant: Variant, repeat_count: int, mean_keep: flo
         "variant": variant.name,
         "kind": variant.kind,
         "keep_ratio": variant.keep_ratio,
+        "fixed_count": variant.fixed_count,
         "feature_zero_ratio": variant.feature_zero_ratio,
         "block_size": variant.block_size,
         "repeats": repeat_count,
@@ -447,10 +545,11 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
                 break
             batch = move_to_cuda(batch)
             batch = adapt_color_feat_space(batch, args.color_feat_space)
+            scene_name = loader.dataset.get_data_name(batch_idx)
             for variant in variants:
                 repeat_count = (
                     args.repeats
-                    if variant.kind in {"random_drop", "classwise_random_drop", "structured_drop", "feature_zero"}
+                    if variant.kind in {"random_drop", "fixed_count_drop", "classwise_random_drop", "structured_drop", "feature_zero"}
                     else 1
                 )
                 for repeat_idx in range(repeat_count):
@@ -458,11 +557,13 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
                     masked_batch, keep_frac, keep_mask = make_variant_batch_with_mask(batch, variant, seed)
                     if input_point_count(masked_batch) <= 0:
                         continue
+                    if batch_idx < args.save_example_scenes and repeat_idx == 0:
+                        maybe_save_example_scene(args, scene_name, variant, batch, masked_batch, keep_frac)
                     logits, labels = forward_logits_labels(model, masked_batch)
                     pred = logits.argmax(dim=1)
                     update_confusion(confs[("retained", variant.name)], pred.cpu(), labels.cpu(), num_classes, -1)
                     if args.full_scene_scoring:
-                        full_logits = full_scene_logits_from_retained(logits, batch, keep_mask, args.full_scene_chunk_size)
+                        full_logits = full_scene_logits_from_support(logits, batch, masked_batch, args.full_scene_chunk_size)
                         update_confusion(
                             confs[("full_nn", variant.name)],
                             full_logits.argmax(dim=1).cpu(),
@@ -572,6 +673,13 @@ def main() -> None:
     args.weight = (args.repo_root / args.weight).resolve() if not args.weight.is_absolute() else args.weight
     args.output_dir = (args.repo_root / args.output_dir).resolve() if not args.output_dir.is_absolute() else args.output_dir
     args.summary_prefix = (args.repo_root / args.summary_prefix).resolve() if not args.summary_prefix.is_absolute() else args.summary_prefix
+    args.example_output_dir = (
+        (args.repo_root / args.example_output_dir).resolve()
+        if not args.example_output_dir.is_absolute()
+        else args.example_output_dir
+    )
+    if not args.dataset_tag:
+        args.dataset_tag = args.data_root.name
     variants = build_variants(args)
     weak_classes = parse_names(args.weak_classes)
     if args.dry_run:

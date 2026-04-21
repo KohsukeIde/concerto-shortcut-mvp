@@ -21,10 +21,12 @@ Adds `full_nn` scoring to the existing retained-subset masking battery. For poin
 
 ## Interpretation
 
+- `random keep20%` is still a relatively dense voxel input. Example-export summaries show that on ScanNet/ScanNet200 it still leaves roughly `18k` to `33k` points per scene, and on S3DIS `32k` to `98k`. This means random keep20 is not a "near-empty input" regime. A stricter fixed-budget condition such as `fixed_points_4000` is needed when we want to claim genuinely sparse input stress.
 - Random keep20 robustness mostly survives full-scene nearest-neighbor scoring on ScanNet20: Concerto decoder `0.7632` retained vs `0.7527` full, Concerto linear `0.7597` vs `0.7519`, Sonata linear `0.6951` vs `0.6865`, and PTv3 ScanNet20 `0.7131` vs `0.6995`. This suggests random retained-subset robustness is not only a scoring-subset artifact.
 - Structured block masking changes sharply under full-scene scoring: Concerto decoder `0.7388` retained vs `0.3012` full, Concerto linear `0.7409` vs `0.2907`, Sonata `0.6712` vs `0.2662`, PTv3 ScanNet20 `0.6573` vs `0.2491`, PTv3 ScanNet200 `0.2425` vs `0.0772`, and PTv3 S3DIS `0.6374` vs `0.2881`. Retained-subset scoring therefore hides the cost of missing structured regions.
 - Feature-zero remains collapsed across models/datasets, so the masking robustness is not coordinate-only. The more accurate claim is retained/random sparsity redundancy plus weak-class fragility, not pure coordinate shortcut.
 - Class-wise keep20 remains close to random keep20, so the random keep result is not mainly class-composition drift.
+- Object-style masked-model examples were exported separately for ScanNet/ScanNet200/S3DIS. Those examples are meant to remove whole-object silhouettes rather than just leave a random point subset. See `results_masking_examples.md`.
 
 ## Files
 
@@ -35,3 +37,4 @@ Adds `full_nn` scoring to the existing retained-subset masking battery. For poin
 - PTv3 ScanNet20: `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_fullscene_ptv3_scannet20.csv`
 - PTv3 ScanNet200: `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_fullscene_ptv3_scannet200.csv`
 - PTv3 S3DIS: `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_fullscene_ptv3_s3dis.csv`
+- Example summary: `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples.md`

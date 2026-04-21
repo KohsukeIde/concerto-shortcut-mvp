@@ -408,6 +408,19 @@ investigation.
     effect remains incompatible with a pure coordinate-only explanation because
     feature-zero collapses all rows. Details are in
     `tools/concerto_projection_shortcut/results_masking_fullscene_scoring.md`.
+  - Masking example export was added to pin down what the new stress regimes
+    actually look like on voxelized inputs. For 5 example scenes each from
+    ScanNet, ScanNet200, and S3DIS, the exporter now writes
+    `clean_voxel`, `random_keep0p2`, `random_keep0p1`, `fixed_points_4000`,
+    and `masked_model_keep0p2` under
+    `data/runs/masking_examples/<dataset>/<scene>/<condition>/`. The key
+    interpretation is that `random_keep0p2` is still a fairly dense regime:
+    roughly `18k-33k` points on ScanNet/ScanNet200 and `32k-98k` on S3DIS,
+    whereas `fixed_points_4000` is the first regime that reliably drops the
+    voxelized input to about `0.8%-4.3%`. The object-style masked-model
+    condition removes whole-instance silhouettes and therefore is a distinct
+    stress family rather than a point-budget-matched version of keep20. See
+    `tools/concerto_projection_shortcut/results_masking_examples.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -513,6 +526,8 @@ investigation.
    - [results_masking_fullscene_ptv3_scannet20.md](./results_masking_fullscene_ptv3_scannet20.md)
    - [results_masking_fullscene_ptv3_scannet200.md](./results_masking_fullscene_ptv3_scannet200.md)
    - [results_masking_fullscene_ptv3_s3dis.md](./results_masking_fullscene_ptv3_s3dis.md)
+36. Masking example export / stress interpretation:
+   - [results_masking_examples.md](./results_masking_examples.md)
 36. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
 37. Short narrative summary:

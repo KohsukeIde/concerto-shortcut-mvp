@@ -44,6 +44,7 @@ class Variant:
     keep_ratio: float = 1.0
     feature_zero_ratio: float = 0.0
     block_size: int = 64
+    fixed_count: int = 0
 
 
 def repo_root_from_here() -> Path:
@@ -69,8 +70,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--max-val-batches", type=int, default=-1)
     parser.add_argument("--random-keep-ratios", default="0.2")
+    parser.add_argument("--fixed-point-counts", default="")
     parser.add_argument("--classwise-keep-ratios", default="")
     parser.add_argument("--structured-keep-ratios", default="")
+    parser.add_argument("--masked-model-keep-ratios", default="")
     parser.add_argument("--feature-zero-ratios", default="")
     parser.add_argument("--structured-block-size", type=int, default=64)
     parser.add_argument("--repeats", type=int, default=1)
@@ -96,6 +99,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--focus-class", default="picture")
     parser.add_argument("--confusion-class", default="wall")
+    parser.add_argument("--dataset-tag", default="")
+    parser.add_argument("--save-example-scenes", type=int, default=0)
+    parser.add_argument("--example-output-dir", type=Path, default=Path("data/runs/masking_examples"))
+    parser.add_argument("--example-max-export-points", type=int, default=200000)
     parser.add_argument("--seed", type=int, default=20260421)
     parser.add_argument(
         "--summary-prefix",
@@ -108,6 +115,10 @@ def parse_args() -> argparse.Namespace:
 
 def parse_float_list(text: str) -> list[float]:
     return [float(x) for x in text.split(",") if x.strip()]
+
+
+def parse_int_list(text: str) -> list[int]:
+    return [int(x) for x in text.split(",") if x.strip()]
 
 
 def seed_everything(seed: int) -> None:
@@ -156,6 +167,8 @@ def build_variants(args: argparse.Namespace) -> list[Variant]:
     variants = [Variant("clean_voxel", "clean")]
     for keep in parse_float_list(args.random_keep_ratios):
         variants.append(Variant(f"random_keep{str(keep).replace('.', 'p')}", "random_drop", keep_ratio=keep))
+    for count in parse_int_list(args.fixed_point_counts):
+        variants.append(Variant(f"fixed_points_{count}", "fixed_count_drop", fixed_count=count))
     for keep in parse_float_list(args.classwise_keep_ratios):
         variants.append(Variant(f"classwise_keep{str(keep).replace('.', 'p')}", "classwise_random_drop", keep_ratio=keep))
     for keep in parse_float_list(args.structured_keep_ratios):
@@ -167,6 +180,8 @@ def build_variants(args: argparse.Namespace) -> list[Variant]:
                 block_size=args.structured_block_size,
             )
         )
+    for keep in parse_float_list(args.masked_model_keep_ratios):
+        variants.append(Variant(f"masked_model_keep{str(keep).replace('.', 'p')}", "masked_model_drop_raw", keep_ratio=keep))
     for ratio in parse_float_list(args.feature_zero_ratios):
         variants.append(Variant(f"feature_zero{str(ratio).replace('.', 'p')}", "feature_zero", feature_zero_ratio=ratio))
     return variants
@@ -218,6 +233,13 @@ def clone_batch(batch: dict) -> dict:
     return {key: value.clone() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
 
 
+def clone_scene(scene: dict) -> dict:
+    out = {}
+    for key, value in scene.items():
+        out[key] = value.copy() if isinstance(value, np.ndarray) else value
+    return out
+
+
 def input_point_count(batch: dict) -> int:
     return int(batch["segment"].shape[0])
 
@@ -239,6 +261,14 @@ def random_drop_mask(n: int, keep_ratio: float, device: torch.device, generator:
     keep = torch.rand(n, device=device, generator=generator) < keep_ratio
     if not bool(keep.any()):
         keep[torch.randint(n, (1,), device=device, generator=generator)] = True
+    return keep
+
+
+def fixed_count_drop_mask(n: int, fixed_count: int, device: torch.device, generator: torch.Generator) -> torch.Tensor:
+    count = max(1, min(int(fixed_count), int(n)))
+    perm = torch.randperm(n, device=device, generator=generator)
+    keep = torch.zeros(n, dtype=torch.bool, device=device)
+    keep[perm[:count]] = True
     return keep
 
 
@@ -267,6 +297,38 @@ def structured_drop_mask(grid: torch.Tensor, keep_ratio: float, block_size: int,
     return region_keep[inv]
 
 
+def filter_scene(scene: dict, mask: np.ndarray) -> dict:
+    n = int(scene["segment"].shape[0])
+    out = {}
+    for key, value in scene.items():
+        if isinstance(value, np.ndarray) and value.shape[:1] == (n,):
+            out[key] = value[mask]
+        else:
+            out[key] = value.copy() if isinstance(value, np.ndarray) else value
+    return out
+
+
+def masked_model_scene(scene: dict, keep_ratio: float, seed: int) -> tuple[dict, float]:
+    rng = np.random.default_rng(seed)
+    instance = scene["instance"].reshape(-1)
+    n = int(instance.shape[0])
+    keep = np.zeros(n, dtype=bool)
+    stuff = instance < 0
+    if np.any(stuff):
+        keep[stuff] = rng.random(int(stuff.sum())) < keep_ratio
+    inst_ids = np.unique(instance[instance >= 0])
+    if inst_ids.size > 0:
+        inst_keep = rng.random(inst_ids.shape[0]) < keep_ratio
+        if not inst_keep.any():
+            inst_keep[rng.integers(inst_ids.shape[0])] = True
+        kept_ids = set(inst_ids[inst_keep].tolist())
+        for inst_id in kept_ids:
+            keep[instance == inst_id] = True
+    if not keep.any():
+        keep[rng.integers(n)] = True
+    return filter_scene(scene, keep), float(keep.mean())
+
+
 def make_variant_batch_with_mask(batch: dict, variant: Variant, seed: int) -> tuple[dict, float, torch.Tensor]:
     n = input_point_count(batch)
     device = batch["segment"].device
@@ -277,6 +339,9 @@ def make_variant_batch_with_mask(batch: dict, variant: Variant, seed: int) -> tu
         return clone_batch(batch), 1.0, keep
     if variant.kind == "random_drop":
         mask = random_drop_mask(n, variant.keep_ratio, device, generator)
+        return filter_batch(batch, mask), float(mask.float().mean().item()), mask
+    if variant.kind == "fixed_count_drop":
+        mask = fixed_count_drop_mask(n, variant.fixed_count, device, generator)
         return filter_batch(batch, mask), float(mask.float().mean().item()), mask
     if variant.kind == "classwise_random_drop":
         mask = classwise_drop_mask(batch["segment"].long(), variant.keep_ratio, generator)
@@ -324,15 +389,6 @@ def update_confusion(confusion: torch.Tensor, pred: torch.Tensor, target: torch.
     confusion += torch.bincount(flat, minlength=num_classes * num_classes).reshape(num_classes, num_classes)
 
 
-def offsets_from_keep_mask(original_offset: torch.Tensor, keep_mask: torch.Tensor) -> torch.Tensor:
-    starts = torch.cat([original_offset.new_zeros(1), original_offset[:-1]])
-    kept = []
-    for start, end in zip(starts.tolist(), original_offset.tolist()):
-        kept.append(int(keep_mask[start:end].sum().item()))
-    counts = torch.tensor(kept, dtype=original_offset.dtype, device=original_offset.device)
-    return torch.cumsum(counts, dim=0)
-
-
 def _nearest_index_fallback(
     query_coord: torch.Tensor,
     support_coord: torch.Tensor,
@@ -377,23 +433,91 @@ def nearest_retained_index(
         return _nearest_index_fallback(query_coord, support_coord, query_offset, support_offset, chunk_size)
 
 
-def full_scene_logits_from_retained(logits: torch.Tensor, batch: dict, keep_mask: torch.Tensor, chunk_size: int) -> torch.Tensor:
-    n = input_point_count(batch)
-    if logits.shape[0] == n and bool(keep_mask.all()):
+def full_scene_logits_from_support(logits: torch.Tensor, query_batch: dict, support_batch: dict, chunk_size: int) -> torch.Tensor:
+    if logits.shape[0] == input_point_count(query_batch) and input_point_count(query_batch) == input_point_count(support_batch):
         return logits
-    original_offset = batch.get("offset")
-    if original_offset is None:
-        original_offset = torch.tensor([n], dtype=torch.int32, device=logits.device)
-    kept_offset = offsets_from_keep_mask(original_offset, keep_mask)
-    support_coord = batch["coord"][keep_mask]
+    query_coord = query_batch["coord"]
+    support_coord = support_batch["coord"]
+    query_offset = query_batch.get("offset")
+    support_offset = support_batch.get("offset")
+    if query_offset is None:
+        query_offset = torch.tensor([int(query_coord.shape[0])], dtype=torch.int32, device=logits.device)
+    if support_offset is None:
+        support_offset = torch.tensor([int(support_coord.shape[0])], dtype=torch.int32, device=logits.device)
     nearest = nearest_retained_index(
-        batch["coord"],
+        query_coord,
         support_coord,
-        original_offset,
-        kept_offset,
+        query_offset,
+        support_offset,
         chunk_size,
     )
     return logits[nearest]
+
+
+def infer_rgb_from_batch(batch: dict) -> np.ndarray:
+    if "feat" in batch:
+        feat = batch["feat"].detach().cpu().numpy()
+        if feat.shape[1] >= 3:
+            rgb = feat[:, :3]
+            if float(rgb.min()) < 0.0:
+                rgb = (rgb + 1.0) / 2.0
+            return np.clip(rgb, 0.0, 1.0)
+    coord = batch["coord"].detach().cpu().numpy()
+    return np.ones_like(coord, dtype=np.float32)
+
+
+def write_ascii_ply(path: Path, coord: np.ndarray, color: np.ndarray) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    coord = np.asarray(coord, dtype=np.float32)
+    color = np.asarray(color, dtype=np.float32)
+    rgb = np.clip(np.round(color * 255.0), 0, 255).astype(np.uint8)
+    with path.open("w") as f:
+        f.write("ply\nformat ascii 1.0\n")
+        f.write(f"element vertex {coord.shape[0]}\n")
+        f.write("property float x\nproperty float y\nproperty float z\n")
+        f.write("property uchar red\nproperty uchar green\nproperty uchar blue\n")
+        f.write("end_header\n")
+        for xyz, c in zip(coord, rgb):
+            f.write(f"{xyz[0]:.6f} {xyz[1]:.6f} {xyz[2]:.6f} {int(c[0])} {int(c[1])} {int(c[2])}\n")
+
+
+def maybe_save_example_scene(
+    args: argparse.Namespace,
+    scene_name: str,
+    variant: Variant,
+    clean_batch: dict,
+    masked_batch: dict,
+    keep_frac: float,
+) -> None:
+    if args.save_example_scenes <= 0:
+        return
+    out_dir = args.example_output_dir / args.dataset_tag / scene_name / variant.name
+    meta = {
+        "dataset": args.dataset_tag,
+        "scene": scene_name,
+        "variant": variant.name,
+        "kind": variant.kind,
+        "keep_ratio": variant.keep_ratio,
+        "feature_zero_ratio": variant.feature_zero_ratio,
+        "block_size": variant.block_size,
+        "fixed_count": variant.fixed_count,
+        "base_points": int(input_point_count(clean_batch)),
+        "masked_points": int(input_point_count(masked_batch)),
+        "observed_keep_frac": float(keep_frac),
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    rng = np.random.default_rng(args.seed)
+    for stem, batch in [("input_clean", clean_batch), ("input_masked", masked_batch)]:
+        coord = batch["coord"].detach().cpu().numpy()
+        color = infer_rgb_from_batch(batch)
+        np.savez_compressed(out_dir / f"{stem}.npz", coord=coord.astype(np.float32), color=color.astype(np.float32))
+        if coord.shape[0] > args.example_max_export_points:
+            idx = rng.choice(coord.shape[0], size=args.example_max_export_points, replace=False)
+            idx = np.sort(idx)
+            coord = coord[idx]
+            color = color[idx]
+        write_ascii_ply(out_dir / f"{stem}_preview.ply", coord, color)
 
 
 def summarize_confusion(conf: np.ndarray):
@@ -435,13 +559,19 @@ def eval_masking(args: argparse.Namespace, model, transform, scene_list: list[Pa
         for scene_idx, scene_path in enumerate(scene_list):
             if args.max_val_batches >= 0 and scene_idx >= args.max_val_batches:
                 break
-            batch = transform(load_scene(scene_path, args.segment_key))
-            batch = move_to_cuda(batch)
+            raw_scene = load_scene(scene_path, args.segment_key)
+            clean_batch = move_to_cuda(transform(clone_scene(raw_scene)))
             for variant in variants:
-                repeat_count = args.repeats if variant.kind in {"random_drop", "classwise_random_drop", "structured_drop", "feature_zero"} else 1
+                repeat_count = args.repeats if variant.kind in {"random_drop", "fixed_count_drop", "classwise_random_drop", "structured_drop", "masked_model_drop_raw", "feature_zero"} else 1
                 for repeat_idx in range(repeat_count):
                     seed = args.seed + scene_idx * 1009 + repeat_idx * 9176 + abs(hash(variant.name)) % 1000
-                    masked_batch, keep_frac, keep_mask = make_variant_batch_with_mask(batch, variant, seed)
+                    if variant.kind == "masked_model_drop_raw":
+                        masked_scene, keep_frac = masked_model_scene(raw_scene, variant.keep_ratio, seed)
+                        masked_batch = move_to_cuda(transform(masked_scene))
+                    else:
+                        masked_batch, keep_frac, _ = make_variant_batch_with_mask(clean_batch, variant, seed)
+                    if scene_idx < args.save_example_scenes and repeat_idx == 0:
+                        maybe_save_example_scene(args, scene_path.name, variant, clean_batch, masked_batch, keep_frac)
                     logits, labels = forward_logits_labels(model, masked_batch)
                     update_confusion(
                         confs[("retained", variant.name)],
@@ -451,11 +581,11 @@ def eval_masking(args: argparse.Namespace, model, transform, scene_list: list[Pa
                         -1,
                     )
                     if args.full_scene_scoring:
-                        full_logits = full_scene_logits_from_retained(logits, batch, keep_mask, args.full_scene_chunk_size)
+                        full_logits = full_scene_logits_from_support(logits, clean_batch, masked_batch, args.full_scene_chunk_size)
                         update_confusion(
                             confs[("full_nn", variant.name)],
                             full_logits.argmax(dim=1).cpu(),
-                            batch["segment"].long().cpu(),
+                            clean_batch["segment"].long().cpu(),
                             args.num_classes,
                             -1,
                         )
@@ -494,6 +624,7 @@ def summary_row(
         "variant": variant.name,
         "kind": variant.kind,
         "keep_ratio": variant.keep_ratio,
+        "fixed_count": variant.fixed_count,
         "feature_zero_ratio": variant.feature_zero_ratio,
         "block_size": variant.block_size,
         "repeats": repeat_count,
@@ -612,6 +743,13 @@ def main() -> None:
     args.weight = (args.repo_root / args.weight).resolve() if not args.weight.is_absolute() else args.weight
     args.output_dir = (args.repo_root / args.output_dir).resolve() if not args.output_dir.is_absolute() else args.output_dir
     args.summary_prefix = (args.repo_root / args.summary_prefix).resolve() if not args.summary_prefix.is_absolute() else args.summary_prefix
+    args.example_output_dir = (
+        (args.repo_root / args.example_output_dir).resolve()
+        if not args.example_output_dir.is_absolute()
+        else args.example_output_dir
+    )
+    if not args.dataset_tag:
+        args.dataset_tag = args.data_root.name
     if args.dry_run:
         print(f"[dry-run] official_root={args.official_root}")
         print(f"[dry-run] data_root={args.data_root}")

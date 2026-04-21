@@ -367,6 +367,38 @@ investigation.
     `tools/concerto_projection_shortcut/results_sonata_scannet_point_stagewise_trace.md`
     and
     `tools/concerto_projection_shortcut/results_sonata_scannet_oracle_actionability_analysis.md`.
+  - PTv3 v1.5.1 supervised ScanNet20 downstream audit completed on the same
+    stage-wise / oracle-actionability protocol. This provides the missing
+    supervised anchor for the readout-gap claim. PTv3 has a materially cleaner
+    base readout than Concerto/Sonata but still leaves substantial oracle
+    headroom. On `picture_vs_wall`, PTv3 reaches point-feature balanced
+    accuracy `0.9626`, refit-logit balanced accuracy `0.9529`, direct
+    pair-margin accuracy `0.8892`, base `picture` IoU `0.4908`, and
+    `picture -> wall` `0.2326`, with oracle top-2 / top-5 raising `picture`
+    IoU to `0.8785 / 0.9952`. The same pattern holds for `door_vs_wall` and
+    `counter_vs_cabinet`. This narrows the interpretation to: the
+    readout/actionability gap is not SSL-exclusive, but it is substantially
+    worse for the audited SSL rows on ScanNet20 than for the supervised PTv3
+    anchor. Details are in
+    `tools/concerto_projection_shortcut/results_ptv3_scannet20_point_stagewise_trace.md`,
+    `tools/concerto_projection_shortcut/results_ptv3_scannet20_oracle_actionability.md`,
+    and
+    `tools/concerto_projection_shortcut/results_cross_model_downstream_audit_scannet20.md`.
+  - PTv3 supervised ScanNet200 downstream corroboration is also positive. The
+    same official v1.5.1 compatibility path shows that the readout gap does
+    not disappear when moving to the 200-class label space: `picture_vs_wall`
+    has point-feature balanced accuracy `0.9097`, refit-logit balanced
+    accuracy `0.9094`, direct pair-margin accuracy `0.8613`, base `picture`
+    IoU `0.4624`, `picture -> wall` `0.2667`, top-2 hit rate `0.8461`, and
+    oracle top-5 `picture` IoU `0.8388`. `door_vs_wall` and
+    `counter_vs_cabinet` remain strong as well. This is weaker than the
+    ScanNet20 supervised anchor but still supports the same reading: there is
+    actionable pairwise information beyond the fixed multiclass readout, even
+    in a valid supervised baseline on a harder label space. Details are in
+    `tools/concerto_projection_shortcut/results_ptv3_scannet200_point_stagewise_trace.md`,
+    `tools/concerto_projection_shortcut/results_ptv3_scannet200_oracle_actionability.md`,
+    and
+    `tools/concerto_projection_shortcut/results_ptv3_scannet200_downstream_audit.md`.
   - PTv3 v1.5.1 supervised masking audit was extended to ScanNet200 and S3DIS
     as dataset-level externality checks. The v1.5.1 compatibility evaluator is
     now generic over segment key, class names, focus class, and confusion
@@ -528,10 +560,18 @@ investigation.
 33. Sonata ScanNet external SSL audit:
    - [results_sonata_scannet_point_stagewise_trace.md](./results_sonata_scannet_point_stagewise_trace.md)
    - [results_sonata_scannet_oracle_actionability_analysis.md](./results_sonata_scannet_oracle_actionability_analysis.md)
-34. ScanNet200 / S3DIS supervised masking externality:
+34. PTv3 ScanNet20 supervised downstream audit:
+   - [results_ptv3_scannet20_point_stagewise_trace.md](./results_ptv3_scannet20_point_stagewise_trace.md)
+   - [results_ptv3_scannet20_oracle_actionability.md](./results_ptv3_scannet20_oracle_actionability.md)
+   - [results_cross_model_downstream_audit_scannet20.md](./results_cross_model_downstream_audit_scannet20.md)
+35. PTv3 ScanNet200 supervised downstream corroboration:
+   - [results_ptv3_scannet200_point_stagewise_trace.md](./results_ptv3_scannet200_point_stagewise_trace.md)
+   - [results_ptv3_scannet200_oracle_actionability.md](./results_ptv3_scannet200_oracle_actionability.md)
+   - [results_ptv3_scannet200_downstream_audit.md](./results_ptv3_scannet200_downstream_audit.md)
+36. ScanNet200 / S3DIS supervised masking externality:
    - [results_ptv3_scannet200_v151_masking_full.md](./results_ptv3_scannet200_v151_masking_full.md)
    - [results_ptv3_s3dis_v151_masking_full.md](./results_ptv3_s3dis_v151_masking_full.md)
-35. Full-scene masking scoring:
+37. Full-scene masking scoring:
    - [results_masking_fullscene_scoring.md](./results_masking_fullscene_scoring.md)
    - [results_masking_fullscene_concerto_decoder.md](./results_masking_fullscene_concerto_decoder.md)
    - [results_masking_fullscene_concerto_linear.md](./results_masking_fullscene_concerto_linear.md)
@@ -539,13 +579,13 @@ investigation.
    - [results_masking_fullscene_ptv3_scannet20.md](./results_masking_fullscene_ptv3_scannet20.md)
    - [results_masking_fullscene_ptv3_scannet200.md](./results_masking_fullscene_ptv3_scannet200.md)
    - [results_masking_fullscene_ptv3_s3dis.md](./results_masking_fullscene_ptv3_s3dis.md)
-36. Masking example export / stress interpretation:
+38. Masking example export / stress interpretation:
    - [results_masking_examples.md](./results_masking_examples.md)
-36. Coordinate projection residual handoff:
+39. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-37. Short narrative summary:
+40. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-38. Reproduction / runner overview:
+41. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

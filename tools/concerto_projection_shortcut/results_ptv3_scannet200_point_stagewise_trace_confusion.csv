@@ -1,0 +1,110 @@
+pair,target_id,target_name,pred_id,pred_name,count,fraction_of_target
+picture_vs_wall,13,picture,0,wall,7072,0.27033639143730887
+picture_vs_wall,13,picture,6,cabinet,18,0.0006880733944954129
+picture_vs_wall,13,picture,13,picture,18206,0.6959480122324159
+picture_vs_wall,13,picture,23,refrigerator,6,0.00022935779816513763
+picture_vs_wall,13,picture,29,nightstand,17,0.0006498470948012232
+picture_vs_wall,13,picture,87,clock,237,0.009059633027522936
+picture_vs_wall,13,picture,133,toilet seat cover dispenser,88,0.003363914373088685
+picture_vs_wall,13,picture,172,object,516,0.019724770642201836
+picture_vs_wall,0,wall,0,wall,50525,0.8420833333333333
+picture_vs_wall,0,wall,1,chair,63,0.00105
+picture_vs_wall,0,wall,2,floor,270,0.0045
+picture_vs_wall,0,wall,3,table,6,0.0001
+picture_vs_wall,0,wall,4,door,112,0.0018666666666666666
+picture_vs_wall,0,wall,6,cabinet,6,0.0001
+picture_vs_wall,0,wall,14,window,6234,0.1039
+picture_vs_wall,0,wall,23,refrigerator,21,0.00035
+picture_vs_wall,0,wall,25,kitchen cabinet,120,0.002
+picture_vs_wall,0,wall,28,tv,388,0.006466666666666667
+picture_vs_wall,0,wall,35,ceiling,87,0.00145
+picture_vs_wall,0,wall,48,trash can,133,0.0022166666666666667
+picture_vs_wall,0,wall,80,radiator,1865,0.031083333333333334
+picture_vs_wall,0,wall,106,dishwasher,8,0.00013333333333333334
+picture_vs_wall,0,wall,110,windowsill,43,0.0007166666666666667
+picture_vs_wall,0,wall,117,kitchen counter,28,0.00046666666666666666
+picture_vs_wall,0,wall,118,doorframe,45,0.00075
+picture_vs_wall,0,wall,154,range hood,46,0.0007666666666666667
+counter_vs_cabinet,30,counter,0,wall,996,0.028468530269250558
+counter_vs_cabinet,30,counter,2,floor,192,0.0054879094494940835
+counter_vs_cabinet,30,counter,6,cabinet,498,0.014234265134625279
+counter_vs_cabinet,30,counter,7,shelf,524,0.01497741953924427
+counter_vs_cabinet,30,counter,12,sink,272,0.007774538386783284
+counter_vs_cabinet,30,counter,19,book,19,0.0005430743726061853
+counter_vs_cabinet,30,counter,22,box,10,0.00028582861716115016
+counter_vs_cabinet,30,counter,23,refrigerator,67,0.001915051734979706
+counter_vs_cabinet,30,counter,25,kitchen cabinet,102,0.0029154518950437317
+counter_vs_cabinet,30,counter,30,counter,29473,0.8424226833590579
+counter_vs_cabinet,30,counter,43,printer,38,0.0010861487452123706
+counter_vs_cabinet,30,counter,51,microwave,12,0.0003429943405933802
+counter_vs_cabinet,30,counter,52,stove,293,0.0083747784828217
+counter_vs_cabinet,30,counter,55,bottle,22,0.0006288229577545304
+counter_vs_cabinet,30,counter,69,paper,6,0.0001714971702966901
+counter_vs_cabinet,30,counter,102,cup,20,0.0005716572343223003
+counter_vs_cabinet,30,counter,105,coffee maker,15,0.00042874292574172527
+counter_vs_cabinet,30,counter,106,dishwasher,8,0.00022866289372892014
+counter_vs_cabinet,30,counter,107,paper towel roll,4,0.00011433144686446007
+counter_vs_cabinet,30,counter,117,kitchen counter,1746,0.04990567655633682
+counter_vs_cabinet,30,counter,126,paper cutter,344,0.009832504430343565
+counter_vs_cabinet,30,counter,151,dish rack,152,0.004344594980849483
+counter_vs_cabinet,30,counter,165,paper bag,1,2.8582861716115017e-05
+counter_vs_cabinet,30,counter,172,object,3,8.574858514834505e-05
+counter_vs_cabinet,30,counter,173,bathroom vanity,27,0.0007717372663351054
+counter_vs_cabinet,30,counter,178,trash bin,127,0.0036300234379466074
+counter_vs_cabinet,30,counter,185,coffee kettle,14,0.00040016006402561027
+counter_vs_cabinet,30,counter,186,structure,1,2.8582861716115017e-05
+counter_vs_cabinet,6,cabinet,0,wall,5475,0.09125
+counter_vs_cabinet,6,cabinet,1,chair,53,0.0008833333333333333
+counter_vs_cabinet,6,cabinet,2,floor,418,0.006966666666666667
+counter_vs_cabinet,6,cabinet,3,table,63,0.00105
+counter_vs_cabinet,6,cabinet,5,couch,189,0.00315
+counter_vs_cabinet,6,cabinet,6,cabinet,35998,0.5999666666666666
+counter_vs_cabinet,6,cabinet,7,shelf,2420,0.04033333333333333
+counter_vs_cabinet,6,cabinet,8,desk,592,0.009866666666666666
+counter_vs_cabinet,6,cabinet,14,window,1997,0.03328333333333333
+counter_vs_cabinet,6,cabinet,16,bookshelf,6858,0.1143
+counter_vs_cabinet,6,cabinet,18,curtain,55,0.0009166666666666666
+counter_vs_cabinet,6,cabinet,19,book,39,0.00065
+counter_vs_cabinet,6,cabinet,23,refrigerator,1149,0.01915
+counter_vs_cabinet,6,cabinet,25,kitchen cabinet,1682,0.028033333333333334
+counter_vs_cabinet,6,cabinet,30,counter,1582,0.026366666666666667
+counter_vs_cabinet,6,cabinet,35,ceiling,3,5e-05
+counter_vs_cabinet,6,cabinet,41,backpack,5,8.333333333333333e-05
+counter_vs_cabinet,6,cabinet,43,printer,22,0.00036666666666666667
+counter_vs_cabinet,6,cabinet,59,board,139,0.0023166666666666665
+counter_vs_cabinet,6,cabinet,69,paper,4,6.666666666666667e-05
+counter_vs_cabinet,6,cabinet,80,radiator,129,0.00215
+counter_vs_cabinet,6,cabinet,83,wardrobe,767,0.012783333333333334
+counter_vs_cabinet,6,cabinet,106,dishwasher,16,0.0002666666666666667
+counter_vs_cabinet,6,cabinet,117,kitchen counter,78,0.0013
+counter_vs_cabinet,6,cabinet,118,doorframe,12,0.0002
+counter_vs_cabinet,6,cabinet,126,paper cutter,246,0.0041
+counter_vs_cabinet,6,cabinet,130,ledge,7,0.00011666666666666667
+counter_vs_cabinet,6,cabinet,172,object,2,3.3333333333333335e-05
+door_vs_wall,4,door,0,wall,11411,0.19018333333333334
+door_vs_wall,4,door,2,floor,314,0.005233333333333334
+door_vs_wall,4,door,4,door,47710,0.7951666666666667
+door_vs_wall,4,door,14,window,211,0.0035166666666666666
+door_vs_wall,4,door,15,toilet,4,6.666666666666667e-05
+door_vs_wall,4,door,16,bookshelf,13,0.00021666666666666666
+door_vs_wall,4,door,48,trash can,186,0.0031
+door_vs_wall,4,door,101,shower wall,5,8.333333333333333e-05
+door_vs_wall,4,door,118,doorframe,146,0.0024333333333333334
+door_vs_wall,0,wall,0,wall,50525,0.8420833333333333
+door_vs_wall,0,wall,1,chair,63,0.00105
+door_vs_wall,0,wall,2,floor,270,0.0045
+door_vs_wall,0,wall,3,table,6,0.0001
+door_vs_wall,0,wall,4,door,112,0.0018666666666666666
+door_vs_wall,0,wall,6,cabinet,6,0.0001
+door_vs_wall,0,wall,14,window,6234,0.1039
+door_vs_wall,0,wall,23,refrigerator,21,0.00035
+door_vs_wall,0,wall,25,kitchen cabinet,120,0.002
+door_vs_wall,0,wall,28,tv,388,0.006466666666666667
+door_vs_wall,0,wall,35,ceiling,87,0.00145
+door_vs_wall,0,wall,48,trash can,133,0.0022166666666666667
+door_vs_wall,0,wall,80,radiator,1865,0.031083333333333334
+door_vs_wall,0,wall,106,dishwasher,8,0.00013333333333333334
+door_vs_wall,0,wall,110,windowsill,43,0.0007166666666666667
+door_vs_wall,0,wall,117,kitchen counter,28,0.00046666666666666666
+door_vs_wall,0,wall,118,doorframe,45,0.00075
+door_vs_wall,0,wall,154,range hood,46,0.0007666666666666667

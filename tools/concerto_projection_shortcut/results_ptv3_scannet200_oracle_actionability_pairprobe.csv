@@ -1,0 +1,4 @@
+pair,positive_class,negative_class,train_bal_acc
+picture_vs_wall,picture,wall,1.0
+counter_vs_cabinet,counter,cabinet,1.0
+door_vs_wall,door,wall,0.9995926320552826

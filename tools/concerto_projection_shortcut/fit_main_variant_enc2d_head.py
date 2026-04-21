@@ -73,8 +73,13 @@ def main() -> int:
     args.output_root.mkdir(parents=True, exist_ok=True)
 
     cfg, model, load_info = build_main_variant_model(repo_root, args.config, args.weight)
-    if not load_info.get("bare_backbone"):
-        print("[warn] input weight was not detected as a bare backbone.")
+    if load_info.get("bare_backbone"):
+        print("[info] input weight is a bare backbone release; fitting/evaluating the missing enc2d head on top.")
+    else:
+        print(
+            "[info] input weight already includes refit enc2d/patch-proj modules; "
+            "running continued diagnostic eval on the head-refit checkpoint."
+        )
     freeze_all_but_patch_proj(model)
     model.eval()
     print(f"[model] trainable_parameters={trainable_parameter_count(model)}")

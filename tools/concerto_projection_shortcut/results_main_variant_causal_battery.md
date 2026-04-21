@@ -2,11 +2,27 @@
 
 | dataset | mode | batches | enc2d loss mean | delta vs baseline |
 | --- | --- | ---: | ---: | ---: |
-| arkit | none | 32 | 6.026655 | 0.000000 |
-| arkit | global_target_permutation | 32 | 6.940444 | 0.913789 |
-| arkit | cross_image_target_swap | 32 | 7.002146 | 0.975491 |
-| arkit | cross_scene_target_swap | 32 | 6.617621 | 0.590967 |
-| scannet | none | 32 | 5.615395 | 0.000000 |
-| scannet | global_target_permutation | 32 | 7.338930 | 1.723535 |
-| scannet | cross_image_target_swap | 32 | 7.392500 | 1.777106 |
-| scannet | cross_scene_target_swap | 32 | 7.461141 | 1.845746 |
+| arkit | none | 32 | 5.834015 | 0.000000 |
+| arkit | global_target_permutation | 32 | 6.769793 | 0.935779 |
+| arkit | cross_image_target_swap | 32 | 6.876039 | 1.042024 |
+| arkit | cross_scene_target_swap | 32 | 6.902062 | 1.068048 |
+| scannet | none | 32 | 5.646850 | 0.000000 |
+| scannet | global_target_permutation | 32 | 7.295800 | 1.648951 |
+| scannet | cross_image_target_swap | 32 | 7.119286 | 1.472437 |
+| scannet | cross_scene_target_swap | 32 | 7.499432 | 1.852582 |
+| scannetpp | none | 32 | 5.014833 | 0.000000 |
+| scannetpp | global_target_permutation | 32 | 7.204923 | 2.190091 |
+| scannetpp | cross_image_target_swap | 32 | 7.213560 | 2.198728 |
+| scannetpp | cross_scene_target_swap | 32 | 7.420904 | 2.406071 |
+| s3dis | none | 32 | 5.876104 | 0.000000 |
+| s3dis | global_target_permutation | 32 | 6.173333 | 0.297228 |
+| s3dis | cross_image_target_swap | 32 | 6.264225 | 0.388121 |
+| s3dis | cross_scene_target_swap | 32 | 6.091769 | 0.215664 |
+| hm3d | none | 32 | 5.342510 | 0.000000 |
+| hm3d | global_target_permutation | 32 | 7.064777 | 1.722267 |
+| hm3d | cross_image_target_swap | 32 | 7.263275 | 1.920766 |
+| hm3d | cross_scene_target_swap | 32 | 7.376742 | 2.034232 |
+| structured3d | none | 32 | 4.912487 | 0.000000 |
+| structured3d | global_target_permutation | 32 | 6.745441 | 1.832954 |
+| structured3d | cross_image_target_swap | 32 | 6.718561 | 1.806075 |
+| structured3d | cross_scene_target_swap | 32 | 7.034856 | 2.122369 |

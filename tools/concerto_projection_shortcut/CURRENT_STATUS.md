@@ -624,6 +624,14 @@ Interpretation:
   but does not contain enc2d / patch projection heads. The main-variant line
   therefore uses frozen-backbone head-refit rather than exact unreleased enc2d
   head recovery.
+- We do **not** rerun Concerto main pretraining from scratch for Step 0/0.5.
+  The goal of this line is to audit the **released** main-variant artifact, not
+  to study a new reproduction with a changed recipe. Using the released
+  backbone and refitting only the missing enc2d / patch-projection head keeps
+  the object of study anchored to the official checkpoint while avoiding a
+  large six-dataset pretraining confound. A scratch rerun would change both the
+  optimization path and the artifact under audit, so it is reserved for a
+  different question.
 
 ## Main-Variant Step 0/0.5 Plan
 
@@ -651,11 +659,27 @@ Current data state:
   Concerto image-point absmeta roots under repo-local `data/`.
 - The final six-dataset Step 0/0.5 job `133050.qjcm` finished with
   `Exit_status=0`, `rt_QF=1`, tag `main-origin-six-step05`.
+- A dedicated six-dataset **eval-only** rerun `134116.qjcm` finished with
+  `Exit_status=0` and wrote the paper-ready all-six causal battery to
+  `data/runs/main_variant_enc2d_headfit/main-origin-six-step05-all6eval-rerun2/`.
 - Target-corruption distance job `133090.qjcm` finished with `Exit_status=0`.
 
 Acceptance:
 - Main-variant causal battery:
-  `data/runs/main_variant_enc2d_headfit/main-origin-six-step05/results_main_variant_causal_battery.md`.
+  `data/runs/main_variant_enc2d_headfit/main-origin-six-step05-all6eval-rerun2/results_main_variant_causal_battery.md`.
+  - Six-dataset deltas are positive on all indoor datasets, but with materially
+    different magnitudes:
+    - `arkit`: `+0.94 / +1.04 / +1.07`
+    - `scannet`: `+1.65 / +1.47 / +1.85`
+    - `scannetpp`: `+2.19 / +2.20 / +2.41`
+    - `s3dis`: `+0.30 / +0.39 / +0.22`
+    - `hm3d`: `+1.72 / +1.92 / +2.03`
+    - `structured3d`: `+1.83 / +1.81 / +2.12`
+  - Reading: the target-swap sensitivity is not confined to ARKit/ScanNet.
+    It is strongest on `scannetpp`, `hm3d`, and `structured3d`, moderate on
+    `scannet`, present but much weaker on `s3dis`, and consistently positive
+    across `global_target_permutation`, `cross_image_target_swap`, and
+    `cross_scene_target_swap`.
 - Main-variant coord-MLP rival:
   `data/runs/main_variant_coord_mlp_rival/main-origin-six-step05/results_official_coord_mlp_rival.md`.
 - Main-variant target-corruption distance:

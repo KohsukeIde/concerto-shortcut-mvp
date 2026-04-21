@@ -85,7 +85,12 @@ investigation.
     checkpoint shows `picture_vs_wall` is separable in point features
     (`0.8376` balanced accuracy), but the direct 20-way class margin is much
     weaker (`0.7203`) and sampled target `picture` points still go to `wall`
-    `54.96%` of the time. Full FT per-class remains a separate check.
+    `54.96%` of the time. Full FT per-class remains a separate check. An
+    official-like origin full-FT run is now launched as `134179.qjcm` with
+    config `semseg-ptv3-base-v1m1-0c-scannet-ft-origin-e800` on ABCI-Q
+    `rt_QF=2`; the 1-epoch smoke/preflight path built the model, loaded the
+    released backbone, and wrote checkpoints/predictions successfully before
+    the long run.
   - Same-checkpoint confusion-graph residual readout pilot completed on the
     origin decoder checkpoint. The implementation works, but the naive
     antisymmetric logit correction is no-go: multi-pair best mIoU delta is only
@@ -329,6 +334,27 @@ investigation.
     external SSL row but still shows weak clean-to-masked ranking shift. Details
     are in
     `tools/concerto_projection_shortcut/results_masking_downloaded_comparators.md`.
+  - Utonia external comparator setup advanced from static prep to executable
+    integration and then to a completed ScanNet point-stagewise trace. The
+    official inference repo was cloned to `external/Utonia`, local released
+    weights are available under `data/weights/utonia/`, and an ABCI-Q
+    one-scene ScanNet smoke (`134182.qjcm`) succeeded with the released
+    backbone plus released ScanNet linear head on `scene0685_00`: raw
+    `132720` points, transformed `93667` points, unpooled feature shape
+    `(93667, 1386)`, logits shape `(93667, 20)`, inverse-restored raw
+    prediction shape `(132720,)`, and single-scene valid accuracy `0.937095`.
+    The follow-up point-stagewise trace is now complete for
+    `picture_vs_wall`, `door_vs_wall`, and `counter_vs_cabinet`. Utonia's
+    released ScanNet stack shows a much stronger fixed-readout realization on
+    these audited pairs than Concerto or Sonata: `picture_vs_wall` reaches
+    point/logit/direct balanced accuracy `0.8847 / 0.9039 / 0.9320`,
+    `door_vs_wall` reaches `0.7294 / 0.9122 / 0.9624`, and
+    `counter_vs_cabinet` reaches `0.6740 / 0.8366 / 0.9499`. This makes
+    Utonia a constructive external comparator showing that the large
+    readout/actionability gap seen in Concerto and Sonata is not universal
+    across recent 2D-3D SSL style rows. Details are in
+    `tools/concerto_projection_shortcut/results_utonia_setup.md` and
+    `tools/concerto_projection_shortcut/results_utonia_scannet_point_stagewise_trace/utonia_scannet_point_stagewise_trace.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches
@@ -367,6 +393,16 @@ investigation.
     `tools/concerto_projection_shortcut/results_sonata_scannet_point_stagewise_trace.md`
     and
     `tools/concerto_projection_shortcut/results_sonata_scannet_oracle_actionability_analysis.md`.
+  - Official-like Sonata ScanNet full fine-tuning also completed at
+    `data/runs/scannet_semseg_origin/exp/scannet-ft-sonata-e800`. The final
+    evaluation reports mIoU/mAcc/allAcc `0.7955 / 0.8649 / 0.9271`, with
+    class-wise IoU including `picture 0.3602`, `door 0.7635`,
+    `cabinet 0.7704`, `counter 0.7284`, `sink 0.7337`, and
+    `otherfurniture 0.6674`. This gives a backbone-moving external SSL anchor
+    beyond the released frozen linear-head audit; the pairwise
+    stagewise/oracle trace on this full-FT checkpoint remains a separate
+    follow-up. Details are in
+    `tools/concerto_projection_shortcut/results_sonata_scannet_fullft.md`.
   - PTv3 v1.5.1 supervised ScanNet20 downstream audit completed on the same
     stage-wise / oracle-actionability protocol. This provides the missing
     supervised anchor for the readout-gap claim. PTv3 has a materially cleaner

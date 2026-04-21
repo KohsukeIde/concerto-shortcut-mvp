@@ -46,6 +46,8 @@ CLASS_NAMES="${CLASS_NAMES:-}"
 FOCUS_CLASS="${FOCUS_CLASS:-picture}"
 CONFUSION_CLASS="${CONFUSION_CLASS:-wall}"
 SUMMARY_PREFIX="${SUMMARY_PREFIX:-tools/concerto_projection_shortcut/results_ptv3_v151_masking_compat}"
+FULL_SCENE_SCORING="${FULL_SCENE_SCORING:-0}"
+FULL_SCENE_CHUNK_SIZE="${FULL_SCENE_CHUNK_SIZE:-2048}"
 
 echo "=== PTv3 v1.5.1 masking compatibility eval ==="
 date +"date=%Y-%m-%dT%H:%M:%S%z"
@@ -60,7 +62,13 @@ echo "split=${SPLIT}"
 echo "segment_key=${SEGMENT_KEY}"
 echo "output_dir=${OUTPUT_DIR}"
 echo "max_val_batches=${MAX_VAL_BATCHES}"
+echo "full_scene_scoring=${FULL_SCENE_SCORING}"
 nvidia-smi -L || true
+
+FULL_SCENE_ARGS=()
+if [[ "${FULL_SCENE_SCORING}" == "1" ]]; then
+  FULL_SCENE_ARGS=(--full-scene-scoring --full-scene-chunk-size "${FULL_SCENE_CHUNK_SIZE}")
+fi
 
 python tools/concerto_projection_shortcut/eval_ptv3_v151_masking_compat.py \
   --official-root "${OFFICIAL_ROOT}" \
@@ -82,6 +90,7 @@ python tools/concerto_projection_shortcut/eval_ptv3_v151_masking_compat.py \
   --class-names "${CLASS_NAMES}" \
   --focus-class "${FOCUS_CLASS}" \
   --confusion-class "${CONFUSION_CLASS}" \
-  --summary-prefix "${SUMMARY_PREFIX}"
+  --summary-prefix "${SUMMARY_PREFIX}" \
+  "${FULL_SCENE_ARGS[@]}"
 
 echo "[done] ptv3 v1.5.1 masking compatibility eval"

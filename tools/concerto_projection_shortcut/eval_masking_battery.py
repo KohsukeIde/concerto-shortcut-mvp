@@ -80,6 +80,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--structured-block-size", type=int, default=64)
     parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument(
+        "--full-scene-scoring",
+        action="store_true",
+        help=(
+            "Also score every original voxel by nearest-neighbor propagation "
+            "from the retained masked-input logits. The default retained-subset "
+            "rows are still written."
+        ),
+    )
+    parser.add_argument(
+        "--full-scene-chunk-size",
+        type=int,
+        default=2048,
+        help="Fallback chunk size for torch.cdist nearest-neighbor propagation.",
+    )
     parser.add_argument("--weak-classes", default="picture,counter,desk,sink,cabinet,shower curtain,door")
     parser.add_argument("--seed", type=int, default=20260420)
     parser.add_argument(
@@ -245,29 +260,36 @@ def structured_drop_mask(grid: torch.Tensor, keep_ratio: float, block_size: int,
     return region_keep[inv]
 
 
-def make_variant_batch(batch: dict, variant: Variant, seed: int) -> tuple[dict, float]:
+def make_variant_batch_with_mask(batch: dict, variant: Variant, seed: int) -> tuple[dict, float, torch.Tensor]:
     n = input_point_count(batch)
     device = batch["segment"].device
     generator = torch.Generator(device=device)
     generator.manual_seed(seed)
     if variant.kind == "clean":
-        return clone_batch(batch), 1.0
+        keep = torch.ones(n, dtype=torch.bool, device=device)
+        return clone_batch(batch), 1.0, keep
     if variant.kind == "random_drop":
         mask = random_drop_mask(n, variant.keep_ratio, device, generator)
-        return filter_batch(batch, mask), float(mask.float().mean().item())
+        return filter_batch(batch, mask), float(mask.float().mean().item()), mask
     if variant.kind == "classwise_random_drop":
         mask = classwise_drop_mask(batch["segment"].long(), variant.keep_ratio, generator)
-        return filter_batch(batch, mask), float(mask.float().mean().item())
+        return filter_batch(batch, mask), float(mask.float().mean().item()), mask
     if variant.kind == "structured_drop":
         mask = structured_drop_mask(batch["grid_coord"], variant.keep_ratio, variant.block_size, generator)
-        return filter_batch(batch, mask), float(mask.float().mean().item())
+        return filter_batch(batch, mask), float(mask.float().mean().item()), mask
     if variant.kind == "feature_zero":
         out = clone_batch(batch)
         zero = random_drop_mask(n, variant.feature_zero_ratio, device, generator)
         if "feat" in out:
             out["feat"][zero] = 0
-        return out, 1.0
+        keep = torch.ones(n, dtype=torch.bool, device=device)
+        return out, 1.0, keep
     raise ValueError(f"unknown variant kind: {variant.kind}")
+
+
+def make_variant_batch(batch: dict, variant: Variant, seed: int) -> tuple[dict, float]:
+    masked_batch, keep_frac, _ = make_variant_batch_with_mask(batch, variant, seed)
+    return masked_batch, keep_frac
 
 
 def inference_batch(batch: dict) -> dict:
@@ -296,6 +318,78 @@ def forward_logits_labels(model, batch: dict) -> tuple[torch.Tensor, torch.Tenso
     if logits.shape[0] != labels.shape[0]:
         raise RuntimeError(f"shape mismatch logits={logits.shape} labels={labels.shape}")
     return logits, labels
+
+
+def offsets_from_keep_mask(original_offset: torch.Tensor, keep_mask: torch.Tensor) -> torch.Tensor:
+    starts = torch.cat([original_offset.new_zeros(1), original_offset[:-1]])
+    kept = []
+    for start, end in zip(starts.tolist(), original_offset.tolist()):
+        kept.append(int(keep_mask[start:end].sum().item()))
+    counts = torch.tensor(kept, dtype=original_offset.dtype, device=original_offset.device)
+    return torch.cumsum(counts, dim=0)
+
+
+def _nearest_index_fallback(
+    query_coord: torch.Tensor,
+    support_coord: torch.Tensor,
+    query_offset: torch.Tensor,
+    support_offset: torch.Tensor,
+    chunk_size: int,
+) -> torch.Tensor:
+    starts_q = torch.cat([query_offset.new_zeros(1), query_offset[:-1]])
+    starts_s = torch.cat([support_offset.new_zeros(1), support_offset[:-1]])
+    out = torch.empty(query_coord.shape[0], dtype=torch.long, device=query_coord.device)
+    for q_start, q_end, s_start, s_end in zip(starts_q.tolist(), query_offset.tolist(), starts_s.tolist(), support_offset.tolist()):
+        support = support_coord[s_start:s_end].float()
+        if support.shape[0] == 0:
+            raise RuntimeError("empty retained support for full-scene propagation")
+        for begin in range(q_start, q_end, chunk_size):
+            end = min(begin + chunk_size, q_end)
+            dist = torch.cdist(query_coord[begin:end].float(), support)
+            out[begin:end] = dist.argmin(dim=1) + s_start
+    return out
+
+
+def nearest_retained_index(
+    query_coord: torch.Tensor,
+    support_coord: torch.Tensor,
+    query_offset: torch.Tensor,
+    support_offset: torch.Tensor,
+    chunk_size: int,
+) -> torch.Tensor:
+    try:
+        import pointops  # noqa: PLC0415
+
+        index, _ = pointops.knn_query(
+            1,
+            support_coord.float(),
+            support_offset.int(),
+            query_coord.float(),
+            query_offset.int(),
+        )
+        return index.flatten().long()
+    except Exception as exc:
+        print(f"[warn] pointops knn_query failed; using torch.cdist fallback: {exc}", flush=True)
+        return _nearest_index_fallback(query_coord, support_coord, query_offset, support_offset, chunk_size)
+
+
+def full_scene_logits_from_retained(logits: torch.Tensor, batch: dict, keep_mask: torch.Tensor, chunk_size: int) -> torch.Tensor:
+    n = input_point_count(batch)
+    if logits.shape[0] == n and bool(keep_mask.all()):
+        return logits
+    original_offset = batch.get("offset")
+    if original_offset is None:
+        original_offset = torch.tensor([n], dtype=torch.int32, device=logits.device)
+    kept_offset = offsets_from_keep_mask(original_offset, keep_mask)
+    support_coord = batch["coord"][keep_mask]
+    nearest = nearest_retained_index(
+        batch["coord"],
+        support_coord,
+        original_offset,
+        kept_offset,
+        chunk_size,
+    )
+    return logits[nearest]
 
 
 def picture_to_wall_from_conf(conf: np.ndarray) -> float:
@@ -336,7 +430,14 @@ def summary_row(method: str, variant: Variant, repeat_count: int, mean_keep: flo
 
 def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], weak_classes: list[int], num_classes: int):
     loader = build_loader(cfg, args.val_split, args.data_root, args.batch_size, args.num_worker)
-    confs = {v.name: torch.zeros((num_classes, num_classes), dtype=torch.long) for v in variants}
+    score_spaces = ["retained"]
+    if args.full_scene_scoring:
+        score_spaces.append("full_nn")
+    confs = {
+        (space, v.name): torch.zeros((num_classes, num_classes), dtype=torch.long)
+        for space in score_spaces
+        for v in variants
+    }
     keep_sums = {v.name: 0.0 for v in variants}
     keep_counts = {v.name: 0 for v in variants}
 
@@ -354,19 +455,29 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
                 )
                 for repeat_idx in range(repeat_count):
                     seed = args.seed + batch_idx * 1009 + repeat_idx * 9176 + abs(hash(variant.name)) % 1000
-                    masked_batch, keep_frac = make_variant_batch(batch, variant, seed)
+                    masked_batch, keep_frac, keep_mask = make_variant_batch_with_mask(batch, variant, seed)
                     if input_point_count(masked_batch) <= 0:
                         continue
                     logits, labels = forward_logits_labels(model, masked_batch)
                     pred = logits.argmax(dim=1)
-                    update_confusion(confs[variant.name], pred.cpu(), labels.cpu(), num_classes, -1)
+                    update_confusion(confs[("retained", variant.name)], pred.cpu(), labels.cpu(), num_classes, -1)
+                    if args.full_scene_scoring:
+                        full_logits = full_scene_logits_from_retained(logits, batch, keep_mask, args.full_scene_chunk_size)
+                        update_confusion(
+                            confs[("full_nn", variant.name)],
+                            full_logits.argmax(dim=1).cpu(),
+                            batch["segment"].long().cpu(),
+                            num_classes,
+                            -1,
+                        )
                     keep_sums[variant.name] += keep_frac
                     keep_counts[variant.name] += 1
             if (batch_idx + 1) % 25 == 0:
-                clean = summarize_confusion(confs["clean_voxel"].numpy(), SCANNET20_CLASS_NAMES)
+                clean = summarize_confusion(confs[("retained", "clean_voxel")].numpy(), SCANNET20_CLASS_NAMES)
                 print(f"[val] batch={batch_idx+1} clean_voxel_mIoU={clean['mIoU']:.4f}", flush=True)
     return {
-        "conf": {k: v.numpy() for k, v in confs.items()},
+        "conf": {f"{space}:{name}": v.numpy() for (space, name), v in confs.items()},
+        "score_spaces": score_spaces,
         "keep_sums": keep_sums,
         "keep_counts": keep_counts,
     }
@@ -374,21 +485,23 @@ def eval_masking(args: argparse.Namespace, model, cfg, variants: list[Variant], 
 
 def write_results(args: argparse.Namespace, results: dict, variants: list[Variant], weak_classes: list[int]) -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    base = summarize_confusion(results["conf"]["clean_voxel"], SCANNET20_CLASS_NAMES)
-    base["conf"] = results["conf"]["clean_voxel"]
     rows = []
-    for v in variants:
-        rows.append(
-            summary_row(
-                args.method_name,
-                v,
-                results["keep_counts"][v.name],
-                results["keep_sums"][v.name] / max(results["keep_counts"][v.name], 1),
-                results["conf"][v.name],
-                base,
-                weak_classes,
+    for score_space in results.get("score_spaces", ["retained"]):
+        base_key = f"{score_space}:clean_voxel"
+        base = summarize_confusion(results["conf"][base_key], SCANNET20_CLASS_NAMES)
+        base["conf"] = results["conf"][base_key]
+        for v in variants:
+            row = summary_row(
+                    args.method_name,
+                    v,
+                    results["keep_counts"][v.name],
+                    results["keep_sums"][v.name] / max(results["keep_counts"][v.name], 1),
+                    results["conf"][f"{score_space}:{v.name}"],
+                    base,
+                    weak_classes,
             )
-        )
+            row["score_space"] = score_space
+            rows.append(row)
     csv_path = args.output_dir / "masking_battery_summary.csv"
     with csv_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
@@ -401,7 +514,7 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
         writer.writeheader()
         writer.writerows(rows)
 
-    sorted_rows = sorted(rows, key=lambda r: (r["variant"] != "clean_voxel", -float(r["mIoU"])))
+    sorted_rows = sorted(rows, key=lambda r: (r["score_space"], r["variant"] != "clean_voxel", -float(r["mIoU"])))
     lines = []
     lines.append("# Masking Battery Pilot\n")
     lines.append("Voxel-level clean/masked evaluation for shortcut-compatible sparsity. Clean and masked rows use the same input-point evaluation space.\n")
@@ -415,13 +528,14 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
     lines.append(f"- Feature-zero ratios: `{args.feature_zero_ratios}`")
     lines.append(f"- Color feature space: `{args.color_feat_space}`")
     lines.append(f"- Repeats: `{args.repeats}`")
+    lines.append(f"- Full-scene scoring: `{args.full_scene_scoring}`")
     lines.append("")
     lines.append("## Results\n")
-    lines.append("| variant | observed keep | mIoU | ΔmIoU | allAcc | weak mIoU | picture | Δpicture | wall | floor | p->wall |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| score | variant | observed keep | mIoU | ΔmIoU | allAcc | weak mIoU | picture | Δpicture | wall | floor | p->wall |")
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for r in sorted_rows:
         lines.append(
-            f"| `{r['variant']}` | {float(r['observed_keep_frac']):.4f} | "
+            f"| `{r['score_space']}` | `{r['variant']}` | {float(r['observed_keep_frac']):.4f} | "
             f"{float(r['mIoU']):.4f} | {float(r['delta_mIoU']):+.4f} | {float(r['allAcc']):.4f} | "
             f"{float(r['weak_mean_iou']):.4f} | {float(r['picture_iou']):.4f} | {float(r['delta_picture_iou']):+.4f} | "
             f"{float(r['wall_iou']):.4f} | {float(r['floor_iou']):.4f} | {float(r['picture_to_wall']):.4f} |"
@@ -442,6 +556,7 @@ def write_results(args: argparse.Namespace, results: dict, variants: list[Varian
         "config": str(args.config),
         "weight": str(args.weight),
         "color_feat_space": args.color_feat_space,
+        "full_scene_scoring": args.full_scene_scoring,
         "variants": [v.__dict__ for v in variants],
         "outputs": {"summary_csv": str(csv_path), "summary_md": str(md)},
     }

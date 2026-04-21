@@ -42,6 +42,8 @@ STRUCTURED_BLOCK_SIZE="${STRUCTURED_BLOCK_SIZE:-64}"
 REPEATS="${REPEATS:-1}"
 NUM_WORKER="${NUM_WORKER:-8}"
 SUMMARY_PREFIX="${SUMMARY_PREFIX:-tools/concerto_projection_shortcut/results_masking_battery}"
+FULL_SCENE_SCORING="${FULL_SCENE_SCORING:-0}"
+FULL_SCENE_CHUNK_SIZE="${FULL_SCENE_CHUNK_SIZE:-2048}"
 
 echo "=== Masking battery ==="
 date +"date=%Y-%m-%dT%H:%M:%S%z"
@@ -57,8 +59,14 @@ echo "classwise_keep_ratios=${CLASSWISE_KEEP_RATIOS}"
 echo "structured_keep_ratios=${STRUCTURED_KEEP_RATIOS}"
 echo "feature_zero_ratios=${FEATURE_ZERO_RATIOS}"
 echo "repeats=${REPEATS}"
+echo "full_scene_scoring=${FULL_SCENE_SCORING}"
 echo "cuda_visible_devices=${CUDA_VISIBLE_DEVICES}"
 nvidia-smi -L || true
+
+FULL_SCENE_ARGS=()
+if [[ "${FULL_SCENE_SCORING}" == "1" ]]; then
+  FULL_SCENE_ARGS=(--full-scene-scoring --full-scene-chunk-size "${FULL_SCENE_CHUNK_SIZE}")
+fi
 
 python tools/concerto_projection_shortcut/eval_masking_battery.py \
   --config "${CONFIG}" \
@@ -75,6 +83,7 @@ python tools/concerto_projection_shortcut/eval_masking_battery.py \
   --structured-block-size "${STRUCTURED_BLOCK_SIZE}" \
   --repeats "${REPEATS}" \
   --num-worker "${NUM_WORKER}" \
-  --summary-prefix "${SUMMARY_PREFIX}"
+  --summary-prefix "${SUMMARY_PREFIX}" \
+  "${FULL_SCENE_ARGS[@]}"
 
 echo "[done] masking battery"

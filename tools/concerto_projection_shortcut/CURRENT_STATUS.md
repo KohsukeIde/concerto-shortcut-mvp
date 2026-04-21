@@ -390,6 +390,24 @@ investigation.
     `tools/concerto_projection_shortcut/results_ptv3_scannet200_v151_masking_full.md`
     and
     `tools/concerto_projection_shortcut/results_ptv3_s3dis_v151_masking_full.md`.
+  - Full-scene masking scoring completed for available checkpoints only
+    (Concerto decoder/linear, Sonata linear, PTv3 ScanNet20/ScanNet200/S3DIS).
+    The masking evaluators now optionally write both retained-subset rows and
+    `full_nn` rows, where retained logits are propagated back to every original
+    voxel by nearest-neighbor assignment before scoring. Random keep `0.2`
+    robustness mostly survives this stricter full-scene scoring on ScanNet20:
+    Concerto decoder `0.7632` retained vs `0.7527` full, Concerto linear
+    `0.7597` vs `0.7519`, Sonata `0.6951` vs `0.6865`, and PTv3 ScanNet20
+    `0.7131` vs `0.6995`. In contrast, structured block keep `0.2` collapses
+    under full-scene scoring: Concerto decoder `0.7388` retained vs `0.3012`
+    full, Concerto linear `0.7409` vs `0.2907`, Sonata `0.6712` vs `0.2662`,
+    PTv3 ScanNet20 `0.6573` vs `0.2491`, PTv3 ScanNet200 `0.2425` vs
+    `0.0772`, and PTv3 S3DIS `0.6374` vs `0.2881`. This upgrades the masking
+    interpretation: retained-subset scoring hides structured missing-region
+    damage, random sparsity is still highly redundant on ScanNet20, and the
+    effect remains incompatible with a pure coordinate-only explanation because
+    feature-zero collapses all rows. Details are in
+    `tools/concerto_projection_shortcut/results_masking_fullscene_scoring.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -487,11 +505,19 @@ investigation.
 34. ScanNet200 / S3DIS supervised masking externality:
    - [results_ptv3_scannet200_v151_masking_full.md](./results_ptv3_scannet200_v151_masking_full.md)
    - [results_ptv3_s3dis_v151_masking_full.md](./results_ptv3_s3dis_v151_masking_full.md)
-35. Coordinate projection residual handoff:
+35. Full-scene masking scoring:
+   - [results_masking_fullscene_scoring.md](./results_masking_fullscene_scoring.md)
+   - [results_masking_fullscene_concerto_decoder.md](./results_masking_fullscene_concerto_decoder.md)
+   - [results_masking_fullscene_concerto_linear.md](./results_masking_fullscene_concerto_linear.md)
+   - [results_masking_fullscene_sonata_linear.md](./results_masking_fullscene_sonata_linear.md)
+   - [results_masking_fullscene_ptv3_scannet20.md](./results_masking_fullscene_ptv3_scannet20.md)
+   - [results_masking_fullscene_ptv3_scannet200.md](./results_masking_fullscene_ptv3_scannet200.md)
+   - [results_masking_fullscene_ptv3_s3dis.md](./results_masking_fullscene_ptv3_s3dis.md)
+36. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-36. Short narrative summary:
+37. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-37. Reproduction / runner overview:
+38. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

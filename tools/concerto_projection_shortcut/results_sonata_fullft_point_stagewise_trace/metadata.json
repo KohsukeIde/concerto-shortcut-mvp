@@ -1,0 +1,48 @@
+{
+  "args": {
+    "batch_size": 1,
+    "bootstrap_iters": 100,
+    "class_pairs": "picture:wall,door:wall,counter:cabinet",
+    "data_root": "data/scannet",
+    "dry_run": false,
+    "linear_config": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/scannet_semseg_origin/exp/scannet-ft-sonata-e800/config.py",
+    "linear_weight": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/scannet_semseg_origin/exp/scannet-ft-sonata-e800/model/model_best.pth",
+    "logreg_lr": 0.05,
+    "logreg_steps": 600,
+    "max_per_class": 60000,
+    "max_train_batches": 256,
+    "max_val_batches": 128,
+    "num_worker": 8,
+    "output_dir": "/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_sonata_fullft_point_stagewise_trace",
+    "repo_root": "/groups/qgah50055/ide/concerto-shortcut-mvp",
+    "seed": 20260419,
+    "train_split": "train",
+    "val_split": "val",
+    "weight_decay": 0.001
+  },
+  "pairs": [
+    "picture_vs_wall",
+    "door_vs_wall",
+    "counter_vs_cabinet"
+  ],
+  "train": {
+    "class_counts": {
+      "cabinet": 60000,
+      "counter": 60000,
+      "door": 60000,
+      "picture": 60000,
+      "wall": 60000
+    },
+    "seen_batches": 256
+  },
+  "val": {
+    "class_counts": {
+      "cabinet": 60000,
+      "counter": 56679,
+      "door": 60000,
+      "picture": 60000,
+      "wall": 60000
+    },
+    "seen_batches": 128
+  }
+}

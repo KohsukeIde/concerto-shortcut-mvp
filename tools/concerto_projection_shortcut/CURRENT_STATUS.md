@@ -89,12 +89,18 @@ investigation.
     at `data/runs/scannet_semseg_origin/exp/scannet-ft-origin-e800` with final
     mIoU/mAcc/allAcc `0.8075 / 0.8838 / 0.9309`; `picture` improves to
     `0.4415`, while `door/cabinet/counter/sink` land at
-    `0.7695 / 0.7856 / 0.7270 / 0.7473`. This removes the stale "full FT still
-    pending" gap and shows that the weak-class issue is reduced but not
-    eliminated when moving from frozen/light adaptation to full fine-tuning. A
-    pairwise stagewise/oracle audit on the origin full-FT checkpoint remains a
-    separate follow-up. Details are in
-    `tools/concerto_projection_shortcut/results_scannet_origin_fullft.md`.
+    `0.7695 / 0.7856 / 0.7270 / 0.7473`. The pairwise stagewise/oracle audit on
+    this full-FT checkpoint is now also complete: `picture_vs_wall` reaches
+    point/logit/direct balanced accuracy `0.7175 / 0.7206 / 0.7052`, while the
+    base oracle-analysis row is `mIoU=0.7972`, `picture=0.4338`, and
+    `picture -> wall=0.3956`; oracle top-2 / top-5 raise `picture` to
+    `0.8304 / 0.9567`. This removes the stale "full FT still pending" gap and
+    shows that full fine-tuning reduces but does not erase the
+    readout/actionability gap. Details are in
+    `tools/concerto_projection_shortcut/results_scannet_origin_fullft.md`,
+    `tools/concerto_projection_shortcut/results_scannet_origin_fullft_point_stagewise_trace/scannet_point_stagewise_trace.md`,
+    and
+    `tools/concerto_projection_shortcut/results_scannet_origin_fullft_oracle_actionability/oracle_actionability_analysis.md`.
   - Same-checkpoint confusion-graph residual readout pilot completed on the
     origin decoder checkpoint. The implementation works, but the naive
     antisymmetric logit correction is no-go: multi-pair best mIoU delta is only
@@ -402,11 +408,18 @@ investigation.
     evaluation reports mIoU/mAcc/allAcc `0.7955 / 0.8649 / 0.9271`, with
     class-wise IoU including `picture 0.3602`, `door 0.7635`,
     `cabinet 0.7704`, `counter 0.7284`, `sink 0.7337`, and
-    `otherfurniture 0.6674`. This gives a backbone-moving external SSL anchor
-    beyond the released frozen linear-head audit; the pairwise
-    stagewise/oracle trace on this full-FT checkpoint remains a separate
-    follow-up. Details are in
-    `tools/concerto_projection_shortcut/results_sonata_scannet_fullft.md`.
+    `otherfurniture 0.6674`. The full-FT pairwise stagewise/oracle trace is now
+    also complete: `picture_vs_wall` reaches point/logit/direct balanced
+    accuracy `0.6742 / 0.6734 / 0.6485`, while the base oracle-analysis row is
+    `mIoU=0.7770`, `picture=0.3508`, and `picture -> wall=0.5478`; oracle
+    top-2 / top-5 raise `picture` to `0.6003 / 0.7700`, and oracle graph
+    top-5 raises it to `0.9924`. This makes the backbone-moving Sonata row a
+    full parity external SSL anchor, not just a separate aggregate full-FT
+    check. Details are in
+    `tools/concerto_projection_shortcut/results_sonata_scannet_fullft.md`,
+    `tools/concerto_projection_shortcut/results_sonata_fullft_point_stagewise_trace/scannet_point_stagewise_trace.md`,
+    and
+    `tools/concerto_projection_shortcut/results_sonata_fullft_oracle_actionability/oracle_actionability_analysis.md`.
   - PTv3 v1.5.1 supervised ScanNet20 downstream audit completed on the same
     stage-wise / oracle-actionability protocol. This provides the missing
     supervised anchor for the readout-gap claim. PTv3 has a materially cleaner

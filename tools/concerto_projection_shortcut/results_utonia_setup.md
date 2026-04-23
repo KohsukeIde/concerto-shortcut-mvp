@@ -116,4 +116,6 @@ Interpretation:
 - One-scene GPU smoke: passed
 - Local audit integration: point-stagewise trace completed
 - Evaluated results: smoke + ScanNet point-stagewise trace complete
-- Oracle/actionability battery: not yet run
+- Oracle/actionability battery: launched on ABCI-Q as `134881.qjcm`
+  (`submit_utonia_scannet_oracle_actionability_abciq_qf.sh`), output target
+  `tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability`

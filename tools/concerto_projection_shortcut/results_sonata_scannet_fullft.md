@@ -38,6 +38,48 @@
 - `picture` remains weak (`0.3602`) even though aggregate mIoU is strong
   (`0.7955`), so the downstream weak-class issue does not disappear merely by
   moving from frozen linear evaluation to full fine-tuning.
-- A pairwise stagewise/oracle audit on this full-FT checkpoint is still a
-  separate follow-up if we want exact parity with the existing Concerto /
-  Sonata / PTv3 downstream-audit tables.
+
+## Confirmatory Downstream Audit
+
+- Point-stagewise trace:
+  - [`results_sonata_fullft_point_stagewise_trace/scannet_point_stagewise_trace.md`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_sonata_fullft_point_stagewise_trace/scannet_point_stagewise_trace.md)
+- Oracle/actionability:
+  - [`results_sonata_fullft_oracle_actionability/oracle_actionability_analysis.md`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_sonata_fullft_oracle_actionability/oracle_actionability_analysis.md)
+
+### Stage-Wise Trace Highlights
+
+- `picture_vs_wall`
+  - point feature balanced accuracy: `0.6742`
+  - refit probe on full logits: `0.6734`
+  - direct pair margin: `0.6485`
+- `door_vs_wall`
+  - point feature balanced accuracy: `0.9550`
+  - refit probe on full logits: `0.9598`
+  - direct pair margin: `0.9445`
+- `counter_vs_cabinet`
+  - point feature balanced accuracy: `0.9576`
+  - refit probe on full logits: `0.9596`
+  - direct pair margin: `0.9469`
+
+### Oracle / Actionability Highlights
+
+- base mIoU: `0.7770`
+- base picture IoU: `0.3508`
+- base `picture -> wall`: `0.5478`
+- `picture` top-k hit rates:
+  - top-1: `0.4366`
+  - top-2: `0.6206`
+  - top-5: `0.7746`
+- oracle upper bounds:
+  - oracle top-2: mIoU `0.8856`, picture IoU `0.6003`
+  - oracle top-5: mIoU `0.9519`, picture IoU `0.7700`
+  - oracle graph top-5: mIoU `0.9663`, picture IoU `0.9924`
+
+## Updated Interpretation
+
+- Full fine-tuning does not make the Sonata row behave like a cleanly solved
+  supervised readout.
+- `picture` remains weak, `picture -> wall` remains high, and the candidate-set
+  oracle headroom is still large.
+- This keeps Sonata useful as a backbone-moving external SSL anchor for the ED
+  framing, rather than collapsing it into a trivial no-gap comparator.

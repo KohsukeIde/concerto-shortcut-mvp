@@ -1,0 +1,140 @@
+{
+  "args": {
+    "batch_size": 1,
+    "bias_lr": 0.05,
+    "bias_steps": 1000,
+    "bias_weight_decay": 0.001,
+    "class_pairs": "picture:wall,door:wall,counter:cabinet",
+    "config": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/scannet_semseg_origin/exp/scannet-ft-sonata-e800/config.py",
+    "data_root": "/groups/qgah50055/ide/3d-sans-3dscans/scannet",
+    "dry_run": false,
+    "graph_top_ks": "1,2,3,5",
+    "max_geometry_per_class": 60000,
+    "max_per_class": 60000,
+    "max_train_batches": 256,
+    "max_train_points": 600000,
+    "max_val_batches": -1,
+    "num_worker": 8,
+    "oracle_top_ks": "2,3,5,10",
+    "output_dir": "/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_sonata_fullft_oracle_actionability",
+    "pair_probe_lr": 0.05,
+    "pair_probe_steps": 800,
+    "pair_probe_weight_decay": 0.001,
+    "prior_alphas": "0.25,0.5,0.75,1.0",
+    "repo_root": "/groups/qgah50055/ide/concerto-shortcut-mvp",
+    "seed": 20260419,
+    "top_ks": "1,2,3,5,10,20",
+    "train_split": "train",
+    "val_split": "val",
+    "weak_classes": "picture,counter,door",
+    "weight": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/scannet_semseg_origin/exp/scannet-ft-sonata-e800/model/model_best.pth"
+  },
+  "bias_history_balanced": [
+    {
+      "acc": 0.9811499714851379,
+      "loss": 0.07717224955558777,
+      "step": 1
+    },
+    {
+      "acc": 0.9853566884994507,
+      "loss": 0.037708982825279236,
+      "step": 200
+    },
+    {
+      "acc": 0.9853600263595581,
+      "loss": 0.03769804537296295,
+      "step": 400
+    },
+    {
+      "acc": 0.9853600263595581,
+      "loss": 0.037698034197092056,
+      "step": 600
+    },
+    {
+      "acc": 0.9853600263595581,
+      "loss": 0.03769802674651146,
+      "step": 800
+    },
+    {
+      "acc": 0.9853600263595581,
+      "loss": 0.037698034197092056,
+      "step": 1000
+    }
+  ],
+  "bias_history_unweighted": [
+    {
+      "acc": 0.9811466932296753,
+      "loss": 0.05787080153822899,
+      "step": 1
+    },
+    {
+      "acc": 0.9861833453178406,
+      "loss": 0.042895037680864334,
+      "step": 200
+    },
+    {
+      "acc": 0.9861816763877869,
+      "loss": 0.04289504885673523,
+      "step": 400
+    },
+    {
+      "acc": 0.9861816763877869,
+      "loss": 0.04289504140615463,
+      "step": 600
+    },
+    {
+      "acc": 0.9861816763877869,
+      "loss": 0.04289504140615463,
+      "step": 800
+    },
+    {
+      "acc": 0.9861816763877869,
+      "loss": 0.04289504140615463,
+      "step": 1000
+    }
+  ],
+  "pairs": [
+    "picture_vs_wall",
+    "door_vs_wall",
+    "counter_vs_cabinet"
+  ],
+  "train": {
+    "class_counts": {
+      "bathtub": 6533,
+      "bed": 60000,
+      "bookshelf": 17582,
+      "cabinet": 41730,
+      "chair": 60000,
+      "counter": 11223,
+      "curtain": 18667,
+      "desk": 16940,
+      "door": 60000,
+      "floor": 60000,
+      "otherfurniture": 23818,
+      "picture": 856,
+      "refridgerator": 5756,
+      "shower curtain": 5366,
+      "sink": 1745,
+      "sofa": 35670,
+      "table": 51174,
+      "toilet": 5647,
+      "wall": 60000,
+      "window": 57293
+    },
+    "num_points": 600000,
+    "seen_batches": 18
+  },
+  "val": {
+    "seen_batches": 312,
+    "target_counts": {
+      "counter": 221560,
+      "door": 1600191,
+      "picture": 207442
+    }
+  },
+  "weak_classes": [
+    "picture",
+    "counter",
+    "door"
+  ]
+}

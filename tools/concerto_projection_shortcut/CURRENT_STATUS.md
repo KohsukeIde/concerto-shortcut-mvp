@@ -365,6 +365,18 @@ investigation.
     across recent 2D-3D SSL style rows. Details are in
     `tools/concerto_projection_shortcut/results_utonia_setup.md` and
     `tools/concerto_projection_shortcut/results_utonia_scannet_point_stagewise_trace/utonia_scannet_point_stagewise_trace.md`.
+  - The follow-up Utonia oracle/actionability battery is now also complete.
+    Base Utonia is already much cleaner than Concerto/Sonata on the audited
+    weak pairs (`picture` base IoU `0.2952`, `picture -> wall 0.1284`,
+    `picture` top-1/top-2/top-5 hit `0.8716 / 0.9994 / 1.0000`), but it still
+    leaves residual headroom: oracle top-2 / top-5 raise `picture` to
+    `0.9747 / 1.0000` and overall mIoU to `0.9367 / 0.9908`. This sharpens the
+    cross-model reading: large readout/actionability gaps are not universal
+    across recent 2D-3D SSL-style rows, but residual actionability gap is still
+    present even in the constructive Utonia comparator. Details are in
+    `tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_actionability_analysis.md`
+    and the updated
+    `tools/concerto_projection_shortcut/results_cross_model_downstream_audit_scannet20.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

@@ -5,8 +5,9 @@
 Prepared the official Utonia inference repository locally so it can be used as
 an external comparator in the downstream audit.
 
-This started as a setup/integration note and now includes both a successful
-one-scene GPU smoke and a completed ScanNet point-stagewise trace.
+This started as a setup/integration note and now includes a successful
+one-scene GPU smoke, a completed ScanNet point-stagewise trace, and a
+completed oracle/actionability battery.
 
 ## Local Repo
 
@@ -109,13 +110,46 @@ Interpretation:
   observed in Concerto/Sonata is not universal across recent 2D-3D SSL style
   rows.
 
+## ScanNet Oracle / Actionability
+
+The follow-up oracle/actionability battery is now also complete on the same
+released Utonia ScanNet stack.
+
+Result files:
+
+- [`tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_actionability_analysis.md`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_actionability_analysis.md)
+- [`tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_variants.csv`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_variants.csv)
+- [`tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_topk_hit_rates.csv`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_topk_hit_rates.csv)
+
+Headline numbers:
+
+- base row:
+  - `mIoU = 0.7574`
+  - `picture IoU = 0.2952`
+  - `picture -> wall = 0.1284`
+- `picture` top-k hit:
+  - top-1 `0.8716`
+  - top-2 `0.9994`
+  - top-5 `1.0000`
+- oracle top-2 / top-5:
+  - `picture IoU = 0.9747 / 1.0000`
+  - overall `mIoU = 0.9367 / 0.9908`
+
+Interpretation:
+
+- Utonia does not show the same large fixed-readout failure as Concerto or
+  Sonata on the audited ScanNet pairs.
+- At the same time, it is not gap-free: oracle headroom is still present, most
+  visibly on `picture`, but the remaining gap is much smaller relative to the
+  already strong direct fixed-logit readout.
+- This makes Utonia a useful constructive comparator rather than a mere
+  negative control.
+
 ## Current Status
 
 - Repo cloned: yes
 - Local weights present: yes
 - One-scene GPU smoke: passed
 - Local audit integration: point-stagewise trace completed
-- Evaluated results: smoke + ScanNet point-stagewise trace complete
-- Oracle/actionability battery: launched on ABCI-Q as `134881.qjcm`
-  (`submit_utonia_scannet_oracle_actionability_abciq_qf.sh`), output target
-  `tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability`
+- Evaluated results: smoke + ScanNet point-stagewise trace + oracle complete
+- Oracle/actionability battery: completed

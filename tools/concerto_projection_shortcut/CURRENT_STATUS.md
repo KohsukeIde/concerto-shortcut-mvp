@@ -85,12 +85,16 @@ investigation.
     checkpoint shows `picture_vs_wall` is separable in point features
     (`0.8376` balanced accuracy), but the direct 20-way class margin is much
     weaker (`0.7203`) and sampled target `picture` points still go to `wall`
-    `54.96%` of the time. Full FT per-class remains a separate check. An
-    official-like origin full-FT run is now launched as `134179.qjcm` with
-    config `semseg-ptv3-base-v1m1-0c-scannet-ft-origin-e800` on ABCI-Q
-    `rt_QF=2`; the 1-epoch smoke/preflight path built the model, loaded the
-    released backbone, and wrote checkpoints/predictions successfully before
-    the long run.
+    `54.96%` of the time. The official-like origin full-FT run also completed
+    at `data/runs/scannet_semseg_origin/exp/scannet-ft-origin-e800` with final
+    mIoU/mAcc/allAcc `0.8075 / 0.8838 / 0.9309`; `picture` improves to
+    `0.4415`, while `door/cabinet/counter/sink` land at
+    `0.7695 / 0.7856 / 0.7270 / 0.7473`. This removes the stale "full FT still
+    pending" gap and shows that the weak-class issue is reduced but not
+    eliminated when moving from frozen/light adaptation to full fine-tuning. A
+    pairwise stagewise/oracle audit on the origin full-FT checkpoint remains a
+    separate follow-up. Details are in
+    `tools/concerto_projection_shortcut/results_scannet_origin_fullft.md`.
   - Same-checkpoint confusion-graph residual readout pilot completed on the
     origin decoder checkpoint. The implementation works, but the naive
     antisymmetric logit correction is no-go: multi-pair best mIoU delta is only

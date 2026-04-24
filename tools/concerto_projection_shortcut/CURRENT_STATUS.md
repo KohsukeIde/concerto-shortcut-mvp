@@ -531,6 +531,23 @@ investigation.
     condition removes whole-instance silhouettes and therefore is a distinct
     stress family rather than a point-budget-matched version of keep20. See
     `tools/concerto_projection_shortcut/results_masking_examples.md`.
+  - XYZ-MLP PCA RASA pilot completed for the Concerto origin decoder features.
+    The experiment trains an xyz-only MLP on ScanNet20 labels, compresses its
+    penultimate hidden representation to a 2D PCA target, and linearly predicts
+    that task-conditioned coordinate target from frozen Concerto decoder
+    features. On a class-capped train sample (`1.2M` points) and a full-val
+    reservoir sample (`2.0M` points across all `312` val scenes), the 2D target
+    is clearly linearly visible in Concerto features (`val R2=0.4925`; dim0
+    `0.5827`, dim1 `0.4070`). However, this factor is not a clean removable
+    harmful subspace: `picture_all` R2 is negative (`-0.3470`), projection
+    energy is higher for picture points than average (`0.0421` vs `0.0250`),
+    and rank-2 RASA-style removal/add-back does not improve the refit
+    downstream classifier (`0.7317` mIoU baseline refit, best removal/add-back
+    below that). Current interpretation: task-conditioned coordinate-derived
+    factors are present, but they are entangled with useful layout/readout
+    information; raw subspace removal is diagnostic, not a positive method.
+    Details are in
+    `tools/concerto_projection_shortcut/results_xyz_mlp_pca_rasa_reservoir.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -646,11 +663,13 @@ investigation.
    - [results_masking_fullscene_ptv3_s3dis.md](./results_masking_fullscene_ptv3_s3dis.md)
 38. Masking example export / stress interpretation:
    - [results_masking_examples.md](./results_masking_examples.md)
-39. Coordinate projection residual handoff:
+39. XYZ-MLP PCA RASA diagnostic:
+   - [results_xyz_mlp_pca_rasa_reservoir.md](./results_xyz_mlp_pca_rasa_reservoir.md)
+40. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-40. Short narrative summary:
+41. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-41. Reproduction / runner overview:
+42. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

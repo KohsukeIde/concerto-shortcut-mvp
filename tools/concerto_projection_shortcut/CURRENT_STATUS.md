@@ -377,6 +377,28 @@ investigation.
     `tools/concerto_projection_shortcut/results_utonia_scannet_oracle_actionability/oracle_actionability_analysis.md`
     and the updated
     `tools/concerto_projection_shortcut/results_cross_model_downstream_audit_scannet20.md`.
+  - Utonia ScanNet20 support-stress battery is now complete. With full-scene
+    nearest-neighbor scoring from retained support logits, Utonia gives clean
+    `mIoU=0.7586`, random keep `0.2` `0.7464` (`-0.0122`), structured block
+    keep `0.2` `0.2837` (`-0.4748`), object-style masked-model keep `0.2`
+    `0.2340` (`-0.5246`), fixed `4000` points `0.4163` (`-0.3423`), and
+    feature-zero `0.7466` (`-0.0120`). Reading: Utonia's cleaner fixed
+    readout does not eliminate support redundancy; random keep `0.2` remains a
+    weak stress, while structured/object-style missing-support is severe. The
+    feature-zero row should not be compared directly to color-dependent rows
+    because the public Utonia inference path is largely raw-feature agnostic.
+    Details are in
+    `tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.md`.
+  - Paper-facing award-level consolidation tables are now generated. The
+    completed six-dataset main-variant causal battery is reformatted as
+    `tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md`,
+    and the scene/object binding-profile rows are consolidated in
+    `tools/concerto_projection_shortcut/results_binding_profile_summary.md`.
+    The object-side pretext logs for PointGPT-S no-mask and no-mask
+    order-random are similarly summarized in
+    `3D-NEPA/results/pointgpt_object_pretext_summary.md`. This closes the
+    "results exist but are not paper-readable" gap for the main causal table,
+    unified binding profile, and object pretext summary.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

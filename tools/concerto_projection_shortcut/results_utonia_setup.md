@@ -145,6 +145,51 @@ Interpretation:
 - This makes Utonia a useful constructive comparator rather than a mere
   negative control.
 
+## ScanNet Support Stress
+
+The Utonia support-stress battery is now complete with full-scene
+nearest-neighbor scoring from retained support logits.
+
+Result files:
+
+- [`tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.md`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.md)
+- [`tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.csv`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.csv)
+
+Headline numbers:
+
+- clean:
+  - `mIoU = 0.7586`
+  - `picture = 0.3796`
+  - weak-class mean `0.6572`
+- random keep `0.2`:
+  - `mIoU = 0.7464` (`-0.0122`)
+  - `picture = 0.3199`
+- structured block keep `0.2`:
+  - `mIoU = 0.2837` (`-0.4748`)
+  - `picture = 0.1188`
+- object-style masked-model keep `0.2`:
+  - `mIoU = 0.2340` (`-0.5246`)
+  - `picture = 0.0544`
+- fixed `4000` points:
+  - `mIoU = 0.4163` (`-0.3423`)
+  - `picture = 0.0211`
+- feature-zero:
+  - `mIoU = 0.7466` (`-0.0120`)
+  - `picture = 0.3250`
+
+Interpretation:
+
+- Utonia follows the same high-level support-stress pattern as the other
+  ScanNet20 rows: random keep `0.2` is a weak stress, while structured
+  block-removal and object-style masked-model removal are severe.
+- This means Utonia's cleaner fixed readout does not remove the
+  support-redundancy phenomenon. It remains a model/data/protocol property,
+  not a Concerto-only artifact.
+- The Utonia `feature_zero` row is not directly comparable to color-dependent
+  Concerto/Sonata/PTv3 rows. The public Utonia inference path is largely
+  raw-feature agnostic, so zeroing `feat` is a weak intervention for this
+  released artifact.
+
 ## Current Status
 
 - Repo cloned: yes
@@ -153,3 +198,4 @@ Interpretation:
 - Local audit integration: point-stagewise trace completed
 - Evaluated results: smoke + ScanNet point-stagewise trace + oracle complete
 - Oracle/actionability battery: completed
+- Support-stress battery: completed

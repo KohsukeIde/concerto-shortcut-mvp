@@ -435,6 +435,19 @@ investigation.
     SOTA-oriented fusion requires a learned gate/decoder rather than naive
     averaging. Details are in
     `tools/concerto_projection_shortcut/results_cross_model_fusion_scannet20.md`.
+  - A bounded learned-fusion pilot was also completed with a two-fold
+    scene-level validation stacker over Concerto/Sonata/Utonia probability
+    features. This is intentionally not a final train-split method baseline;
+    it tests whether logit/probability-level learning can extract the oracle
+    complementarity at all. The best CV stacker uses inverse-sqrt class weights
+    and reaches `0.7910` mIoU (`picture=0.3836`, `picture->wall=0.3714`),
+    compared with `0.7845` for three-model averaging and `0.7796` for Concerto
+    decoder in the same CV pass. Reading: learned logit-level fusion extracts
+    a small additional gain but remains far below the `0.8556` three-model
+    oracle and below the full-FT reference, so clean SOTA likely requires
+    feature-level fusion or a stronger train-split multi-expert decoder rather
+    than a simple stacker. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_cv_stacker_scannet20.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

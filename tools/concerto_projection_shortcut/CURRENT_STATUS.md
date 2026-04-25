@@ -471,6 +471,33 @@ investigation.
     train-split multi-expert decoder, not another probability-level router.
     Details are in
     `tools/concerto_projection_shortcut/results_cross_model_fusion_cv_router_scannet20_with_ptv3.md`.
+  - Concerto full-FT was added as an additional cached expert using
+    `data/runs/scannet_semseg_origin/exp/scannet-ft-origin-e800/model/model_best.pth`.
+    The full-FT raw-probability export loaded cleanly (`missing=0`,
+    `unexpected=0`) and produced 312 raw-point aligned ScanNet20 validation
+    caches. With Concerto decoder, Sonata, Utonia, Concerto full-FT, and PTv3,
+    the 5-expert oracle reaches `0.8969` mIoU (`weak_mean=0.8399`,
+    `picture=0.6397`, `picture->wall=0.2873`). Pairwise oracle rows are also
+    high: Utonia+fullFT `0.8547`, decoder+fullFT `0.8492`,
+    fullFT+PTv3 `0.8429`. The best simple non-oracle row is the 5-expert
+    average at `0.8065`, just below the local full-FT reference (`~0.8075`) and
+    above the full-FT single row in the same raw-aligned fusion protocol
+    (`0.7969`). Thus full-FT raises the practical fusion floor and confirms
+    substantial cross-protocol complementarity, but simple logit/probability
+    fusion still does not robustly clear the SOTA target. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_scannet20_with_fullft_ptv3.md`.
+  - A matching 5-expert two-fold CV stacker/router pilot was run. The best
+    row is still simple averaging: `avgprob_all=0.8064`. CV linear stackers are
+    slightly lower (`0.8056` with inverse-sqrt class weights, `0.8051`
+    unweighted), the soft oracle-router is `0.8015`, and the hard router is
+    `0.7924`. Router targets are dominated by the full-FT expert but still
+    assign non-trivial mass to PTv3, Utonia, Concerto decoder, and Sonata,
+    indicating real complementarity but poor selectability from probability
+    features. Reading: the full-FT expert makes cross-model fusion promising,
+    but the next SOTA attempt should move to feature-level fusion or a proper
+    train-split multi-expert decoder; probability-level routing is saturated.
+    Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_cv_router_scannet20_with_fullft_ptv3.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

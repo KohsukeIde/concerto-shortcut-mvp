@@ -422,6 +422,19 @@ investigation.
     comparator, not as causal evidence for RoPE, modality blinding, perceptual
     granularity rescale, scale, or data size individually. Details are in
     `tools/concerto_projection_shortcut/results_utonia_ablation_availability.md`.
+  - Cross-model complementarity / simple-fusion audit completed for Concerto
+    decoder, Sonata linear, and the released Utonia ScanNet stack on raw-point
+    aligned ScanNet20 val. The oracle upper bound is high: Concerto+Utonia
+    reaches `0.8301` mIoU, Concerto+Sonata reaches `0.8331`, and the three-model
+    oracle reaches `0.8556`. This means the model errors are materially
+    complementary. However, simple probability averaging / temperature averaging
+    / max-confidence gates recover only a small part of this headroom; the best
+    non-oracle row is Concerto+Utonia temperature-averaged probabilities at
+    `0.7867` mIoU, above Concerto decoder (`0.7782`) but below the full-FT
+    reference (`~0.8075`). Reading: cross-model complementarity is real, but
+    SOTA-oriented fusion requires a learned gate/decoder rather than naive
+    averaging. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_scannet20.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

@@ -548,6 +548,18 @@ investigation.
     information; raw subspace removal is diagnostic, not a positive method.
     Details are in
     `tools/concerto_projection_shortcut/results_xyz_mlp_pca_rasa_reservoir.md`.
+  - XYZ-MLP PCA error-conditioned energy follow-up completed on the full
+    ScanNet val split (`35.9M` points). Hard-class errors to majority classes
+    have higher coordinate-factor projection energy than correct hard-class
+    points (`0.0234` vs `0.0095`) and slightly higher R2 (`0.3101` vs
+    `0.2646`), so the task-conditioned coordinate factor is not completely
+    unrelated to hard errors. However, correct majority-class points remain the
+    strongest coordinate-factor subset (`energy=0.0279`, `R2=0.5192`), and the
+    key `picture_to_wall` subset has high energy (`0.0413`) but near/under-zero
+    R2 (`-0.0517`). This supports the current reading: the coordinate-derived
+    factor exists and is mildly error-associated, but it is not a clean harmful
+    shortcut subspace explaining the picture/wall failure. Details are in
+    `tools/concerto_projection_shortcut/results_xyz_mlp_pca_error_energy.md`.
   - Data and run outputs should live under repo-local `data/`.
   - Existing ScanNet is used through a symlink, not copied.
   - Do not run the optional fine-tune, e075/e100, or broad posthoc sweeps
@@ -665,11 +677,13 @@ investigation.
    - [results_masking_examples.md](./results_masking_examples.md)
 39. XYZ-MLP PCA RASA diagnostic:
    - [results_xyz_mlp_pca_rasa_reservoir.md](./results_xyz_mlp_pca_rasa_reservoir.md)
-40. Coordinate projection residual handoff:
+40. XYZ-MLP PCA error-conditioned energy:
+   - [results_xyz_mlp_pca_error_energy.md](./results_xyz_mlp_pca_error_energy.md)
+41. Coordinate projection residual handoff:
    - [HANDOFF_PROJRES_V1.md](./HANDOFF_PROJRES_V1.md)
-41. Short narrative summary:
+42. Short narrative summary:
    - [results_interim_summary_2026-04-06.md](./results_interim_summary_2026-04-06.md)
-42. Reproduction / runner overview:
+43. Reproduction / runner overview:
    - [README.md](./README.md)
 
 ## Official Large-Video Checkpoint Causal Battery

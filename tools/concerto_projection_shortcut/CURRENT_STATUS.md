@@ -448,6 +448,29 @@ investigation.
     feature-level fusion or a stronger train-split multi-expert decoder rather
     than a simple stacker. Details are in
     `tools/concerto_projection_shortcut/results_cross_model_fusion_cv_stacker_scannet20.md`.
+  - PTv3 v1.5.1 raw-point probability caches were exported separately from the
+    official Pointcept v1.5.1 code path, then added as a fourth expert to the
+    cross-model fusion audit. The 4-expert oracle
+    (Concerto/Sonata/Utonia/PTv3) reaches `0.8843` mIoU, with weak-class mean
+    `0.8221`, so the complementarity ceiling is very large. Pairwise oracles
+    also rise: Concerto+PTv3 reaches `0.8485`, Utonia+PTv3 `0.8495`. However,
+    simple probability fusion still does not convert this into a SOTA row:
+    the best simple 4-expert average is `0.7959`, still below the full-FT
+    reference (`~0.8075`). Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_scannet20_with_ptv3.md`.
+  - An oracle-guided expert-router pilot was run on the same 4 experts using a
+    two-fold scene-level validation protocol. The router target chooses the
+    correct expert with the highest correct-class probability, or the expert
+    with the highest correct-class probability when all experts are wrong.
+    This directly tests whether the large oracle headroom is selectable from
+    expert probability features. It is not: the best CV linear stacker is
+    `0.7975`, three/four-expert averaging is `0.7959`, the soft oracle-router
+    is only `0.7812`, and the hard router is `0.7676`. Reading: complementarity
+    is real, but logit/probability-level expert selection is not sufficiently
+    learnable. A SOTA fusion attempt would need feature-level fusion or a
+    train-split multi-expert decoder, not another probability-level router.
+    Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_cv_router_scannet20_with_ptv3.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

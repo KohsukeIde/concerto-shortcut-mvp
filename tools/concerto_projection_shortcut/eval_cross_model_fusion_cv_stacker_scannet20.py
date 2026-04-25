@@ -26,10 +26,13 @@ from tools.concerto_projection_shortcut.eval_cross_model_fusion_scannet20 import
     build_utonia_scene_transform,
     current_raw_scene_from_dataset,
     forward_current_raw_logits,
+    load_cached_expert_logits,
     parse_current_specs,
+    parse_cached_experts,
     parse_weak_ids,
     picture_to_wall,
     resolve,
+    scene_name_from_dataset,
     softmax_logits,
     transform_utonia_scene,
     write_csv,
@@ -85,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--utonia-weight", type=Path, default=Path("data/weights/utonia/utonia.pth"))
     parser.add_argument("--utonia-head", type=Path, default=Path("data/weights/utonia/utonia_linear_prob_head_sc.pth"))
     parser.add_argument("--disable-utonia-flash", action="store_true")
+    parser.add_argument("--cached-expert", action="append", default=[], help="Repeated spec name::cache_dir.")
     parser.add_argument("--weak-classes", default="picture,counter,desk,sink,cabinet,shower curtain,door")
     parser.add_argument("--summary-prefix", type=Path, default=Path("tools/concerto_projection_shortcut/results_cross_model_fusion_cv_stacker_scannet20"))
     return parser.parse_args()
@@ -193,8 +197,9 @@ def load_models(args: argparse.Namespace, repo_root: Path):
             args.disable_utonia_flash,
         )
         utonia = (model, head, build_utonia_scene_transform())
-    names = [name for name, _ in current] + (["Utonia"] if utonia is not None else [])
-    return loader, current, utonia, names
+    cached = parse_cached_experts(args.cached_expert, repo_root)
+    names = [name for name, _ in current] + (["Utonia"] if utonia is not None else []) + [name for name, _ in cached]
+    return loader, current, utonia, cached, names
 
 
 @torch.no_grad()
@@ -202,6 +207,7 @@ def scene_logits(
     loader,
     current_models,
     utonia,
+    cached_experts,
     batch_idx: int,
     batch: dict,
     chunk_size: int,
@@ -222,6 +228,9 @@ def scene_logits(
         if labels.shape != labels_ref.shape or not torch.equal(labels, labels_ref):
             raise RuntimeError(f"Utonia label mismatch at batch {batch_idx}: {labels.shape} vs {labels_ref.shape}")
         logits_by_model["Utonia"] = logits
+    scene_name = scene_name_from_dataset(loader.dataset, batch_idx)
+    for name, cache_dir in cached_experts:
+        logits_by_model[name] = load_cached_expert_logits(cache_dir, scene_name, labels_ref)
     return logits_by_model, labels_ref
 
 
@@ -235,7 +244,7 @@ def main() -> None:
     summary_prefix.parent.mkdir(parents=True, exist_ok=True)
     weak_ids = parse_weak_ids(args.weak_classes)
     num_classes = len(SCANNET20_CLASS_NAMES)
-    loader, current_models, utonia, names = load_models(args, repo_root)
+    loader, current_models, utonia, cached_experts, names = load_models(args, repo_root)
     generator = torch.Generator().manual_seed(args.seed)
 
     fold_x: list[list[torch.Tensor]] = [[], []]
@@ -244,7 +253,7 @@ def main() -> None:
         for batch_idx, batch in enumerate(loader):
             if args.max_val_batches >= 0 and batch_idx >= args.max_val_batches:
                 break
-            logits_by_model, labels = scene_logits(loader, current_models, utonia, batch_idx, batch, args.full_scene_chunk_size)
+            logits_by_model, labels = scene_logits(loader, current_models, utonia, cached_experts, batch_idx, batch, args.full_scene_chunk_size)
             feats = fusion_features(logits_by_model, names)
             scene_fold = batch_idx % 2
             train_for_eval_fold = 1 - scene_fold
@@ -289,7 +298,7 @@ def main() -> None:
         for batch_idx, batch in enumerate(loader):
             if args.max_val_batches >= 0 and batch_idx >= args.max_val_batches:
                 break
-            logits_by_model, labels = scene_logits(loader, current_models, utonia, batch_idx, batch, args.full_scene_chunk_size)
+            logits_by_model, labels = scene_logits(loader, current_models, utonia, cached_experts, batch_idx, batch, args.full_scene_chunk_size)
             feats = fusion_features(logits_by_model, names)
             fold = batch_idx % 2
             for power in weight_powers:

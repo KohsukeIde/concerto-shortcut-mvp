@@ -3,8 +3,8 @@
 #PBS -q abciq
 #PBS -W group_list=qgah50055
 #PBS -l rt_QF=1
-#PBS -l walltime=04:00:00
-#PBS -N xmodel_fusion
+#PBS -l walltime=03:00:00
+#PBS -N ptv3_probs
 #PBS -j oe
 
 set -euo pipefail
@@ -19,42 +19,36 @@ module load "${CUDA_MODULE:-cuda/12.6/12.6.2}" 2>/dev/null || module load cuda/1
 source "${REPO_ROOT}/tools/concerto_projection_shortcut/device_defaults.sh"
 ensure_venv_active
 
-export PYTHONPATH="${REPO_ROOT}/external/Utonia:${REPO_ROOT}:${PYTHONPATH:-}"
-export HF_HOME HF_HUB_CACHE HUGGINGFACE_HUB_CACHE HF_XET_CACHE TORCH_HOME
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 LOG_DIR="${POINTCEPT_DATA_ROOT}/logs/abciq"
 mkdir -p "${LOG_DIR}"
-LOG_FILE="${LOG_DIR}/cross_model_fusion_scannet20_${PBS_JOBID:-manual}.log"
+LOG_FILE="${LOG_DIR}/export_ptv3_v151_raw_probs_scannet20_${PBS_JOBID:-manual}.log"
 exec > >(tee -a "${LOG_FILE}") 2>&1
 
-echo "=== Cross-model fusion ScanNet20 ==="
+echo "=== Export PTv3 v1.5.1 raw ScanNet20 probabilities ==="
 echo "date=$(date -Is)"
 echo "pbs_jobid=${PBS_JOBID:-}"
 echo "repo_root=${REPO_ROOT}"
+echo "official_root=${OFFICIAL_ROOT:-data/tmp/Pointcept-v1.5.1}"
+echo "weight=${WEIGHT:-data/weights/ptv3/scannet-semseg-pt-v3m1-0-base/model/model_best.pth}"
 echo "data_root=${SCANNET_DATA_ROOT:-${SCANNET_EXTRACT_DIR}}"
-echo "output_dir=${OUTPUT_DIR:-data/runs/cross_model_fusion_scannet20/full}"
+echo "output_dir=${OUTPUT_DIR:-data/runs/ptv3_v151_raw_probs_scannet20/full}"
 echo "max_val_batches=${MAX_VAL_BATCHES:--1}"
-echo "cached_expert=${CACHED_EXPERT:-}"
 nvidia-smi -L || true
 
-CACHED_ARGS=()
-if [[ -n "${CACHED_EXPERT:-}" ]]; then
-  CACHED_ARGS=(--cached-expert "${CACHED_EXPERT}")
-fi
-
-"${PYTHON_BIN}" tools/concerto_projection_shortcut/eval_cross_model_fusion_scannet20.py \
+"${PYTHON_BIN}" tools/concerto_projection_shortcut/export_ptv3_v151_raw_probs_scannet20.py \
   --repo-root "${REPO_ROOT}" \
+  --official-root "${OFFICIAL_ROOT:-data/tmp/Pointcept-v1.5.1}" \
+  --config "${CONFIG:-configs/scannet/semseg-pt-v3m1-0-base.py}" \
+  --weight "${WEIGHT:-data/weights/ptv3/scannet-semseg-pt-v3m1-0-base/model/model_best.pth}" \
   --data-root "${SCANNET_DATA_ROOT:-${SCANNET_EXTRACT_DIR}}" \
-  --output-dir "${OUTPUT_DIR:-data/runs/cross_model_fusion_scannet20/full}" \
+  --split "${SPLIT:-val}" \
+  --segment-key "${SEGMENT_KEY:-segment20}" \
+  --output-dir "${OUTPUT_DIR:-data/runs/ptv3_v151_raw_probs_scannet20/full}" \
   --max-val-batches "${MAX_VAL_BATCHES:--1}" \
-  --num-worker "${NUM_WORKER:-4}" \
-  --full-scene-chunk-size "${FULL_SCENE_CHUNK_SIZE:-2048}" \
-  --summary-prefix "${SUMMARY_PREFIX:-tools/concerto_projection_shortcut/results_cross_model_fusion_scannet20}" \
-  --include-utonia \
-  "${CACHED_ARGS[@]}" \
   ${EXTRA_ARGS:-}
 
-echo "[done] cross-model fusion ScanNet20"
+echo "[done] export PTv3 v1.5.1 raw probabilities"
 echo "[log] ${LOG_FILE}"

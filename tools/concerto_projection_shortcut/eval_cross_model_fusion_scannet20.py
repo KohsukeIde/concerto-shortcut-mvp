@@ -78,6 +78,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--utonia-weight", type=Path, default=Path("data/weights/utonia/utonia.pth"))
     parser.add_argument("--utonia-head", type=Path, default=Path("data/weights/utonia/utonia_linear_prob_head_sc.pth"))
     parser.add_argument("--disable-utonia-flash", action="store_true")
+    parser.add_argument(
+        "--cached-expert",
+        action="append",
+        default=[],
+        help="Repeated spec name::cache_dir. Cache files are per-scene .npz with probs or logits and labels.",
+    )
     parser.add_argument("--weak-classes", default="picture,counter,desk,sink,cabinet,shower curtain,door")
     parser.add_argument("--summary-prefix", type=Path, default=Path("tools/concerto_projection_shortcut/results_cross_model_fusion_scannet20"))
     parser.add_argument("--dry-run", action="store_true")
@@ -117,6 +123,17 @@ def parse_weak_ids(text: str) -> list[int]:
         if name not in NAME_TO_ID:
             raise ValueError(f"unknown weak class: {name}")
         out.append(NAME_TO_ID[name])
+    return out
+
+
+def parse_cached_experts(raw_specs: list[str], repo_root: Path) -> list[tuple[str, Path]]:
+    out = []
+    for raw in raw_specs:
+        parts = raw.split("::")
+        if len(parts) != 2:
+            raise ValueError(f"invalid --cached-expert spec: {raw}")
+        name, cache_dir = parts
+        out.append((name, resolve(repo_root, Path(cache_dir))))
     return out
 
 
@@ -193,6 +210,30 @@ def current_raw_scene_from_dataset(dataset, idx: int) -> dict:
         if inst.exists():
             scene["instance"] = np.load(inst)
     return scene
+
+
+def scene_name_from_dataset(dataset, idx: int) -> str:
+    try:
+        return str(dataset.get_data_name(idx))
+    except Exception:
+        return Path(dataset.data_list[idx]).name
+
+
+def load_cached_expert_logits(cache_dir: Path, scene_name: str, labels_ref: torch.Tensor) -> torch.Tensor:
+    path = cache_dir / f"{scene_name}.npz"
+    if not path.exists():
+        raise FileNotFoundError(f"missing cached expert scene file: {path}")
+    with np.load(path) as data:
+        labels = torch.from_numpy(data["labels"].astype(np.int64))
+        if labels.shape != labels_ref.shape or not torch.equal(labels, labels_ref):
+            raise RuntimeError(f"cached expert label mismatch for {path}: {labels.shape} vs {labels_ref.shape}")
+        if "logits" in data:
+            logits_np = data["logits"].astype(np.float32)
+        elif "probs" in data:
+            logits_np = np.log(np.clip(data["probs"].astype(np.float32), 1e-8, 1.0))
+        else:
+            raise KeyError(f"cache file lacks logits/probs: {path}")
+    return torch.from_numpy(logits_np)
 
 
 def softmax_logits(logits: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
@@ -321,6 +362,7 @@ def main() -> None:
     summary_prefix = resolve(repo_root, args.summary_prefix)
     summary_prefix.parent.mkdir(parents=True, exist_ok=True)
     current_specs = parse_current_specs(args)
+    cached_experts = parse_cached_experts(args.cached_expert, repo_root)
 
     if args.dry_run:
         print(f"[dry-run] current={current_specs}")
@@ -373,6 +415,9 @@ def main() -> None:
                 if labels.shape != labels_ref.shape or not torch.equal(labels, labels_ref):
                     raise RuntimeError(f"Utonia label mismatch at batch {batch_idx}: {labels.shape} vs {labels_ref.shape}")
                 logits_by_model["Utonia"] = logits
+            scene_name = scene_name_from_dataset(loader.dataset, batch_idx)
+            for name, cache_dir in cached_experts:
+                logits_by_model[name] = load_cached_expert_logits(cache_dir, scene_name, labels_ref)
 
             preds = build_variant_predictions(logits_by_model, labels_ref, weak_ids)
             for variant, pred in preds.items():
@@ -479,6 +524,7 @@ def main() -> None:
                 "include_utonia": args.include_utonia,
                 "utonia_weight": str(args.utonia_weight),
                 "utonia_head": str(args.utonia_head),
+                "cached_experts": [(name, str(path)) for name, path in cached_experts],
                 "max_val_batches": args.max_val_batches,
             },
             indent=2,

@@ -39,7 +39,13 @@ echo "max_val_batches=${MAX_VAL_BATCHES:--1}"
 echo "sample_points_per_scene=${SAMPLE_POINTS_PER_SCENE:-4096}"
 echo "epochs=${STACKER_EPOCHS:-60}"
 echo "class_weight_powers=${CLASS_WEIGHT_POWERS:-0.0,0.5}"
+echo "cached_expert=${CACHED_EXPERT:-}"
 nvidia-smi -L || true
+
+CACHED_ARGS=()
+if [[ -n "${CACHED_EXPERT:-}" ]]; then
+  CACHED_ARGS=(--cached-expert "${CACHED_EXPERT}")
+fi
 
 "${PYTHON_BIN}" tools/concerto_projection_shortcut/eval_cross_model_fusion_cv_stacker_scannet20.py \
   --repo-root "${REPO_ROOT}" \
@@ -53,6 +59,7 @@ nvidia-smi -L || true
   --class-weight-powers "${CLASS_WEIGHT_POWERS:-0.0,0.5}" \
   --summary-prefix "${SUMMARY_PREFIX:-tools/concerto_projection_shortcut/results_cross_model_fusion_cv_stacker_scannet20}" \
   --include-utonia \
+  "${CACHED_ARGS[@]}" \
   ${EXTRA_ARGS:-}
 
 echo "[done] cross-model fusion CV stacker ScanNet20"

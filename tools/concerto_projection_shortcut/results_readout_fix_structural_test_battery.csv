@@ -1,0 +1,14 @@
+family,method,best_delta_miou,best_delta_picture_iou,picture_to_wall_effect,decision,source
+fixed-logit residual,confusion residual readout,0.0002,0.00055,reduced slightly,below gate,results_confusion_residual_readout.md
+top-k rerank,top-K pairwise reranker,0.00022,0.00066,reduced at small lambda,below gate,results_topk_pairwise_rerank_decoder.md
+validation-aware set rerank,constrained top-K set decoder,0.00012274,0.00129753,0.4386 -> 0.4277,below gate,results_constrained_topk_set_decoder.md
+feature-conditioned adapter,CoDA residual decoder adapter,0.00023654,0.00167642,0.4436 -> 0.4232,below gate / transfer failure,results_coda_decoder_adapter.md
+in-loop decoder adaptation,CIDA,-0.00312027,-0.02025931,reduced slightly but collateral damage,no-go,results_cida_inloop_decoder_adaptation.md
+nonparametric retrieval,kNN readout,0.0002,0.0003,minor,no-go,results_knn_readout_small.md
+prototype metric readout,prototype / multi-prototype readout,0.0002,0.0008,minor,no-go,results_prototype_readout.md
+decoupled classifier,tau / cRT / balanced softmax,0.0002,-0.0006,can reduce confusion but not IoU,no-go,results_decoupled_classifier_readout.md
+region readout,purity-aware hybrid region decoder,0.0002,0.0,no useful movement,no-go,results_purity_aware_region_readout.md
+proposal/readout,proposal-verify decoder,0.0,0.0,base remains best,no-go,results_proposal_verify_decoder.md
+encoder adaptation,linear-head LoRA,0.0132,0.0225,0.4151 -> 0.3867,positive only in low-capacity linear-head family,results_scannet_lora_origin_perclass.md
+decoder-capacity encoder adaptation,decoder + LoRA,-0.0028,-0.0013,0.4310 -> 0.4387,no-go under decoder-capacity matching,results_scannet_dec_lora_origin_perclass.md
+full fine-tuning,Concerto origin official-like full FT,0.0187,0.0198,residual 0.3956 in audit row,improves aggregate but does not close oracle headroom,results_scannet_origin_fullft.md; results_scannet_origin_fullft_oracle_actionability/

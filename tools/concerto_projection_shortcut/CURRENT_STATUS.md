@@ -399,6 +399,29 @@ investigation.
     `3D-NEPA/results/pointgpt_object_pretext_summary.md`. This closes the
     "results exist but are not paper-readable" gap for the main causal table,
     unified binding profile, and object pretext summary.
+  - Representation-readout actionability gap tables are now generated. The
+    cross-model, multi-pair table
+    `tools/concerto_projection_shortcut/results_actionability_gap_cross_model_pairs.md`
+    separates feature content, fixed pair-margin realization, observed
+    target-to-confusion error, and oracle top-k headroom. The key reading is
+    that the failure is not representation collapse, but also not a trivial
+    readout-only artifact: pairwise information is present, Concerto/Sonata
+    show large `picture -> wall` confusion, PTv3/Utonia are cleaner on fixed
+    pairwise readout, and oracle headroom remains in all rows. The companion
+    structural-test table
+    `tools/concerto_projection_shortcut/results_readout_fix_structural_test_battery.md`
+    summarizes fixed-logit, cached-feature, in-loop, nonparametric,
+    decoupled-classifier, region/proposal, LoRA, and full-FT attempts. These
+    recover little of the oracle headroom, so the safe phrasing is
+    "representation-readout actionability gap", not "readout problem only".
+  - Utonia ablation checkpoint availability was checked locally and against the
+    public HuggingFace model repo. Only the released stack weights are
+    available (`utonia.pth`, `pretrain-utonia-v1m1-0-base_stagev2.pth`, and
+    `utonia_linear_prob_head_sc.pth`); no scale/data/design ablation weights
+    were found. Therefore Utonia should be used as a constructive released-stack
+    comparator, not as causal evidence for RoPE, modality blinding, perceptual
+    granularity rescale, scale, or data size individually. Details are in
+    `tools/concerto_projection_shortcut/results_utonia_ablation_availability.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

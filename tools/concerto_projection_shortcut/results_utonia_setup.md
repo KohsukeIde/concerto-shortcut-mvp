@@ -144,6 +144,10 @@ Interpretation:
   already strong direct fixed-logit readout.
 - This makes Utonia a useful constructive comparator rather than a mere
   negative control.
+- This should not be interpreted as causal evidence for a specific Utonia
+  component. Public/local weights currently expose the released stack, not
+  scale/data/design ablations. See
+  [`tools/concerto_projection_shortcut/results_utonia_ablation_availability.md`](/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_ablation_availability.md).
 
 ## ScanNet Support Stress
 

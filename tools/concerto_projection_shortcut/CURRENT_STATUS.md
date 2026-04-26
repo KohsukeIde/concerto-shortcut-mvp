@@ -49,6 +49,12 @@ investigation.
     indoor Concerto datasets. Target swaps remain clearly positive on ARKit and
     ScanNet. The coord-MLP rival is weak on ARKit and partial on ScanNet, so it
     is usable only as a lower-bound rival, not as a full shortcut proxy.
+    A six-dataset recalibration of the existing coord-MLP losses against the
+    completed causal battery is now complete. The coord-only rival has positive
+    clean-to-corruption closure on `5/6` datasets, but the mean closure is only
+    `14.5%` and `s3dis` is worse than the mean corruption reference. Therefore
+    the paper-safe claim is dataset-dependent coordinate-satisfiable signal,
+    not a strong six-dataset average coord-only explanation.
   - A target-corruption distance diagnostic completed for the main-variant
     ARKit/ScanNet battery. ARKit cross-scene targets are not closer to the
     original targets than cross-image targets, so the lower ARKit cross-scene
@@ -392,6 +398,8 @@ investigation.
   - Paper-facing award-level consolidation tables are now generated. The
     completed six-dataset main-variant causal battery is reformatted as
     `tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md`,
+    the six-dataset coord-MLP rival calibration is summarized in
+    `tools/concerto_projection_shortcut/results_coord_mlp_rival_six_dataset_calibration.md`,
     and the scene/object binding-profile rows are consolidated in
     `tools/concerto_projection_shortcut/results_binding_profile_summary.md`.
     The object-side pretext logs for PointGPT-S no-mask and no-mask
@@ -974,8 +982,33 @@ Acceptance:
     `scannet`, present but much weaker on `s3dis`, and consistently positive
     across `global_target_permutation`, `cross_image_target_swap`, and
     `cross_scene_target_swap`.
-- Main-variant coord-MLP rival:
-  `data/runs/main_variant_coord_mlp_rival/main-origin-six-step05/results_official_coord_mlp_rival.md`.
+  - Main-variant coord-MLP rival:
+    `data/runs/main_variant_coord_mlp_rival/main-origin-six-step05/results_official_coord_mlp_rival.md`.
+  - Paper-facing six-dataset calibration:
+    `tools/concerto_projection_shortcut/results_coord_mlp_rival_six_dataset_calibration.md`.
+    Relative to the mean of global permutation, cross-image swap, and
+    cross-scene swap, closure is `15.1% / 34.4% / 41.4% / -73.0% / 45.6% /
+    23.5%` for `arkit / scannet / scannetpp / s3dis / hm3d / structured3d`.
+    Mean closure is `14.5%`, so do not write that a coord-only rival explains
+    the six-dataset objective response on average.
+  - S3DIS failure diagnostic:
+    `tools/concerto_projection_shortcut/results_coord_mlp_s3dis_failure_diagnostic.md`.
+    S3DIS is the outlier for three concrete reasons: the coord-rival val cache
+    has only `449` rows versus `15k-28k` rows for the other datasets; its
+    clean-to-mean-corruption denominator is small (`0.3003`); and train/val
+    target statistics shift much more strongly (`target mean cosine=0.8536`,
+    coordinate mean shift `0.4489`). A S3DIS-only coord MLP reduces train loss
+    to `5.8708` but still gives val loss `6.2347`, worse than the mean
+    corruption reference (`6.1764`). Reading: S3DIS is not evidence for a
+    clean no-coordinate result; it is a sample/shift-sensitive outlier and
+    should be reported separately or excluded from any coordinate-closure
+    average.
+  - Follow-up `135489.qjcm` submitted:
+    `tools/concerto_projection_shortcut/submit_s3dis_coord_mlp_highval_abciq_qf.sh`.
+    This reruns S3DIS-only coord extraction with `max_val_batches=512` and
+    `max_rows_per_batch=4096` without overwriting the canonical repo-level
+    coord-rival CSV. Purpose: determine whether the `449` val rows are an
+    extraction-cap artifact or a true lack of valid S3DIS image-point rows.
 - Main-variant target-corruption distance:
   `data/runs/main_variant_target_corruption_distance/main-origin-six-step05/results_target_corruption_distance.md`.
 - SR-LoRA Phase A:
@@ -1636,9 +1669,9 @@ Remaining after these complete:
 - Summarize seed variance. If any seed repeats fail or exceed walltime, label
   the corresponding row as a single-run controlled audit rather than making a
   seed-variance claim.
-- Summarize `ptgpt_shapenetpart_official_support_stress.md` and
-  `ptgpt_shapenetpart_nomask_support_stress.md` into the object-level results
-  section.
+- ShapeNetPart support-stress rows are already folded into
+  `results_binding_profile_summary.md`; still copy the short interpretation
+  into the object-level paper section when drafting.
 
 1. Treat the current pair-emphasis decoder-family pilots (CoDA/CIDA) as no-go.
    The useful signal is diagnostic: moving `picture` away from `wall` is

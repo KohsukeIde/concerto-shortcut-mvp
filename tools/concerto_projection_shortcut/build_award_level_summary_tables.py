@@ -103,6 +103,131 @@ def build_six_dataset_table() -> None:
     (OUT_DIR / "results_main_variant_causal_battery_paper_table.md").write_text("\n".join(lines) + "\n")
 
 
+def _coord_closure(coord_loss: float, clean_loss: float, corrupt_loss: float) -> tuple[float | str, float | str]:
+    denom = corrupt_loss - clean_loss
+    if denom <= 0:
+        return "", ""
+    relative_position = (coord_loss - clean_loss) / denom
+    closure = 1.0 - relative_position
+    return relative_position, closure
+
+
+def build_six_dataset_coord_rival_calibration() -> None:
+    """Calibrate the existing coord-only rival against six-dataset references.
+
+    `results_official_coord_mlp_rival.csv` already contains coord-MLP losses
+    for all six datasets, but only ARKit/ScanNet carried reference losses in
+    that original file. The paper-facing claim needs the coord rival normalized
+    against the same six-dataset causal battery used for target corruption.
+    """
+
+    coord_src = OUT_DIR / "results_official_coord_mlp_rival.csv"
+    causal_src = OUT_DIR / "results_main_variant_causal_battery.csv"
+    if not coord_src.exists() or not causal_src.exists():
+        return
+
+    causal_rows = read_csv(causal_src)
+    by_ds: dict[str, dict[str, float]] = {}
+    for row in causal_rows:
+        by_ds.setdefault(row["dataset"], {})[row["mode"]] = float(row["enc2d_loss_mean"])
+
+    rows = []
+    for row in read_csv(coord_src):
+        dataset = row["dataset"]
+        if dataset not in by_ds:
+            continue
+        refs = by_ds[dataset]
+        coord_loss = float(row["coord_mlp_loss"])
+        clean_loss = refs["none"]
+        global_loss = refs["global_target_permutation"]
+        cross_image_loss = refs["cross_image_target_swap"]
+        cross_scene_loss = refs["cross_scene_target_swap"]
+        mean_corrupt_loss = (global_loss + cross_image_loss + cross_scene_loss) / 3.0
+
+        rel_mean, closure_mean = _coord_closure(coord_loss, clean_loss, mean_corrupt_loss)
+        rel_global, closure_global = _coord_closure(coord_loss, clean_loss, global_loss)
+        rel_cross_image, closure_cross_image = _coord_closure(coord_loss, clean_loss, cross_image_loss)
+        rel_cross_scene, closure_cross_scene = _coord_closure(coord_loss, clean_loss, cross_scene_loss)
+
+        if closure_mean == "":
+            gate = "invalid_reference"
+        elif closure_mean < 0:
+            gate = "worse_than_mean_corruption"
+        elif closure_mean < 0.25:
+            gate = "weak"
+        elif closure_mean < 0.5:
+            gate = "partial"
+        else:
+            gate = "strong"
+
+        rows.append(
+            {
+                "dataset": dataset,
+                "clean_loss": clean_loss,
+                "coord_mlp_loss": coord_loss,
+                "global_perm_loss": global_loss,
+                "cross_image_loss": cross_image_loss,
+                "cross_scene_loss": cross_scene_loss,
+                "mean_corruption_loss": mean_corrupt_loss,
+                "coord_delta_vs_clean": coord_loss - clean_loss,
+                "mean_corruption_delta_vs_clean": mean_corrupt_loss - clean_loss,
+                "relative_position_mean": rel_mean,
+                "closure_fraction_mean": closure_mean,
+                "closure_fraction_global": closure_global,
+                "closure_fraction_cross_image": closure_cross_image,
+                "closure_fraction_cross_scene": closure_cross_scene,
+                "gate_hint": gate,
+            }
+        )
+
+    write_csv(OUT_DIR / "results_coord_mlp_rival_six_dataset_calibration.csv", rows)
+
+    closures = [float(r["closure_fraction_mean"]) for r in rows if r["closure_fraction_mean"] != ""]
+    mean_closure = sum(closures) / len(closures) if closures else ""
+    min_closure = min(closures) if closures else ""
+    max_closure = max(closures) if closures else ""
+    positive_count = sum(1 for x in closures if x > 0.0)
+
+    lines = [
+        "# Six-Dataset Coord-MLP Rival Calibration",
+        "",
+        "This table recalibrates the existing coordinate-only rival against the completed six-dataset main-variant causal battery.",
+        "",
+        "Definitions:",
+        "- `relative_position = (L_coord - L_clean) / (L_corrupt - L_clean)`.",
+        "- `closure_fraction = 1 - relative_position`; higher means the coordinate-only rival is closer to the clean reference than the corrupted reference.",
+        "- The main summary uses the mean of global permutation, cross-image target swap, and cross-scene target swap as `L_corrupt`.",
+        "",
+        "| dataset | clean | coord MLP | mean corrupt | rel. position | closure | global closure | cross-image closure | cross-scene closure | hint |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r['dataset']}` | `{fmt(r['clean_loss'])}` | `{fmt(r['coord_mlp_loss'])}` | "
+            f"`{fmt(r['mean_corruption_loss'])}` | `{fmt(r['relative_position_mean'])}` | "
+            f"`{fmt_pct(r['closure_fraction_mean'])}` | `{fmt_pct(r['closure_fraction_global'])}` | "
+            f"`{fmt_pct(r['closure_fraction_cross_image'])}` | `{fmt_pct(r['closure_fraction_cross_scene'])}` | "
+            f"`{r['gate_hint']}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Aggregate",
+            "",
+            f"- Mean closure against mean corruption: `{fmt_pct(mean_closure)}`.",
+            f"- Min / max closure: `{fmt_pct(min_closure)}` / `{fmt_pct(max_closure)}`.",
+            f"- Positive-closure datasets: `{positive_count}/{len(rows)}`.",
+            "",
+            "## Interpretation",
+            "",
+            "- The six-dataset target-corruption sensitivity is positive, but the coordinate-only rival is not uniformly strong.",
+            "- The coordinate-only rival closes a nonzero fraction of the clean-to-corrupted gap on most datasets, but it is weak on ARKit and worse than the mean corruption reference on S3DIS.",
+            "- Therefore, the safe paper claim is not that coordinate-only explains the six-dataset average. The safe claim is that the objective has a coordinate-satisfiable component whose strength is dataset-dependent.",
+        ]
+    )
+    (OUT_DIR / "results_coord_mlp_rival_six_dataset_calibration.md").write_text("\n".join(lines) + "\n")
+
+
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text())
 
@@ -627,11 +752,13 @@ def build_object_pretext_summary() -> None:
 
 def main() -> None:
     build_six_dataset_table()
+    build_six_dataset_coord_rival_calibration()
     build_binding_profile()
     build_binding_profile_figure()
     build_recoverability_table()
     build_object_pretext_summary()
     print("[write] tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md")
+    print("[write] tools/concerto_projection_shortcut/results_coord_mlp_rival_six_dataset_calibration.md")
     print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary.md")
     print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary.png")
     print("[write] tools/concerto_projection_shortcut/results_recoverability_rrec_max.md")

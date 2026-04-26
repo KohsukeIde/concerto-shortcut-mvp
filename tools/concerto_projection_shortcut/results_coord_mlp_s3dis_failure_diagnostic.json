@@ -1,0 +1,124 @@
+{
+  "cache_rows": [
+    {
+      "dataset": "arkit",
+      "train_rows": 49513,
+      "val_rows": 15239,
+      "coord_mean_shift_l2": 0.16260822117328644,
+      "coord_std_shift_l2": 0.08164915442466736,
+      "target_mean_cosine_train_val": 0.9648326635360718,
+      "shared_mlp_train_loss": 6.614874362945557,
+      "shared_mlp_val_loss": 6.6959710121154785,
+      "train_target_mean_train_loss": 6.434599876403809,
+      "train_target_mean_val_loss": 6.508246421813965,
+      "clean_loss": 5.834015,
+      "mean_corruption_loss": 6.849298,
+      "closure_fraction_mean": 0.15101897697489264
+    },
+    {
+      "dataset": "scannet",
+      "train_rows": 101996,
+      "val_rows": 25986,
+      "coord_mean_shift_l2": 0.10907135158777237,
+      "coord_std_shift_l2": 0.03328494355082512,
+      "target_mean_cosine_train_val": 0.9750242233276367,
+      "shared_mlp_train_loss": 6.556740760803223,
+      "shared_mlp_val_loss": 6.735274314880371,
+      "train_target_mean_train_loss": 6.493502616882324,
+      "train_target_mean_val_loss": 6.642395496368408,
+      "clean_loss": 5.64685,
+      "mean_corruption_loss": 7.304839333333333,
+      "closure_fraction_mean": 0.3435277428403233
+    },
+    {
+      "dataset": "scannetpp",
+      "train_rows": 108970,
+      "val_rows": 28452,
+      "coord_mean_shift_l2": 0.12373584508895874,
+      "coord_std_shift_l2": 0.020492156967520714,
+      "target_mean_cosine_train_val": 0.9371222257614136,
+      "shared_mlp_train_loss": 6.290182590484619,
+      "shared_mlp_val_loss": 6.342474937438965,
+      "train_target_mean_train_loss": 6.329957962036133,
+      "train_target_mean_val_loss": 6.3672685623168945,
+      "clean_loss": 5.014833,
+      "mean_corruption_loss": 7.279795666666668,
+      "closure_fraction_mean": 0.4138349300238652
+    },
+    {
+      "dataset": "s3dis",
+      "train_rows": 61527,
+      "val_rows": 449,
+      "coord_mean_shift_l2": 0.44893863797187805,
+      "coord_std_shift_l2": 0.15000246465206146,
+      "target_mean_cosine_train_val": 0.8536450862884521,
+      "shared_mlp_train_loss": 6.2853312492370605,
+      "shared_mlp_val_loss": 6.39555025100708,
+      "train_target_mean_train_loss": 6.096485137939453,
+      "train_target_mean_val_loss": 6.209538459777832,
+      "clean_loss": 5.876104,
+      "mean_corruption_loss": 6.176442333333333,
+      "closure_fraction_mean": -0.7295394638269075
+    },
+    {
+      "dataset": "hm3d",
+      "train_rows": 108345,
+      "val_rows": 26830,
+      "coord_mean_shift_l2": 0.04372940585017204,
+      "coord_std_shift_l2": 0.015077590942382812,
+      "target_mean_cosine_train_val": 0.9946199655532837,
+      "shared_mlp_train_loss": 6.377902984619141,
+      "shared_mlp_val_loss": 6.372809886932373,
+      "train_target_mean_train_loss": 6.2236809730529785,
+      "train_target_mean_val_loss": 6.2275776863098145,
+      "clean_loss": 5.34251,
+      "mean_corruption_loss": 7.234931333333333,
+      "closure_fraction_mean": 0.45556521592090804
+    },
+    {
+      "dataset": "structured3d",
+      "train_rows": 104971,
+      "val_rows": 26343,
+      "coord_mean_shift_l2": 0.14010435342788696,
+      "coord_std_shift_l2": 0.039383385330438614,
+      "target_mean_cosine_train_val": 0.9804858565330505,
+      "shared_mlp_train_loss": 6.511523723602295,
+      "shared_mlp_val_loss": 6.382243633270264,
+      "train_target_mean_train_loss": 6.28139066696167,
+      "train_target_mean_val_loss": 6.139918804168701,
+      "clean_loss": 4.912487,
+      "mean_corruption_loss": 6.832952666666667,
+      "closure_fraction_mean": 0.23468717743283463
+    }
+  ],
+  "s3dis_only_history": [
+    {
+      "epoch": 1.0,
+      "train_loss": 7.927152693271637,
+      "val_loss": 7.092887878417969
+    },
+    {
+      "epoch": 5.0,
+      "train_loss": 6.098449766635895,
+      "val_loss": 6.340835094451904
+    },
+    {
+      "epoch": 10.0,
+      "train_loss": 5.967692136764526,
+      "val_loss": 6.197619438171387
+    },
+    {
+      "epoch": 80.0,
+      "train_loss": 5.885548830032349,
+      "val_loss": 6.23472785949707
+    }
+  ],
+  "s3dis_only_final": {
+    "train_loss": 5.870841979980469,
+    "val_loss": 6.23472785949707,
+    "clean_loss": 5.876104,
+    "mean_corruption_loss": 6.176442333333333,
+    "relative_position_mean": 1.194066223638021,
+    "closure_fraction_mean": -0.19406622363802106
+  }
+}

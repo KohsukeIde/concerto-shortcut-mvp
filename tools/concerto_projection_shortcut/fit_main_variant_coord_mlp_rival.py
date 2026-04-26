@@ -246,6 +246,11 @@ def main() -> int:
     parser.add_argument("--prior-hidden-channels", type=int, default=512)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--causal-csv", type=Path, default=None)
+    parser.add_argument(
+        "--skip-repo-results",
+        action="store_true",
+        help="Write results only under output-root; do not overwrite the repo-level canonical coord-rival CSV/MD.",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -451,7 +456,7 @@ def main() -> int:
         )
         print(f"[fit] wrote {args.output_root / 'model_last.pth'}")
 
-    if not args.dry_run:
+    if not args.dry_run and not args.skip_repo_results:
         write_results(
             result_rows,
             repo_root / "tools" / "concerto_projection_shortcut" / "results_official_coord_mlp_rival.csv",

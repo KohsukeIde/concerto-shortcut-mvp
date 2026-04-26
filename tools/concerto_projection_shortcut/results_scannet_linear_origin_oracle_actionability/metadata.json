@@ -1,0 +1,151 @@
+{
+  "args": {
+    "batch_size": 1,
+    "bias_lr": 0.05,
+    "bias_steps": 1000,
+    "bias_weight_decay": 0.001,
+    "class_pairs": "picture:wall,counter:cabinet,desk:table,sink:cabinet,door:wall,shower curtain:wall",
+    "config": "/groups/qgah50055/ide/concerto-shortcut-mvp/configs/concerto/semseg-ptv3-base-v1m1-0f-scannet-lin-origin-e100.py",
+    "data_root": "/groups/qgah50055/ide/3d-sans-3dscans/scannet",
+    "dry_run": false,
+    "graph_top_ks": "1,2,3,5",
+    "max_geometry_per_class": 60000,
+    "max_per_class": 60000,
+    "max_train_batches": 256,
+    "max_train_points": 600000,
+    "max_val_batches": -1,
+    "num_worker": 8,
+    "oracle_top_ks": "2,3,5,10",
+    "output_dir": "/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_scannet_linear_origin_oracle_actionability",
+    "pair_probe_lr": 0.05,
+    "pair_probe_steps": 800,
+    "pair_probe_weight_decay": 0.001,
+    "prior_alphas": "0.25,0.5,0.75,1.0",
+    "repo_root": "/groups/qgah50055/ide/concerto-shortcut-mvp",
+    "seed": 20260419,
+    "top_ks": "1,2,3,5,10,20",
+    "train_split": "train",
+    "val_split": "val",
+    "weak_classes": "picture,counter,desk,sink,cabinet,shower curtain,door",
+    "weight": "/groups/qgah50055/ide/concerto-shortcut-mvp/exp/concerto/scannet-lin-origin-e100/model/model_best.pth"
+  },
+  "bias_history_balanced": [
+    {
+      "acc": 0.9224683046340942,
+      "loss": 0.2581140995025635,
+      "step": 1
+    },
+    {
+      "acc": 0.9331150054931641,
+      "loss": 0.1837431937456131,
+      "step": 200
+    },
+    {
+      "acc": 0.9331166744232178,
+      "loss": 0.18374314904212952,
+      "step": 400
+    },
+    {
+      "acc": 0.9331133365631104,
+      "loss": 0.18374314904212952,
+      "step": 600
+    },
+    {
+      "acc": 0.9331133365631104,
+      "loss": 0.18374314904212952,
+      "step": 800
+    },
+    {
+      "acc": 0.9331133365631104,
+      "loss": 0.1837431639432907,
+      "step": 1000
+    }
+  ],
+  "bias_history_unweighted": [
+    {
+      "acc": 0.9225850105285645,
+      "loss": 0.23154036700725555,
+      "step": 1
+    },
+    {
+      "acc": 0.9374666810035706,
+      "loss": 0.19663557410240173,
+      "step": 200
+    },
+    {
+      "acc": 0.9374666810035706,
+      "loss": 0.19663555920124054,
+      "step": 400
+    },
+    {
+      "acc": 0.9374650120735168,
+      "loss": 0.19663557410240173,
+      "step": 600
+    },
+    {
+      "acc": 0.9374650120735168,
+      "loss": 0.19663555920124054,
+      "step": 800
+    },
+    {
+      "acc": 0.9374650120735168,
+      "loss": 0.19663554430007935,
+      "step": 1000
+    }
+  ],
+  "pairs": [
+    "picture_vs_wall",
+    "counter_vs_cabinet",
+    "desk_vs_table",
+    "sink_vs_cabinet",
+    "door_vs_wall",
+    "shower_curtain_vs_wall"
+  ],
+  "train": {
+    "class_counts": {
+      "bathtub": 6530,
+      "bed": 60000,
+      "bookshelf": 17590,
+      "cabinet": 41714,
+      "chair": 60000,
+      "counter": 11203,
+      "curtain": 18672,
+      "desk": 16955,
+      "door": 60000,
+      "floor": 60000,
+      "otherfurniture": 23819,
+      "picture": 844,
+      "refridgerator": 5759,
+      "shower curtain": 5361,
+      "sink": 1740,
+      "sofa": 35681,
+      "table": 51215,
+      "toilet": 5640,
+      "wall": 60000,
+      "window": 57277
+    },
+    "num_points": 600000,
+    "seen_batches": 18
+  },
+  "val": {
+    "seen_batches": 312,
+    "target_counts": {
+      "cabinet": 1399895,
+      "counter": 221560,
+      "desk": 655163,
+      "door": 1600191,
+      "picture": 207442,
+      "shower curtain": 158208,
+      "sink": 102489
+    }
+  },
+  "weak_classes": [
+    "picture",
+    "counter",
+    "desk",
+    "sink",
+    "cabinet",
+    "shower curtain",
+    "door"
+  ]
+}

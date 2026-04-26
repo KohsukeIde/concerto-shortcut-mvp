@@ -624,27 +624,32 @@ def build_recoverability_table() -> None:
 
         (best_non_oracle_score - base_score) / (oracle_score - base_score).
 
-    The main suite is intentionally small:
+    The main suite is intentionally small and family-level:
 
     Frozen recovery:
-      1. decoupled classifier / class-prior correction
-      2. prototype or kNN readout
-      3. constrained top-K reranking
+      1. class-prior correction / decoupled classifier
+      2. nonparametric feature readout: prototype or kNN
+      3. candidate-set reranking: constrained top-K reranking
 
     Adaptation recovery:
-      4. fixed-rank LoRA
-      5. full fine-tuning
+      4. capacity-limited adaptation: fixed-rank LoRA
+      5. LP-FT: linear-probe-to-fine-tuning warm start
+      6. full fine-tuning
 
-    Exploratory CoDA/CIDA/region/proposal/subgroup lines stay outside the main
-    suite. We keep missing external-model suites explicit instead of inventing
-    numbers.
+    R_rec is protocol-matched: the base representation/readout that defines
+    the oracle denominator must also define the recovery numerator. For example,
+    the LP-FT rows below belong to the Concerto linear-head family and are not
+    mixed into the Concerto decoder-probe R_rec row. Exploratory
+    CoDA/CIDA/region/proposal/subgroup lines stay outside the main suite. We
+    keep missing external-model suites explicit instead of inventing numbers.
     """
 
     fixed_suite_rows = [
         {
             "model": "Concerto decoder",
+            "base_row": "frozen encoder + decoder probe",
             "suite": "frozen",
-            "method": "decoupled classifier / class-prior correction",
+            "family": "class-prior correction / decoupled classifier",
             "best_delta_miou": 0.00020,
             "best_delta_picture": -0.00060,
             "source": "results_decoupled_classifier_readout.md",
@@ -652,8 +657,9 @@ def build_recoverability_table() -> None:
         },
         {
             "model": "Concerto decoder",
+            "base_row": "frozen encoder + decoder probe",
             "suite": "frozen",
-            "method": "prototype or kNN readout",
+            "family": "nonparametric feature readout: prototype or kNN",
             "best_delta_miou": 0.00020,
             "best_delta_picture": 0.00080,
             "source": "results_knn_readout_small.md; results_prototype_readout.md",
@@ -661,8 +667,9 @@ def build_recoverability_table() -> None:
         },
         {
             "model": "Concerto decoder",
+            "base_row": "frozen encoder + decoder probe",
             "suite": "frozen",
-            "method": "constrained Top-K reranking",
+            "family": "candidate-set reranking: constrained Top-K",
             "best_delta_miou": 0.00022,
             "best_delta_picture": 0.00130,
             "source": "results_topk_pairwise_rerank_decoder.md; results_constrained_topk_set_decoder.md",
@@ -670,33 +677,86 @@ def build_recoverability_table() -> None:
         },
         {
             "model": "Concerto decoder",
+            "base_row": "frozen encoder + decoder probe",
             "suite": "adaptation",
-            "method": "fixed-rank LoRA",
+            "family": "capacity-limited adaptation: fixed-rank LoRA",
             "best_delta_miou": -0.00280,
             "best_delta_picture": -0.00130,
             "source": "results_scannet_dec_lora_origin_perclass.md",
             "notes": "decoder-capacity-matched LoRA; same-head linear LoRA is positive but head-capacity confounded",
         },
         {
-            "model": "Concerto decoder",
+            "model": "Concerto linear",
+            "base_row": "frozen encoder + linear head",
             "suite": "adaptation",
-            "method": "full fine-tuning",
+            "family": "capacity-limited adaptation: fixed-rank LoRA",
+            "best_delta_miou": 0.0134,
+            "best_delta_picture": 0.0289,
+            "source": "results_scannet_lora_origin_perclass.md; results_scannet_linear_origin_oracle_actionability/",
+            "notes": "protocol-matched to the linear-head family; strongest picture recovery among linear-head adaptation rows",
+        },
+        {
+            "model": "Concerto linear",
+            "base_row": "frozen encoder + linear head",
+            "suite": "adaptation",
+            "family": "LP-FT warm-start adaptation",
+            "best_delta_miou": 0.0166,
+            "best_delta_picture": 0.0125,
+            "source": "results_scannet_lora_lpft_classsafe.md; results_scannet_lora_lpft_plain_oracle_actionability/",
+            "notes": "protocol-matched to the linear-head family; strongest mIoU recovery among linear-head adaptation rows",
+        },
+        {
+            "model": "Concerto decoder",
+            "base_row": "frozen encoder + decoder probe",
+            "suite": "adaptation",
+            "family": "full fine-tuning",
             "best_delta_miou": 0.01870,
             "best_delta_picture": 0.01980,
             "source": "results_scannet_origin_fullft.md; results_scannet_origin_fullft_oracle_actionability/",
             "notes": "maximum practical adaptation budget; improves aggregate but leaves large oracle headroom",
         },
+        {
+            "model": "Sonata linear",
+            "base_row": "released backbone + linear head",
+            "suite": "frozen",
+            "family": "class-prior correction / decoupled classifier",
+            "best_delta_miou": 0.00170,
+            "best_delta_picture": -0.00005,
+            "source": "results_sonata_recovery_decoupled_classifier.md",
+            "notes": "small aggregate gain; picture does not recover",
+        },
+        {
+            "model": "Sonata linear",
+            "base_row": "released backbone + linear head",
+            "suite": "frozen",
+            "family": "candidate-set reranking: constrained Top-K",
+            "best_delta_miou": 0.0,
+            "best_delta_picture": 0.00064,
+            "source": "data/runs/sonata_recovery_topk/topk_pairwise_rerank_decoder.md",
+            "notes": "no aggregate recovery; tiny picture-only movement",
+        },
+        {
+            "model": "Sonata full FT",
+            "base_row": "released backbone + full fine-tuned head",
+            "suite": "adaptation",
+            "family": "full fine-tuning",
+            "best_delta_miou": 0.0684,
+            "best_delta_picture": -0.0074,
+            "source": "results_sonata_fullft_oracle_actionability/oracle_actionability_analysis.md",
+            "notes": "full-FT improves aggregate relative to Sonata linear under the oracle evaluator, but does not improve picture",
+        },
     ]
-    for model in ("Sonata linear", "Utonia released stack", "PTv3 supervised"):
+    for model in ("Utonia released stack", "PTv3 supervised"):
         fixed_suite_rows.append(
             {
                 "model": model,
-                "suite": "fixed suite",
-                "method": "5-method fixed recovery suite",
+                "base_row": "released stack / protocol-specific head",
+                "suite": "frozen/adaptation",
+                "family": "6-family recovery suite",
                 "best_delta_miou": "",
                 "best_delta_picture": "",
                 "source": "",
-                "notes": "not run; external rows report oracle/actionability diagnostics only",
+                "notes": "not run in a protocol-matched way yet; external rows report oracle/actionability diagnostics only",
             }
         )
     write_csv(OUT_DIR / "results_recoverability_fixed_suite_methods.csv", fixed_suite_rows)
@@ -715,7 +775,22 @@ def build_recoverability_table() -> None:
             "frozen_delta_picture": 0.00130,
             "adapt_delta_miou": 0.01870,
             "adapt_delta_picture": 0.01980,
-            "recovery_suite": "5-method fixed suite: decoupled classifier, prototype/kNN, constrained Top-K, fixed-rank LoRA, full FT",
+            "recovery_suite": "6-family suite; decoder-compatible families used here: class-prior, prototype/kNN, constrained Top-K, decoder-matched LoRA, full FT. LP-FT is tracked separately for the linear-head base.",
+        },
+        {
+            "model": "Concerto linear",
+            "source": "results_scannet_linear_origin_oracle_actionability/; results_scannet_lora_lpft_plain_oracle_actionability/",
+            "base_miou": 0.7615,
+            "oracle2_miou": 0.9171,
+            "oracle5_miou": 0.9839,
+            "base_picture": 0.4014,
+            "oracle2_picture": 0.8013,
+            "oracle5_picture": 0.9394,
+            "frozen_delta_miou": "",
+            "frozen_delta_picture": "",
+            "adapt_delta_miou": 0.0166,
+            "adapt_delta_picture": 0.0289,
+            "recovery_suite": "6-family suite; linear-head-compatible adaptation families used here: fixed-rank LoRA and LP-FT. Frozen suite pending for this base row.",
         },
         {
             "model": "Sonata linear",
@@ -726,11 +801,11 @@ def build_recoverability_table() -> None:
             "base_picture": 0.3582,
             "oracle2_picture": 0.6972,
             "oracle5_picture": 0.8867,
-            "frozen_delta_miou": "",
-            "frozen_delta_picture": "",
-            "adapt_delta_miou": "",
-            "adapt_delta_picture": "",
-            "recovery_suite": "5-method fixed suite not run; oracle/actionability diagnostics only",
+            "frozen_delta_miou": 0.00170,
+            "frozen_delta_picture": 0.00064,
+            "adapt_delta_miou": 0.0684,
+            "adapt_delta_picture": -0.0074,
+            "recovery_suite": "6-family suite partially run: class-prior and constrained Top-K frozen rows complete, prototype/kNN pending, full-FT adaptation integrated. LoRA/LP-FT not run.",
         },
         {
             "model": "Utonia released stack",
@@ -745,7 +820,7 @@ def build_recoverability_table() -> None:
             "frozen_delta_picture": "",
             "adapt_delta_miou": "",
             "adapt_delta_picture": "",
-            "recovery_suite": "5-method fixed suite not run; oracle/actionability diagnostics only",
+            "recovery_suite": "6-family recovery suite not run in a protocol-matched way; oracle/actionability diagnostics only",
         },
         {
             "model": "PTv3 supervised",
@@ -760,7 +835,7 @@ def build_recoverability_table() -> None:
             "frozen_delta_picture": "",
             "adapt_delta_miou": "",
             "adapt_delta_picture": "",
-            "recovery_suite": "5-method fixed suite not run; oracle/actionability diagnostics only",
+            "recovery_suite": "6-family recovery suite not run in a protocol-matched way; oracle/actionability diagnostics only",
         },
     ]
 
@@ -796,15 +871,17 @@ def build_recoverability_table() -> None:
         "# Recoverability Table: R_rec^max",
         "",
         "Definition: `R_rec^max = (best non-oracle score - base score) / (oracle score - base score)`.",
-        "This table separates available oracle headroom from the fraction recovered by the pre-specified five-method recovery suite.",
+        "This table separates available oracle headroom from the fraction recovered by the pre-specified six-family recovery suite.",
+        "`R_rec` is computed only within protocol-matched base/readout rows; LP-FT belongs to the Concerto linear-head family and is not mixed into the decoder-probe denominator.",
         "",
-        "Main-suite methods:",
+        "Main-suite recovery families:",
         "",
-        "1. Decoupled classifier / class-prior correction.",
-        "2. Prototype or kNN readout.",
-        "3. Constrained Top-K reranking.",
-        "4. Fixed-rank LoRA.",
-        "5. Full fine-tuning.",
+        "1. Class-prior correction / decoupled classifier.",
+        "2. Nonparametric feature readout: prototype or kNN.",
+        "3. Candidate-set reranking: constrained Top-K.",
+        "4. Capacity-limited adaptation: fixed-rank LoRA.",
+        "5. LP-FT warm-start adaptation.",
+        "6. Full fine-tuning.",
         "",
         "Exploratory CoDA/CIDA/region/proposal/subgroup attempts are intentionally not included in `R_rec^max`; they belong in the appendix.",
         "",
@@ -827,22 +904,24 @@ def build_recoverability_table() -> None:
             "",
             "- Concerto has large top-2/top-5 oracle headroom, but the fixed frozen suite recovers essentially none of it.",
             "- Full fine-tuning recovers a nonzero but still small fraction of the oracle headroom; it improves aggregate accuracy but does not close the actionability gap.",
-            "- For Sonata, Utonia, and PTv3, the fixed recovery suite has not been run. The main claim should therefore stay Concerto-centric for recovery, while external models support oracle/actionability comparisons.",
+            "- LP-FT is a linear-head-family adaptation row. It should be reported as protocol-matched to the Concerto linear base, not as recovery for the decoder-probe oracle denominator.",
+            "- Sonata now has partial protocol-matched recovery coverage: class-prior and constrained Top-K frozen rows are complete, prototype/kNN is pending, and full fine-tuning provides the high-budget adaptation row. Aggregate recovery is possible under full FT, but picture recovery remains poor.",
+            "- For Utonia and PTv3, the six-family recovery suite has not been run in a protocol-matched way. Keep their recovery interpretation limited to oracle/actionability comparisons unless custom recovery paths are added.",
         ]
     )
     (OUT_DIR / "results_recoverability_rrec_max.md").write_text("\n".join(lines) + "\n")
 
     detail_lines = [
-        "# Fixed Recovery Suite: Method-Level Rows",
+        "# Fixed Recovery Suite: Family-Level Rows",
         "",
-        "These are the only methods included in the main-paper `R_rec^max` suite.",
+        "These are the only recovery families included in the main-paper `R_rec^max` suite.",
         "",
-        "| model | suite | method | best ΔmIoU | best Δpicture | source | notes |",
-        "|---|---|---|---:|---:|---|---|",
+        "| model | base row | suite | family | best ΔmIoU | best Δpicture | source | notes |",
+        "|---|---|---|---|---:|---:|---|---|",
     ]
     for r in fixed_suite_rows:
         detail_lines.append(
-            f"| `{r['model']}` | `{r['suite']}` | `{r['method']}` | `{fmt(r['best_delta_miou'])}` | "
+            f"| `{r['model']}` | `{r['base_row']}` | `{r['suite']}` | `{r['family']}` | `{fmt(r['best_delta_miou'])}` | "
             f"`{fmt(r['best_delta_picture'])}` | `{r['source']}` | {r['notes']} |"
         )
     detail_lines.extend(

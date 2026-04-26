@@ -1660,14 +1660,48 @@ Generated paper-facing framework artifacts:
 
 - `results_recoverability_rrec_max.md` / `.csv`: `R_rec^max` table for
   Concerto, Sonata, Utonia, and PTv3. The main recovery suite is now fixed to
-  five pre-specified families: decoupled classifier / class-prior correction,
-  prototype-or-kNN readout, constrained Top-K reranking, fixed-rank LoRA, and
-  full fine-tuning. CoDA/CIDA/region/proposal/subgroup variants are appendix
-  exploratory rows rather than part of the main `R_rec^max` suite.
+  six pre-specified recovery families: class-prior correction / decoupled
+  classifier, prototype-or-kNN readout, constrained Top-K reranking,
+  fixed-rank LoRA, LP-FT warm-start adaptation, and full fine-tuning.
+  `R_rec` is protocol-matched by base representation/readout. In particular,
+  LP-FT belongs to the Concerto linear-head family and is not mixed into the
+  Concerto decoder-probe oracle denominator. CoDA/CIDA/region/proposal/subgroup
+  variants are appendix exploratory rows rather than part of the main
+  `R_rec^max` suite.
   `results_recoverability_fixed_suite_methods.md` / `.csv` records the
-  method-level rows. The external-model fixed recovery suites are marked not
-  run, so the recovery-suite claim remains Concerto-centric while external
+  family-level rows. The external-model fixed recovery suites are still mostly
+  pending, so the recovery-suite claim remains Concerto-centric while external
   models support oracle/actionability comparisons.
+- Follow-up protocol-matched recovery jobs submitted on `abciq`:
+  - `135520.qjcm`: Concerto linear-head oracle/actionability denominator for
+    the LP-FT/linear-head recovery row.
+  - `135524.qjcm`: LP-FT plain linear-head checkpoint through the same
+    oracle/actionability evaluator, to make the LP-FT numerator as
+    protocol-matched as possible.
+  - `135521.qjcm`: Sonata linear class-prior / decoupled-classifier frozen
+    recovery.
+  - `135522.qjcm`: Sonata linear prototype/kNN frozen recovery.
+  - `135523.qjcm`: Sonata linear constrained Top-K frozen recovery.
+  Utonia and PTv3 are not sent through these generic Pointcept recovery scripts:
+  Utonia uses a custom released-stack inference path, and PTv3 is a supervised
+  control with a separate compatibility evaluator. Add protocol-specific
+  recovery only if the base/readout/evaluator path can be matched cleanly.
+- Completed recovery follow-ups from this batch:
+  - Concerto linear-head oracle/actionability denominator (`135520.qjcm`):
+    base mIoU `0.7615`, oracle top-2 `0.9171`, oracle top-5 `0.9839`;
+    picture base `0.4014`, oracle top-2 `0.8013`, top-5 `0.9394`.
+  - LP-FT plain through the same evaluator (`135524.qjcm`): base mIoU
+    `0.7780`, picture `0.4139`; oracle top-2 remains high at `0.9263`
+    mIoU and `0.8198` picture. Linear-head adaptation recovery is therefore
+    nonzero but still far from closing the oracle headroom.
+  - Sonata class-prior / decoupled classifier (`135521.qjcm`): best aggregate
+    row `tau0p25_bias` gives mIoU `0.7107` (`+0.0017`) but picture drops
+    (`0.3506`, `-0.0073`). Best safe picture row is essentially flat.
+  - Sonata constrained Top-K (`135523.qjcm`): base remains the best mIoU row
+    (`0.7091`); best picture row gives only `+0.0006` picture and slightly
+    lower mIoU. This mirrors the Concerto result: candidate-set reranking
+    does not recover the oracle headroom.
+  - Sonata prototype/kNN (`135522.qjcm`) is still running.
 - `results_binding_profile_summary.png` / `.pdf`: central binding-profile
   heatmap generated from `results_binding_profile_summary.csv`.
 - `results_binding_profile_summary_panels.png` / `.pdf`: paper-facing panel

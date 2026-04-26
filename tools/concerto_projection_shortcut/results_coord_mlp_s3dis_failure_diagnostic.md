@@ -29,3 +29,13 @@ This diagnostic checks whether the negative S3DIS coordinate-rival closure is a 
 - The S3DIS coord-rival validation cache is extremely small compared with the other five datasets.
 - The S3DIS clean-to-corruption gap is also small, so normalized closure is unstable and can become strongly negative from modest absolute loss differences.
 - If the S3DIS-only MLP improves train loss but not validation loss, the safest reading is train/val or sample-selection mismatch rather than a clean six-dataset coordinate-only closure.
+
+## High-Val Follow-Up
+
+A dedicated S3DIS-only rerun with a larger validation cap writes `data/runs/main_variant_coord_mlp_rival/s3dis-highval-probe/results_official_coord_mlp_rival.md`.
+
+| train rows | val rows | coord MLP loss | clean | mean corrupt | relative position | closure |
+|---:|---:|---:|---:|---:|---:|---:|
+| `107235` | `29822` | `6.136451` | `5.876104` | `6.176442` | `0.866845` | `13.3%` |
+
+This follow-up shows that the original `449`-row validation cache was an extraction-cap artifact. It does not make S3DIS a strong coordinate-rival dataset: the corrected closure is positive but weak, and cross-scene closure remains negative. The paper-safe reading is that S3DIS weakens, rather than invalidates, the dataset-dependent coordinate-satisfiable component claim.

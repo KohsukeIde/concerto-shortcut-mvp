@@ -50,11 +50,14 @@ investigation.
     ScanNet. The coord-MLP rival is weak on ARKit and partial on ScanNet, so it
     is usable only as a lower-bound rival, not as a full shortcut proxy.
     A six-dataset recalibration of the existing coord-MLP losses against the
-    completed causal battery is now complete. The coord-only rival has positive
-    clean-to-corruption closure on `5/6` datasets, but the mean closure is only
-    `14.5%` and `s3dis` is worse than the mean corruption reference. Therefore
-    the paper-safe claim is dataset-dependent coordinate-satisfiable signal,
-    not a strong six-dataset average coord-only explanation.
+    completed causal battery is now complete. The original table had positive
+    clean-to-corruption closure on `5/6` datasets, with `s3dis` worse than the
+    mean corruption reference. A dedicated S3DIS high-validation follow-up
+    showed that this negative closure was mainly a tiny validation-cache
+    artifact: replacing S3DIS with the high-val run gives positive closure on
+    `6/6` datasets and mean closure `28.9%`. S3DIS remains weak (`13.3%`), so
+    the paper-safe claim is still dataset-dependent coordinate-satisfiable
+    signal, not a uniformly strong six-dataset coord-only explanation.
   - A target-corruption distance diagnostic completed for the main-variant
     ARKit/ScanNet battery. ARKit cross-scene targets are not closer to the
     original targets than cross-image targets, so the lower ARKit cross-scene
@@ -581,6 +584,56 @@ investigation.
     `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_fullft_default_with_ptv3_kl003_safe2.md`
     and
     `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_fullft_default_with_ptv3_minimal.md`.
+  - Train-split residual fusion was launched to convert the val-CV signal into
+    a publishable protocol. The new script
+    `tools/concerto_projection_shortcut/train_cross_model_residual_fusion_scannet20.py`
+    trains on ScanNet train scenes, selects hyperparameters on held-out train
+    scenes, and evaluates ScanNet val once. Jobs `135491.qjcm` and
+    `135492.qjcm` ran SSL-only expert sets
+    (`Concerto fullFT` default + `Concerto decoder`, `Sonata`, `Utonia`) with
+    `logit+feature` and `logit-only` inputs, respectively. Both use
+    `384` train scenes, `heldout-every=5`, full val, 12 epochs, KL
+    `{0,0.03}`, and safe CE `{2,4}`. PTv3 was not included in these two jobs
+    because train-split PTv3 raw-prob caches did not exist at launch time.
+    PTv3 train-cache export job `135493.qjcm` has now completed for the first
+    `384` train scenes under
+    `data/runs/ptv3_v151_raw_probs_scannet20/trainval384`; the existing val
+    cache was linked into the same cache root. The first PTv3-inclusive
+    train-split residual jobs `135494.qjcm` and `135495.qjcm` failed fast
+    because the 384-scene export did not cover every ScanNet train scene
+    visited by the train loader (`scene0449_02` was missing). Full train-split
+    PTv3 export job `135496.qjcm` completed into the same cache root with
+    `1201` train scene caches, and the missing scene is now present. The
+    PTv3-inclusive residual jobs were relaunched as `135498.qjcm` (feature)
+    and `135499.qjcm` (logit). The SSL-only `135491.qjcm`/`135492.qjcm` jobs
+    are unaffected.
+  - The SSL-only train-split residual fusion rows completed:
+    `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_train_split_logit_ssl.md`
+    and
+    `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_train_split_feature_ssl.md`.
+    In this publishable protocol, the val-CV residual signal does not transfer
+    to a clear method gain. Logit-only selects `kl=0.03,safe=2` and gives
+    `0.7967` mIoU versus `0.7964` for the fullFT default; feature mode selects
+    `kl=0.03,safe=4` and gives `0.7960` versus `0.7960` for fullFT. In both
+    cases, simple SSL-only `avgprob_all` is stronger (`0.8019` logit,
+    `0.8023` feature) but still below the official-path fullFT reference
+    (`~0.8075`). Reading: the earlier `0.8164` residual result was a useful
+    val-CV diagnostic signal, but the first train-split SSL-only residual
+    decoder is not a publishable SOTA method.
+  - The PTv3-inclusive train-split residual fusion rows also completed:
+    `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_train_split_logit_with_ptv3.md`
+    and
+    `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_train_split_feature_with_ptv3.md`.
+    Adding PTv3 raises the simple average but still does not turn residual
+    fusion into a publishable SOTA row. Logit+PTv3 selects `kl=0,safe=2` and
+    gives `0.7990` versus `0.7970` for the fullFT default, while feature+PTv3
+    gives `0.7976` versus `0.7967`. The strongest train-split rows are still
+    simple 5-expert averages: `0.8068` for logit mode and `0.8061` for feature
+    mode, both just below the official-path fullFT reference (`~0.8075`).
+    Reading: cross-model complementarity remains real, but the train-split
+    residual decoder recovers only a small safe correction. The SOTA route is
+    not validated by this bounded residual-fusion pilot; use it as evidence
+    that val-CV fusion signals can overstate publishable gains.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches
@@ -991,6 +1044,17 @@ Acceptance:
     23.5%` for `arkit / scannet / scannetpp / s3dis / hm3d / structured3d`.
     Mean closure is `14.5%`, so do not write that a coord-only rival explains
     the six-dataset objective response on average.
+  - S3DIS high-val corrected calibration:
+    `tools/concerto_projection_shortcut/results_coord_mlp_rival_six_dataset_calibration_s3dis_highval.md`.
+    The S3DIS-only high-validation rerun writes
+    `data/runs/main_variant_coord_mlp_rival/s3dis-highval-probe/results_official_coord_mlp_rival.md`
+    with `107235` train rows and `29822` val rows, replacing the original
+    `449`-row val cache. The S3DIS coord loss becomes `6.1365`, relative
+    position `0.8668`, and closure `13.3%`. With this corrected S3DIS row,
+    positive closure holds on `6/6` datasets and mean closure is `28.9%`.
+    Reading: the original S3DIS negative was primarily a validation-extraction
+    artifact, but S3DIS is still the weakest coordinate-only rival dataset and
+    should be described explicitly rather than hidden in an average.
   - S3DIS failure diagnostic:
     `tools/concerto_projection_shortcut/results_coord_mlp_s3dis_failure_diagnostic.md`.
     S3DIS is the outlier for three concrete reasons: the coord-rival val cache
@@ -1003,12 +1067,12 @@ Acceptance:
     clean no-coordinate result; it is a sample/shift-sensitive outlier and
     should be reported separately or excluded from any coordinate-closure
     average.
-  - Follow-up `135489.qjcm` submitted:
+  - Follow-up `135489.qjcm` completed:
     `tools/concerto_projection_shortcut/submit_s3dis_coord_mlp_highval_abciq_qf.sh`.
-    This reruns S3DIS-only coord extraction with `max_val_batches=512` and
+    This reran S3DIS-only coord extraction with `max_val_batches=512` and
     `max_rows_per_batch=4096` without overwriting the canonical repo-level
-    coord-rival CSV. Purpose: determine whether the `449` val rows are an
-    extraction-cap artifact or a true lack of valid S3DIS image-point rows.
+    coord-rival CSV. It confirms the `449` val rows were an extraction-cap
+    artifact, not a true lack of valid S3DIS image-point rows.
 - Main-variant target-corruption distance:
   `data/runs/main_variant_target_corruption_distance/main-origin-six-step05/results_target_corruption_distance.md`.
 - SR-LoRA Phase A:

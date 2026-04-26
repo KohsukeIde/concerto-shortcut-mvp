@@ -227,6 +227,98 @@ def build_six_dataset_coord_rival_calibration() -> None:
     )
     (OUT_DIR / "results_coord_mlp_rival_six_dataset_calibration.md").write_text("\n".join(lines) + "\n")
 
+    # A later S3DIS-only follow-up reran the coord-MLP extraction with a much
+    # larger validation cap. Keep the original canonical table above intact,
+    # and emit an explicitly corrected variant for paper interpretation.
+    s3dis_highval = ROOT / "data/runs/main_variant_coord_mlp_rival/s3dis-highval-probe/results_official_coord_mlp_rival.md"
+    if not s3dis_highval.exists():
+        return
+    text = s3dis_highval.read_text()
+    match = re.search(r"\|\s*s3dis\s*\|\s*([0-9.]+)\s*\|\s*([0-9.]+)\s*\|\s*([0-9.]+)", text)
+    if not match:
+        return
+    highval_coord_loss = float(match.group(1))
+
+    corrected = []
+    for row in rows:
+        item = dict(row)
+        if item["dataset"] == "s3dis":
+            clean_loss = float(item["clean_loss"])
+            global_loss = float(item["global_perm_loss"])
+            cross_image_loss = float(item["cross_image_loss"])
+            cross_scene_loss = float(item["cross_scene_loss"])
+            mean_corrupt_loss = float(item["mean_corruption_loss"])
+            rel_mean, closure_mean = _coord_closure(highval_coord_loss, clean_loss, mean_corrupt_loss)
+            _, closure_global = _coord_closure(highval_coord_loss, clean_loss, global_loss)
+            _, closure_cross_image = _coord_closure(highval_coord_loss, clean_loss, cross_image_loss)
+            _, closure_cross_scene = _coord_closure(highval_coord_loss, clean_loss, cross_scene_loss)
+            if closure_mean == "":
+                gate = "invalid_reference"
+            elif closure_mean < 0:
+                gate = "worse_than_mean_corruption"
+            elif closure_mean < 0.25:
+                gate = "weak_highval"
+            elif closure_mean < 0.5:
+                gate = "partial_highval"
+            else:
+                gate = "strong_highval"
+            item.update(
+                {
+                    "coord_mlp_loss": highval_coord_loss,
+                    "coord_delta_vs_clean": highval_coord_loss - clean_loss,
+                    "relative_position_mean": rel_mean,
+                    "closure_fraction_mean": closure_mean,
+                    "closure_fraction_global": closure_global,
+                    "closure_fraction_cross_image": closure_cross_image,
+                    "closure_fraction_cross_scene": closure_cross_scene,
+                    "gate_hint": gate,
+                }
+            )
+        corrected.append(item)
+
+    write_csv(OUT_DIR / "results_coord_mlp_rival_six_dataset_calibration_s3dis_highval.csv", corrected)
+    corrected_closures = [float(r["closure_fraction_mean"]) for r in corrected if r["closure_fraction_mean"] != ""]
+    corrected_mean = sum(corrected_closures) / len(corrected_closures) if corrected_closures else ""
+    corrected_min = min(corrected_closures) if corrected_closures else ""
+    corrected_max = max(corrected_closures) if corrected_closures else ""
+    corrected_positive = sum(1 for x in corrected_closures if x > 0.0)
+
+    corrected_lines = [
+        "# Six-Dataset Coord-MLP Rival Calibration with S3DIS High-Val Follow-Up",
+        "",
+        "This table keeps the same six-dataset causal references as the canonical calibration, but replaces the original tiny-cache S3DIS coord-MLP loss with the S3DIS-only high-validation follow-up.",
+        "",
+        "| dataset | clean | coord MLP | mean corrupt | rel. position | closure | global closure | cross-image closure | cross-scene closure | hint |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for r in corrected:
+        corrected_lines.append(
+            f"| `{r['dataset']}` | `{fmt(r['clean_loss'])}` | `{fmt(r['coord_mlp_loss'])}` | "
+            f"`{fmt(r['mean_corruption_loss'])}` | `{fmt(r['relative_position_mean'])}` | "
+            f"`{fmt_pct(r['closure_fraction_mean'])}` | `{fmt_pct(r['closure_fraction_global'])}` | "
+            f"`{fmt_pct(r['closure_fraction_cross_image'])}` | `{fmt_pct(r['closure_fraction_cross_scene'])}` | "
+            f"`{r['gate_hint']}` |"
+        )
+    corrected_lines.extend(
+        [
+            "",
+            "## Aggregate",
+            "",
+            f"- Mean closure against mean corruption: `{fmt_pct(corrected_mean)}`.",
+            f"- Min / max closure: `{fmt_pct(corrected_min)}` / `{fmt_pct(corrected_max)}`.",
+            f"- Positive-closure datasets: `{corrected_positive}/{len(corrected)}`.",
+            "",
+            "## Interpretation",
+            "",
+            "- The original S3DIS negative closure was mainly a small validation-cache artifact.",
+            "- With the high-val S3DIS follow-up, all six datasets have positive closure, but S3DIS remains weak at `13.3%`.",
+            "- The safe claim is still dataset-dependent coordinate-satisfiable signal, not a uniformly strong coordinate-only explanation.",
+        ]
+    )
+    (OUT_DIR / "results_coord_mlp_rival_six_dataset_calibration_s3dis_highval.md").write_text(
+        "\n".join(corrected_lines) + "\n"
+    )
+
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text())

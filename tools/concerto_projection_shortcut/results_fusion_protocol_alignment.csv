@@ -1,0 +1,5 @@
+row,protocol,mIoU,mAcc,allAcc,delta_vs_raw_fullft
+Concerto fullFT raw-aligned single-pass,raw-point aligned cache; one pass; no Pointcept test fragments/voting,0.7969183262741323,0.8778517139312345,0.9275823391364144,0.0
+Concerto fullFT Pointcept precise/test,Pointcept tester from training log; model_best test path,0.8075,0.8838,0.9309,0.010581673725867713
+5-expert avgprob raw-aligned,"raw-point aligned cache fusion; diagnostic, not official SOTA protocol",0.806500242179238,0.883173647293976,0.9321179082420489,0.009581915905105709
+5-expert oracle raw-aligned,diagnostic oracle upper bound using labels,0.896948344547188,0.9418230708875308,0.9684426215573266,0.10003001827305569

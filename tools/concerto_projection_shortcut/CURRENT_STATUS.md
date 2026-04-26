@@ -517,6 +517,30 @@ investigation.
     must use feature/region-level evidence or train-split multi-expert decoding,
     not another confidence-based defer rule. Details are in
     `tools/concerto_projection_shortcut/results_cross_model_deferral_scannet20_fullft_default_with_ptv3.md`.
+  - A feature-level selective-deferral diagnostic was then run with the same
+    full-FT default. The predictor input augments the previous logit/confidence
+    features with fixed random projections of raw point features from the
+    default and auxiliary experts (Concerto decoder, Sonata, Utonia; PTv3
+    remains probability-only in this run). This does not materially solve
+    selectability. Feature-mode PR-AUC is comparable to or slightly worse than
+    logit-only for most experts (`Concerto decoder` best `0.4733` vs logit
+    `0.4778`; `Utonia` best `0.4494` vs logit `0.4457`; `Sonata` best
+    `0.3537` vs logit `0.3643`), and high-precision recall remains near zero.
+    A sample conservative router moves the full-FT default only marginally
+    (`fold0 0.8117 -> 0.8123`, `fold1 0.7926 -> 0.7939` at P80). Reading:
+    cross-model complementarity is real, but a shallow pointwise deferral
+    selector over projected raw features still cannot safely recover it; a
+    serious SOTA attempt would need a train-split feature/region-level fusion
+    decoder rather than another pointwise confidence/feature gate. Details are
+    in
+    `tools/concerto_projection_shortcut/results_cross_model_feature_deferral_scannet20_fullft_default_with_ptv3.md`.
+  - The fusion protocol mismatch was also made explicit. The same full-FT
+    checkpoint scores `0.7969` in the raw-point aligned single-pass cache
+    protocol used by fusion diagnostics, but `0.8075` under the Pointcept
+    model_best test path. The 5-expert raw average (`0.8065`) should therefore
+    be interpreted as a diagnostic raw-protocol gain, not as an official SOTA
+    number. Details are in
+    `tools/concerto_projection_shortcut/results_fusion_protocol_alignment.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

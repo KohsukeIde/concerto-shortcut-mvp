@@ -398,6 +398,87 @@ def object_shapenetpart_rows() -> list[dict]:
     return rows
 
 
+def build_shapenetpart_support_stress_table() -> None:
+    specs = [
+        (
+            "PointGPT-S official",
+            NEPA_ROOT / "results/ptgpt_shapenetpart_official_support_stress.json",
+        ),
+        (
+            "PointGPT-S no-mask",
+            NEPA_ROOT / "results/ptgpt_shapenetpart_nomask_support_stress.json",
+        ),
+    ]
+    rows = []
+    for name, path in specs:
+        if not path.exists():
+            continue
+        summary = load_json(path)
+        by_name = {r["condition"]: r for r in summary["conditions"]}
+        clean = by_name["clean"]
+        clean_class = float(clean["class_avg_iou"])
+        clean_inst = float(clean["instance_avg_iou"])
+
+        def val(condition: str, key: str = "class_avg_iou") -> float | str:
+            if condition not in by_name:
+                return ""
+            return float(by_name[condition][key])
+
+        random20 = val("random_keep20")
+        structured20 = val("structured_keep20")
+        part_drop = val("part_drop_largest")
+        part_keep = val("part_keep20_per_part")
+        xyz_zero = val("xyz_zero")
+        rows.append(
+            {
+                "model": name,
+                "clean_class_avg_iou": clean_class,
+                "clean_instance_avg_iou": clean_inst,
+                "random_keep20_class_avg_iou": random20,
+                "structured_keep20_class_avg_iou": structured20,
+                "part_drop_largest_class_avg_iou": part_drop,
+                "part_keep20_per_part_class_avg_iou": part_keep,
+                "xyz_zero_class_avg_iou": xyz_zero,
+                "delta_random_keep20": clean_class - random20 if random20 != "" else "",
+                "delta_structured_keep20": clean_class - structured20 if structured20 != "" else "",
+                "delta_part_drop_largest": clean_class - part_drop if part_drop != "" else "",
+                "delta_part_keep20_per_part": clean_class - part_keep if part_keep != "" else "",
+                "delta_xyz_zero": clean_class - xyz_zero if xyz_zero != "" else "",
+                "source": str(path.relative_to(ROOT)),
+            }
+        )
+
+    write_csv(NEPA_ROOT / "results/ptgpt_shapenetpart_support_stress_paper_table.csv", rows)
+    lines = [
+        "# ShapeNetPart Support-Stress Paper Table",
+        "",
+        "This table reformats the completed ShapeNetPart support-stress audits for the object-level dense-transfer section.",
+        "",
+        "| model | clean c-mIoU | random keep20 | structured keep20 | part-drop largest | part keep20/part | xyz-zero | Δ random | Δ structured | Δ part-drop | Δ xyz-zero |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r['model']}` | `{fmt(r['clean_class_avg_iou'])}` | "
+            f"`{fmt(r['random_keep20_class_avg_iou'])}` | `{fmt(r['structured_keep20_class_avg_iou'])}` | "
+            f"`{fmt(r['part_drop_largest_class_avg_iou'])}` | `{fmt(r['part_keep20_per_part_class_avg_iou'])}` | "
+            f"`{fmt(r['xyz_zero_class_avg_iou'])}` | `{fmt(r['delta_random_keep20'])}` | "
+            f"`{fmt(r['delta_structured_keep20'])}` | `{fmt(r['delta_part_drop_largest'])}` | "
+            f"`{fmt(r['delta_xyz_zero'])}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Interpretation",
+            "",
+            "- The no-mask checkpoint remains close to the official PointGPT-S checkpoint on clean ShapeNetPart, so the no-mask object-side finding is not classification-only.",
+            "- Random keep20 is a weaker dense-transfer stress than structured keep20.",
+            "- Semantic part removal (`part_drop_largest`) is the strongest support stress in both rows, which supports the claim that structured missing support is more decisive than random point sparsity.",
+        ]
+    )
+    (NEPA_ROOT / "results/ptgpt_shapenetpart_support_stress_paper_table.md").write_text("\n".join(lines) + "\n")
+
+
 def scene_readout_rows() -> list[dict]:
     src = OUT_DIR / "results_cross_model_downstream_audit_scannet20.csv"
     if not src.exists():
@@ -539,15 +620,86 @@ def build_recoverability_table() -> None:
     """Build the paper-facing R_rec^max table.
 
     R_rec^max is the fraction of oracle headroom recovered by the strongest
-    non-oracle intervention in a pre-specified suite:
+    non-oracle intervention in a pre-specified fixed suite:
 
         (best_non_oracle_score - base_score) / (oracle_score - base_score).
 
-    We keep missing suites explicit instead of inventing numbers. For Concerto,
-    the frozen and adaptation suites are the structural test battery. For the
-    external comparator rows, the same recovery suite has not been run, so those
-    recovery fields are intentionally marked `not_run`.
+    The main suite is intentionally small:
+
+    Frozen recovery:
+      1. decoupled classifier / class-prior correction
+      2. prototype or kNN readout
+      3. constrained top-K reranking
+
+    Adaptation recovery:
+      4. fixed-rank LoRA
+      5. full fine-tuning
+
+    Exploratory CoDA/CIDA/region/proposal/subgroup lines stay outside the main
+    suite. We keep missing external-model suites explicit instead of inventing
+    numbers.
     """
+
+    fixed_suite_rows = [
+        {
+            "model": "Concerto decoder",
+            "suite": "frozen",
+            "method": "decoupled classifier / class-prior correction",
+            "best_delta_miou": 0.00020,
+            "best_delta_picture": -0.00060,
+            "source": "results_decoupled_classifier_readout.md",
+            "notes": "tests long-tail / class-prior miscalibration; no meaningful recovery",
+        },
+        {
+            "model": "Concerto decoder",
+            "suite": "frozen",
+            "method": "prototype or kNN readout",
+            "best_delta_miou": 0.00020,
+            "best_delta_picture": 0.00080,
+            "source": "results_knn_readout_small.md; results_prototype_readout.md",
+            "notes": "tests nonparametric/metric readout geometry; no meaningful recovery",
+        },
+        {
+            "model": "Concerto decoder",
+            "suite": "frozen",
+            "method": "constrained Top-K reranking",
+            "best_delta_miou": 0.00022,
+            "best_delta_picture": 0.00130,
+            "source": "results_topk_pairwise_rerank_decoder.md; results_constrained_topk_set_decoder.md",
+            "notes": "tests whether oracle candidate-set headroom is recoverable by reranking; no meaningful recovery",
+        },
+        {
+            "model": "Concerto decoder",
+            "suite": "adaptation",
+            "method": "fixed-rank LoRA",
+            "best_delta_miou": -0.00280,
+            "best_delta_picture": -0.00130,
+            "source": "results_scannet_dec_lora_origin_perclass.md",
+            "notes": "decoder-capacity-matched LoRA; same-head linear LoRA is positive but head-capacity confounded",
+        },
+        {
+            "model": "Concerto decoder",
+            "suite": "adaptation",
+            "method": "full fine-tuning",
+            "best_delta_miou": 0.01870,
+            "best_delta_picture": 0.01980,
+            "source": "results_scannet_origin_fullft.md; results_scannet_origin_fullft_oracle_actionability/",
+            "notes": "maximum practical adaptation budget; improves aggregate but leaves large oracle headroom",
+        },
+    ]
+    for model in ("Sonata linear", "Utonia released stack", "PTv3 supervised"):
+        fixed_suite_rows.append(
+            {
+                "model": model,
+                "suite": "fixed suite",
+                "method": "5-method fixed recovery suite",
+                "best_delta_miou": "",
+                "best_delta_picture": "",
+                "source": "",
+                "notes": "not run; external rows report oracle/actionability diagnostics only",
+            }
+        )
+    write_csv(OUT_DIR / "results_recoverability_fixed_suite_methods.csv", fixed_suite_rows)
 
     oracle_specs = [
         {
@@ -559,11 +711,11 @@ def build_recoverability_table() -> None:
             "base_picture": 0.4034,
             "oracle2_picture": 0.8579,
             "oracle5_picture": 0.9427,
-            "frozen_delta_miou": 0.00023654,
-            "frozen_delta_picture": 0.00167642,
+            "frozen_delta_miou": 0.00022,
+            "frozen_delta_picture": 0.00130,
             "adapt_delta_miou": 0.01870,
             "adapt_delta_picture": 0.01980,
-            "recovery_suite": "Concerto structural test battery",
+            "recovery_suite": "5-method fixed suite: decoupled classifier, prototype/kNN, constrained Top-K, fixed-rank LoRA, full FT",
         },
         {
             "model": "Sonata linear",
@@ -574,11 +726,11 @@ def build_recoverability_table() -> None:
             "base_picture": 0.3582,
             "oracle2_picture": 0.6972,
             "oracle5_picture": 0.8867,
-            "frozen_delta_miou": 0.0,
-            "frozen_delta_picture": 0.0,
+            "frozen_delta_miou": "",
+            "frozen_delta_picture": "",
             "adapt_delta_miou": "",
             "adapt_delta_picture": "",
-            "recovery_suite": "oracle-analysis prior variants only; adaptation suite not run",
+            "recovery_suite": "5-method fixed suite not run; oracle/actionability diagnostics only",
         },
         {
             "model": "Utonia released stack",
@@ -589,11 +741,11 @@ def build_recoverability_table() -> None:
             "base_picture": 0.2952,
             "oracle2_picture": 0.9747,
             "oracle5_picture": 1.0000,
-            "frozen_delta_miou": 0.0,
-            "frozen_delta_picture": 0.0,
+            "frozen_delta_miou": "",
+            "frozen_delta_picture": "",
             "adapt_delta_miou": "",
             "adapt_delta_picture": "",
-            "recovery_suite": "oracle-analysis prior/pair variants only; adaptation suite not run",
+            "recovery_suite": "5-method fixed suite not run; oracle/actionability diagnostics only",
         },
         {
             "model": "PTv3 supervised",
@@ -604,11 +756,11 @@ def build_recoverability_table() -> None:
             "base_picture": 0.4908,
             "oracle2_picture": 0.8785,
             "oracle5_picture": 0.9952,
-            "frozen_delta_miou": 0.0,
-            "frozen_delta_picture": 0.0,
+            "frozen_delta_miou": "",
+            "frozen_delta_picture": "",
             "adapt_delta_miou": "",
             "adapt_delta_picture": "",
-            "recovery_suite": "oracle-analysis prior/bias variants only; adaptation suite not run",
+            "recovery_suite": "5-method fixed suite not run; oracle/actionability diagnostics only",
         },
     ]
 
@@ -644,7 +796,17 @@ def build_recoverability_table() -> None:
         "# Recoverability Table: R_rec^max",
         "",
         "Definition: `R_rec^max = (best non-oracle score - base score) / (oracle score - base score)`.",
-        "This table separates available oracle headroom from the fraction recovered by pre-specified non-oracle suites.",
+        "This table separates available oracle headroom from the fraction recovered by the pre-specified five-method recovery suite.",
+        "",
+        "Main-suite methods:",
+        "",
+        "1. Decoupled classifier / class-prior correction.",
+        "2. Prototype or kNN readout.",
+        "3. Constrained Top-K reranking.",
+        "4. Fixed-rank LoRA.",
+        "5. Full fine-tuning.",
+        "",
+        "Exploratory CoDA/CIDA/region/proposal/subgroup attempts are intentionally not included in `R_rec^max`; they belong in the appendix.",
         "",
         "| model | base mIoU | oracle@2 | oracle@5 | frozen Δ mIoU | frozen R_rec@2 | adaptation Δ mIoU | adaptation R_rec@2 | base picture | picture oracle@2 | frozen Δ picture | frozen picture R_rec@2 | adaptation Δ picture | adaptation picture R_rec@2 | suite |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
@@ -663,12 +825,35 @@ def build_recoverability_table() -> None:
             "",
             "## Interpretation",
             "",
-            "- Concerto has large top-2/top-5 oracle headroom, but frozen/cached-feature families recover essentially none of it.",
+            "- Concerto has large top-2/top-5 oracle headroom, but the fixed frozen suite recovers essentially none of it.",
             "- Full fine-tuning recovers a nonzero but still small fraction of the oracle headroom; it improves aggregate accuracy but does not close the actionability gap.",
-            "- For Sonata, Utonia, and PTv3, the table intentionally reports only the recovery suites that have actually been run. Missing adaptation recovery is a gap to label as `not run`, not a zero.",
+            "- For Sonata, Utonia, and PTv3, the fixed recovery suite has not been run. The main claim should therefore stay Concerto-centric for recovery, while external models support oracle/actionability comparisons.",
         ]
     )
     (OUT_DIR / "results_recoverability_rrec_max.md").write_text("\n".join(lines) + "\n")
+
+    detail_lines = [
+        "# Fixed Recovery Suite: Method-Level Rows",
+        "",
+        "These are the only methods included in the main-paper `R_rec^max` suite.",
+        "",
+        "| model | suite | method | best ΔmIoU | best Δpicture | source | notes |",
+        "|---|---|---|---:|---:|---|---|",
+    ]
+    for r in fixed_suite_rows:
+        detail_lines.append(
+            f"| `{r['model']}` | `{r['suite']}` | `{r['method']}` | `{fmt(r['best_delta_miou'])}` | "
+            f"`{fmt(r['best_delta_picture'])}` | `{r['source']}` | {r['notes']} |"
+        )
+    detail_lines.extend(
+        [
+            "",
+            "## Appendix-only exploratory families",
+            "",
+            "CoDA, CIDA, latent subgroup readout, region/superpoint smoothing, PHRD/PVD, proposal boosting, and other process-driven variants should be reported as exploratory recovery attempts, not as part of the pre-specified main suite.",
+        ]
+    )
+    (OUT_DIR / "results_recoverability_fixed_suite_methods.md").write_text("\n".join(detail_lines) + "\n")
 
 
 def build_binding_profile_figure() -> None:
@@ -727,6 +912,84 @@ def build_binding_profile_figure() -> None:
     fig.tight_layout()
     fig.savefig(OUT_DIR / "results_binding_profile_summary.png", dpi=220)
     fig.savefig(OUT_DIR / "results_binding_profile_summary.pdf")
+
+
+def build_binding_profile_panel_figure() -> None:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - environment dependent
+        (OUT_DIR / "results_binding_profile_summary_panels_note.md").write_text(
+            f"# Binding Profile Panel Figure\n\nMatplotlib is unavailable.\n\nError: `{exc}`\n"
+        )
+        return
+
+    causal_path = OUT_DIR / "results_main_variant_causal_battery_paper_table.csv"
+    coord_path = OUT_DIR / "results_coord_mlp_rival_six_dataset_calibration_s3dis_highval.csv"
+    profile_path = OUT_DIR / "results_binding_profile_summary.csv"
+    if not causal_path.exists() or not coord_path.exists() or not profile_path.exists():
+        return
+
+    causal = {r["dataset"]: r for r in read_csv(causal_path)}
+    coord = {r["dataset"]: r for r in read_csv(coord_path)}
+    profile = read_csv(profile_path)
+
+    fig, axes = plt.subplots(3, 1, figsize=(13, 13), constrained_layout=True)
+
+    # Panel A: pretext-side target corruption and coordinate-rival closure.
+    datasets = [d for d in ("arkit", "scannet", "scannetpp", "s3dis", "hm3d", "structured3d") if d in causal]
+    x = np.arange(len(datasets))
+    width = 0.38
+    bpre = [float(causal[d]["b_pre_relative"]) for d in datasets]
+    closures = [float(coord[d]["closure_fraction_mean"]) if d in coord and coord[d]["closure_fraction_mean"] != "" else np.nan for d in datasets]
+    axes[0].bar(x - width / 2, bpre, width, label="target-corruption B_pre / clean loss", color="#4666a6")
+    axes[0].bar(x + width / 2, closures, width, label="coord-rival closure", color="#c17a2c")
+    axes[0].axhline(0, color="#555555", linewidth=0.8)
+    axes[0].set_xticks(x, datasets, rotation=20, ha="right")
+    axes[0].set_ylim(0, max(max(bpre), max(closures)) * 1.25)
+    axes[0].set_ylabel("relative score")
+    axes[0].set_title("A. Train-side counterfactuals are positive, but coord-rival closure is dataset-dependent")
+    axes[0].legend(loc="upper left", ncols=2, fontsize=9)
+
+    # Panel B: actionability.
+    action_rows = [r for r in profile if r["domain"] in ("scene", "object")]
+    action_labels = [f"{r['model']}\n{r['task'].split()[0]}" for r in action_rows]
+    x = np.arange(len(action_rows))
+    width = 0.25
+    base = [float(r["top1_or_miou"]) for r in action_rows]
+    top2 = [float(r["top2_oracle_proxy"]) for r in action_rows]
+    top5 = [float(r["top5_oracle_proxy"]) for r in action_rows]
+    axes[1].bar(x - width, base, width, label="base", color="#4d7f72")
+    axes[1].bar(x, top2, width, label="top-2/proxy", color="#d0a13a")
+    axes[1].bar(x + width, top5, width, label="top-5/proxy", color="#8f5aa9")
+    axes[1].set_xticks(x, action_labels, rotation=25, ha="right")
+    axes[1].set_ylim(0, 1.05)
+    axes[1].set_ylabel("score / hit rate")
+    axes[1].set_title("B. Candidate/actionability headroom remains after standard readout")
+    axes[1].legend(loc="lower right", ncols=3, fontsize=9)
+
+    # Panel C: support stress.
+    support_rows = [r for r in profile if "support" in r["domain"]]
+    support_labels = [r["model"] for r in support_rows]
+    x = np.arange(len(support_rows))
+    width = 0.25
+    random_damage = [float(r["random_keep20_down"]) if r["random_keep20_down"] != "" else np.nan for r in support_rows]
+    structured_damage = [float(r["structured_keep20_down"]) if r["structured_keep20_down"] != "" else np.nan for r in support_rows]
+    zero_damage = [float(r["feature_zero_down"]) if r["feature_zero_down"] != "" else np.nan for r in support_rows]
+    axes[2].bar(x - width, random_damage, width, label="random keep20 damage", color="#5f8ec6")
+    axes[2].bar(x, structured_damage, width, label="structured keep20 damage", color="#c45a4f")
+    axes[2].bar(x + width, zero_damage, width, label="feature/xyz-zero damage", color="#5e5e5e")
+    axes[2].set_xticks(x, support_labels, rotation=25, ha="right")
+    axes[2].set_ylim(0, max([v for v in random_damage + structured_damage + zero_damage if np.isfinite(v)]) * 1.2)
+    axes[2].set_ylabel("drop from clean")
+    axes[2].set_title("C. Random point drop is weaker than structured/semantic support stress")
+    axes[2].legend(loc="upper left", ncols=3, fontsize=9)
+
+    fig.savefig(OUT_DIR / "results_binding_profile_summary_panels.png", dpi=220)
+    fig.savefig(OUT_DIR / "results_binding_profile_summary_panels.pdf")
 
 
 EPOCH_RE = re.compile(r"\[Training\] EPOCH:\s+(\d+).*?Losses = \['([^']+)'\]")
@@ -845,15 +1108,20 @@ def build_object_pretext_summary() -> None:
 def main() -> None:
     build_six_dataset_table()
     build_six_dataset_coord_rival_calibration()
+    build_shapenetpart_support_stress_table()
     build_binding_profile()
     build_binding_profile_figure()
+    build_binding_profile_panel_figure()
     build_recoverability_table()
     build_object_pretext_summary()
     print("[write] tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md")
     print("[write] tools/concerto_projection_shortcut/results_coord_mlp_rival_six_dataset_calibration.md")
     print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary.md")
     print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary.png")
+    print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary_panels.png")
     print("[write] tools/concerto_projection_shortcut/results_recoverability_rrec_max.md")
+    print("[write] tools/concerto_projection_shortcut/results_recoverability_fixed_suite_methods.md")
+    print("[write] 3D-NEPA/results/ptgpt_shapenetpart_support_stress_paper_table.md")
     print("[write] 3D-NEPA/results/pointgpt_object_pretext_summary.md")
 
 

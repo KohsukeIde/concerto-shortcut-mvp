@@ -1659,16 +1659,30 @@ Expected next stage:
 Generated paper-facing framework artifacts:
 
 - `results_recoverability_rrec_max.md` / `.csv`: `R_rec^max` table for
-  Concerto, Sonata, Utonia, and PTv3. The table intentionally marks missing
-  external-model adaptation suites as not run rather than treating them as zero.
-  Concerto frozen/cached-feature recovery remains essentially zero, while full
-  FT recovers only a small fraction of oracle headroom.
+  Concerto, Sonata, Utonia, and PTv3. The main recovery suite is now fixed to
+  five pre-specified families: decoupled classifier / class-prior correction,
+  prototype-or-kNN readout, constrained Top-K reranking, fixed-rank LoRA, and
+  full fine-tuning. CoDA/CIDA/region/proposal/subgroup variants are appendix
+  exploratory rows rather than part of the main `R_rec^max` suite.
+  `results_recoverability_fixed_suite_methods.md` / `.csv` records the
+  method-level rows. The external-model fixed recovery suites are marked not
+  run, so the recovery-suite claim remains Concerto-centric while external
+  models support oracle/actionability comparisons.
 - `results_binding_profile_summary.png` / `.pdf`: central binding-profile
   heatmap generated from `results_binding_profile_summary.csv`.
+- `results_binding_profile_summary_panels.png` / `.pdf`: paper-facing panel
+  version separating train-side counterfactuals, actionability headroom, and
+  support-stress damage instead of forcing heterogeneous quantities into a
+  single scalar.
 - `3D-NEPA/results/pointgpt_object_pretext_summary.md` / `.csv`: object pretext
   summary now includes the official masked checkpoint as a checkpoint-only row
   with no local pretraining log, plus no-mask and no-mask order-random loss
   trajectories.
+- `3D-NEPA/results/ptgpt_shapenetpart_support_stress_paper_table.md` / `.csv`:
+  ShapeNetPart support-stress paper table. Official and no-mask PointGPT-S rows
+  are close on clean class-avg IoU (`0.8335` vs `0.8287`), while random keep20
+  is weaker than structured keep20 and semantic part removal is the strongest
+  stress in both rows.
 
 New long-running object jobs submitted:
 
@@ -1730,9 +1744,9 @@ Remaining after these complete:
 
 - Run readout/support audits for the new `mask_ratio=0.7` order-random
   fine-tuned checkpoint after its pretraining and downstream fine-tuning finish.
-- Summarize seed variance. If any seed repeats fail or exceed walltime, label
-  the corresponding row as a single-run controlled audit rather than making a
-  seed-variance claim.
+- Summarize seed variance if the repeat jobs complete. If repeats fail or
+  exceed walltime, report only the available point estimate and avoid
+  seed-variance claims.
 - ShapeNetPart support-stress rows are already folded into
   `results_binding_profile_summary.md`; still copy the short interpretation
   into the object-level paper section when drafting.

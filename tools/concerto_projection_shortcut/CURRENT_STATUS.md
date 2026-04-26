@@ -498,6 +498,25 @@ investigation.
     train-split multi-expert decoder; probability-level routing is saturated.
     Details are in
     `tools/concerto_projection_shortcut/results_cross_model_fusion_cv_router_scannet20_with_fullft_ptv3.md`.
+  - Selective-deferral recoverability/predictability was then tested with
+    Concerto full-FT as the default expert and Concerto decoder, Sonata, Utonia,
+    and PTv3 as auxiliary experts. Recoverability exists but is class- and
+    expert-specific: for example, Utonia has positive opportunity mass on
+    `picture` (`B=0.0800`) but also larger false-defer danger (`A=0.1612`);
+    Concerto decoder is useful for `door` (`B/A=1.85`) and
+    `shower curtain` (`B/A=3.88`) but not for `picture` (`B/A=0.59`);
+    PTv3 has favorable `B/A` on dominant classes like `wall` but weak
+    recoverability on `picture` (`B/A=0.24`). Predictability is the limiting
+    factor. Binary deferral predictors trained on probability/uncertainty/top
+    class features achieve PR-AUC around `0.36`-`0.48`, but high-precision
+    recall is essentially zero at precision `0.8`/`0.9`/`0.95`. A conservative
+    sample-level router therefore leaves the full-FT default almost unchanged
+    (`fold0 0.8129 -> 0.8129`, `fold1 0.7924 -> 0.7929` at P80). Reading:
+    selective deferral is the right conceptual framing, but logit/probability
+    features cannot safely identify deferable points; any further SOTA attempt
+    must use feature/region-level evidence or train-split multi-expert decoding,
+    not another confidence-based defer rule. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_deferral_scannet20_fullft_default_with_ptv3.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

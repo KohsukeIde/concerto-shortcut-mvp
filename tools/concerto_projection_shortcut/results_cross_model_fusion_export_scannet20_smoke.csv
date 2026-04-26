@@ -1,0 +1,3 @@
+variant,mIoU,mAcc,allAcc,weak_mean_iou,picture_iou,picture_to_wall,note
+fullft_single_saved,0.42082420382983593,0.4709435049031364,0.9585444655215715,0.42839797697941956,0.9380630630630102,0.012396694214876033,"saved raw-point predictions; same labels/metric as raw-aligned fusion, not Pointcept test-time fragment voting"
+avgprob_all_saved,0.3906310852900016,0.4236359568615886,0.9512945109961967,0.33556583009365676,0.06139315230223959,0.9321133412042503,"saved raw-point predictions; same labels/metric as raw-aligned fusion, not Pointcept test-time fragment voting"

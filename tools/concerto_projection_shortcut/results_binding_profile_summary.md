@@ -18,6 +18,8 @@ This is a paper-facing consolidation table. It does not replace the source resul
 | `object` | `PointGPT-S official` | `ScanObjectNN obj_bg` | `0.9105` | `0.9776` | `0.9948` | `bag->box (0.2353)` | `0.8466` | `` | `` | `` |
 | `object` | `PointGPT-S no-mask` | `ScanObjectNN obj_bg` | `0.8726` | `0.9466` | `0.9914` | `pillow->bag (0.2381)` | `0.8754` | `0.3528` | `0.6558` | `0.7814` |
 | `object` | `PointGPT-S no-mask order-random` | `ScanObjectNN obj_bg` | `0.8726` | `0.9587` | `0.9931` | `pillow->bag (0.2857)` | `0.8221` | `0.4423` | `0.6506` | `0.8210` |
+| `object-support` | `PointGPT-S official` | `ShapeNetPart support stress` | `0.8335` | `` | `` | `` | `` | `0.1412` | `0.1922` | `0.5751` |
+| `object-support` | `PointGPT-S no-mask` | `ShapeNetPart support stress` | `0.8287` | `` | `` | `` | `` | `0.1301` | `0.1682` | `0.5964` |
 
 ## Notes
 

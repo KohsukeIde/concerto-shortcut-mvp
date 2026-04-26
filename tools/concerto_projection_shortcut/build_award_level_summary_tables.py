@@ -5,6 +5,7 @@ import csv
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +24,7 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         path.write_text("")
         return
     with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -31,10 +32,18 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 def fmt(x, digits=4) -> str:
     if x is None:
         return ""
+    if x == "":
+        return ""
     try:
         return f"{float(x):.{digits}f}"
     except Exception:
         return str(x)
+
+
+def fmt_pct(x, digits=1) -> str:
+    if x is None or x == "":
+        return ""
+    return f"{100.0 * float(x):.{digits}f}%"
 
 
 def build_six_dataset_table() -> None:
@@ -134,6 +143,44 @@ def object_rows() -> list[dict]:
     return rows
 
 
+def object_shapenetpart_rows() -> list[dict]:
+    rows = []
+    specs = [
+        (
+            "PointGPT-S official",
+            NEPA_ROOT / "results/ptgpt_shapenetpart_official_support_stress.json",
+        ),
+        (
+            "PointGPT-S no-mask",
+            NEPA_ROOT / "results/ptgpt_shapenetpart_nomask_support_stress.json",
+        ),
+    ]
+    for name, path in specs:
+        if not path.exists():
+            continue
+        summary = load_json(path)
+        by_name = {r["condition"]: r for r in summary["conditions"]}
+        clean = by_name.get("clean", {})
+        clean_iou = clean.get("class_avg_iou", "")
+        rows.append(
+            {
+                "domain": "object-support",
+                "model": name,
+                "task": "ShapeNetPart support stress",
+                "top1_or_miou": clean_iou,
+                "top2_oracle_proxy": "",
+                "top5_oracle_proxy": "",
+                "hardest_pair": "",
+                "hardest_pair_confusion": "",
+                "pair_probe_bal_acc": "",
+                "random_keep20_down": clean_iou - by_name["random_keep20"]["class_avg_iou"] if clean_iou != "" and "random_keep20" in by_name else "",
+                "structured_keep20_down": clean_iou - by_name["structured_keep20"]["class_avg_iou"] if clean_iou != "" and "structured_keep20" in by_name else "",
+                "feature_zero_down": clean_iou - by_name["xyz_zero"]["class_avg_iou"] if clean_iou != "" and "xyz_zero" in by_name else "",
+            }
+        )
+    return rows
+
+
 def scene_readout_rows() -> list[dict]:
     src = OUT_DIR / "results_cross_model_downstream_audit_scannet20.csv"
     if not src.exists():
@@ -222,7 +269,7 @@ def support_rows_from_utonia() -> list[dict]:
 
 
 def build_binding_profile() -> None:
-    rows = scene_readout_rows() + support_rows_from_scene() + support_rows_from_utonia() + object_rows()
+    rows = scene_readout_rows() + support_rows_from_scene() + support_rows_from_utonia() + object_rows() + object_shapenetpart_rows()
     write_csv(OUT_DIR / "results_binding_profile_summary.csv", rows)
     lines = [
         "# Binding Profile Summary",
@@ -256,6 +303,215 @@ def build_binding_profile() -> None:
     (OUT_DIR / "results_binding_profile_summary.md").write_text("\n".join(lines) + "\n")
 
 
+def _float_or_blank(x: Any) -> float | str:
+    if x in (None, ""):
+        return ""
+    return float(x)
+
+
+def _recovery(base: float, oracle: float, recovered_delta: float | str) -> float | str:
+    if recovered_delta == "":
+        return ""
+    denom = oracle - base
+    if denom <= 0:
+        return ""
+    return max(0.0, float(recovered_delta)) / denom
+
+
+def build_recoverability_table() -> None:
+    """Build the paper-facing R_rec^max table.
+
+    R_rec^max is the fraction of oracle headroom recovered by the strongest
+    non-oracle intervention in a pre-specified suite:
+
+        (best_non_oracle_score - base_score) / (oracle_score - base_score).
+
+    We keep missing suites explicit instead of inventing numbers. For Concerto,
+    the frozen and adaptation suites are the structural test battery. For the
+    external comparator rows, the same recovery suite has not been run, so those
+    recovery fields are intentionally marked `not_run`.
+    """
+
+    oracle_specs = [
+        {
+            "model": "Concerto decoder",
+            "source": "results_oracle_actionability_analysis.md",
+            "base_miou": 0.7778,
+            "oracle2_miou": 0.9197,
+            "oracle5_miou": 0.9775,
+            "base_picture": 0.4034,
+            "oracle2_picture": 0.8579,
+            "oracle5_picture": 0.9427,
+            "frozen_delta_miou": 0.00023654,
+            "frozen_delta_picture": 0.00167642,
+            "adapt_delta_miou": 0.01870,
+            "adapt_delta_picture": 0.01980,
+            "recovery_suite": "Concerto structural test battery",
+        },
+        {
+            "model": "Sonata linear",
+            "source": "results_sonata_scannet_oracle_actionability_analysis.md",
+            "base_miou": 0.7086,
+            "oracle2_miou": 0.8747,
+            "oracle5_miou": 0.9670,
+            "base_picture": 0.3582,
+            "oracle2_picture": 0.6972,
+            "oracle5_picture": 0.8867,
+            "frozen_delta_miou": 0.0,
+            "frozen_delta_picture": 0.0,
+            "adapt_delta_miou": "",
+            "adapt_delta_picture": "",
+            "recovery_suite": "oracle-analysis prior variants only; adaptation suite not run",
+        },
+        {
+            "model": "Utonia released stack",
+            "source": "results_utonia_scannet_oracle_actionability/oracle_actionability_analysis.md",
+            "base_miou": 0.7574,
+            "oracle2_miou": 0.9367,
+            "oracle5_miou": 0.9908,
+            "base_picture": 0.2952,
+            "oracle2_picture": 0.9747,
+            "oracle5_picture": 1.0000,
+            "frozen_delta_miou": 0.0,
+            "frozen_delta_picture": 0.0,
+            "adapt_delta_miou": "",
+            "adapt_delta_picture": "",
+            "recovery_suite": "oracle-analysis prior/pair variants only; adaptation suite not run",
+        },
+        {
+            "model": "PTv3 supervised",
+            "source": "results_ptv3_scannet20_oracle_actionability.md",
+            "base_miou": 0.7745,
+            "oracle2_miou": 0.9038,
+            "oracle5_miou": 0.9690,
+            "base_picture": 0.4908,
+            "oracle2_picture": 0.8785,
+            "oracle5_picture": 0.9952,
+            "frozen_delta_miou": 0.0,
+            "frozen_delta_picture": 0.0,
+            "adapt_delta_miou": "",
+            "adapt_delta_picture": "",
+            "recovery_suite": "oracle-analysis prior/bias variants only; adaptation suite not run",
+        },
+    ]
+
+    rows = []
+    for spec in oracle_specs:
+        row = {
+            "model": spec["model"],
+            "base_miou": spec["base_miou"],
+            "oracle2_miou": spec["oracle2_miou"],
+            "oracle5_miou": spec["oracle5_miou"],
+            "base_picture_iou": spec["base_picture"],
+            "oracle2_picture_iou": spec["oracle2_picture"],
+            "oracle5_picture_iou": spec["oracle5_picture"],
+            "frozen_delta_miou_max": spec["frozen_delta_miou"],
+            "frozen_delta_picture_max": spec["frozen_delta_picture"],
+            "frozen_Rrec2_miou": _recovery(spec["base_miou"], spec["oracle2_miou"], spec["frozen_delta_miou"]),
+            "frozen_Rrec5_miou": _recovery(spec["base_miou"], spec["oracle5_miou"], spec["frozen_delta_miou"]),
+            "frozen_Rrec2_picture": _recovery(spec["base_picture"], spec["oracle2_picture"], spec["frozen_delta_picture"]),
+            "frozen_Rrec5_picture": _recovery(spec["base_picture"], spec["oracle5_picture"], spec["frozen_delta_picture"]),
+            "adapt_delta_miou_max": spec["adapt_delta_miou"],
+            "adapt_delta_picture_max": spec["adapt_delta_picture"],
+            "adapt_Rrec2_miou": _recovery(spec["base_miou"], spec["oracle2_miou"], spec["adapt_delta_miou"]),
+            "adapt_Rrec5_miou": _recovery(spec["base_miou"], spec["oracle5_miou"], spec["adapt_delta_miou"]),
+            "adapt_Rrec2_picture": _recovery(spec["base_picture"], spec["oracle2_picture"], spec["adapt_delta_picture"]),
+            "adapt_Rrec5_picture": _recovery(spec["base_picture"], spec["oracle5_picture"], spec["adapt_delta_picture"]),
+            "recovery_suite": spec["recovery_suite"],
+            "source": spec["source"],
+        }
+        rows.append(row)
+
+    write_csv(OUT_DIR / "results_recoverability_rrec_max.csv", rows)
+    lines = [
+        "# Recoverability Table: R_rec^max",
+        "",
+        "Definition: `R_rec^max = (best non-oracle score - base score) / (oracle score - base score)`.",
+        "This table separates available oracle headroom from the fraction recovered by pre-specified non-oracle suites.",
+        "",
+        "| model | base mIoU | oracle@2 | oracle@5 | frozen Δ mIoU | frozen R_rec@2 | adaptation Δ mIoU | adaptation R_rec@2 | base picture | picture oracle@2 | frozen Δ picture | frozen picture R_rec@2 | adaptation Δ picture | adaptation picture R_rec@2 | suite |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r['model']}` | `{fmt(r['base_miou'])}` | `{fmt(r['oracle2_miou'])}` | `{fmt(r['oracle5_miou'])}` | "
+            f"`{fmt(r['frozen_delta_miou_max'])}` | `{fmt_pct(r['frozen_Rrec2_miou'])}` | "
+            f"`{fmt(r['adapt_delta_miou_max'])}` | `{fmt_pct(r['adapt_Rrec2_miou'])}` | "
+            f"`{fmt(r['base_picture_iou'])}` | `{fmt(r['oracle2_picture_iou'])}` | "
+            f"`{fmt(r['frozen_delta_picture_max'])}` | `{fmt_pct(r['frozen_Rrec2_picture'])}` | "
+            f"`{fmt(r['adapt_delta_picture_max'])}` | `{fmt_pct(r['adapt_Rrec2_picture'])}` | `{r['recovery_suite']}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Interpretation",
+            "",
+            "- Concerto has large top-2/top-5 oracle headroom, but frozen/cached-feature families recover essentially none of it.",
+            "- Full fine-tuning recovers a nonzero but still small fraction of the oracle headroom; it improves aggregate accuracy but does not close the actionability gap.",
+            "- For Sonata, Utonia, and PTv3, the table intentionally reports only the recovery suites that have actually been run. Missing adaptation recovery is a gap to label as `not run`, not a zero.",
+        ]
+    )
+    (OUT_DIR / "results_recoverability_rrec_max.md").write_text("\n".join(lines) + "\n")
+
+
+def build_binding_profile_figure() -> None:
+    src = OUT_DIR / "results_binding_profile_summary.csv"
+    if not src.exists():
+        return
+    rows = read_csv(src)
+    # Keep the figure compact by plotting the rows that can be compared without
+    # forcing heterogeneous quantities into a single false scalar.
+    labels = [r["model"] for r in rows]
+    metrics = [
+        ("base", "top1_or_miou"),
+        ("oracle/top2 proxy", "top2_oracle_proxy"),
+        ("oracle/top5 proxy", "top5_oracle_proxy"),
+        ("random20 damage", "random_keep20_down"),
+        ("structured20 damage", "structured_keep20_down"),
+        ("feature/xyz-zero damage", "feature_zero_down"),
+    ]
+    values = []
+    for r in rows:
+        row_vals = []
+        for _, key in metrics:
+            val = r.get(key, "")
+            row_vals.append(float(val) if val not in ("", None) else float("nan"))
+        values.append(row_vals)
+
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - environment dependent
+        (OUT_DIR / "results_binding_profile_summary_figure_note.md").write_text(
+            f"# Binding Profile Figure\n\nMatplotlib is unavailable, so only CSV/Markdown tables were written.\n\nError: `{exc}`\n"
+        )
+        return
+
+    arr = np.array(values, dtype=float)
+    fig_h = max(6.0, 0.42 * len(labels) + 1.8)
+    fig, ax = plt.subplots(figsize=(12, fig_h))
+    cmap = plt.cm.viridis.copy()
+    cmap.set_bad(color="#eeeeee")
+    im = ax.imshow(arr, aspect="auto", vmin=0.0, vmax=1.0, cmap=cmap)
+    ax.set_xticks(range(len(metrics)), [m[0] for m in metrics], rotation=30, ha="right")
+    ax.set_yticks(range(len(labels)), labels)
+    ax.set_title("Binding Profile Summary")
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            if np.isfinite(arr[i, j]):
+                ax.text(j, i, f"{arr[i, j]:.2f}", ha="center", va="center", color="white" if arr[i, j] > 0.55 else "black", fontsize=8)
+            else:
+                ax.text(j, i, "n/a", ha="center", va="center", color="#666666", fontsize=8)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
+    cbar.set_label("score / damage")
+    fig.tight_layout()
+    fig.savefig(OUT_DIR / "results_binding_profile_summary.png", dpi=220)
+    fig.savefig(OUT_DIR / "results_binding_profile_summary.pdf")
+
+
 EPOCH_RE = re.compile(r"\[Training\] EPOCH:\s+(\d+).*?Losses = \['([^']+)'\]")
 DIAG_RE = re.compile(r"diag\(loss_main=([0-9.]+).*?recon_cd_l1=([0-9.]+).*?recon_cd_l2=([0-9.]+)")
 
@@ -281,18 +537,45 @@ def parse_pretrain_log(path: Path) -> dict:
 def build_object_pretext_summary() -> None:
     specs = [
         (
+            "PointGPT-S official masked",
+            None,
+            "cdl12 + mask_ratio0.7",
+            "official checkpoint only; pretrain log unavailable in rebuilt local environment",
+        ),
+        (
             "PointGPT-S no-mask",
             NEPA_ROOT / "PointGPT/experiments/pretrain_nomask/PointGPT-S/pgpt_s_nomask_e300/20260422_021328.log",
             "cdl12",
+            "",
         ),
         (
             "PointGPT-S no-mask order-random",
             NEPA_ROOT / "PointGPT/experiments/pretrain_nomask_orderrandom/PointGPT-S/pgpt_s_nomask_ordrand_e300/20260423_200226.log",
             "cdl12 + random token order",
+            "",
         ),
     ]
     rows = []
-    for name, path, variant in specs:
+    for name, path, variant, note in specs:
+        if path is None:
+            rows.append(
+                {
+                    "variant": name,
+                    "pretext": variant,
+                    "epoch0_loss": "",
+                    "epoch50_loss": "",
+                    "epoch100_loss": "",
+                    "epoch200_loss": "",
+                    "final_epoch": "",
+                    "final_loss": "",
+                    "loss_main_last_logged": "",
+                    "recon_cd_l1_last_logged": "",
+                    "recon_cd_l2_last_logged": "",
+                    "source_log": "",
+                    "note": note,
+                }
+            )
+            continue
         if not path.exists():
             continue
         parsed = parse_pretrain_log(path)
@@ -312,26 +595,28 @@ def build_object_pretext_summary() -> None:
                 "recon_cd_l1_last_logged": parsed["diag_last"].get("recon_cd_l1", ""),
                 "recon_cd_l2_last_logged": parsed["diag_last"].get("recon_cd_l2", ""),
                 "source_log": str(path.relative_to(NEPA_ROOT)),
+                "note": note,
             }
         )
     write_csv(NEPA_ROOT / "results/pointgpt_object_pretext_summary.csv", rows)
     lines = [
         "# PointGPT Object-Side Pretext Summary",
         "",
-        "| variant | pretext | epoch0 | epoch50 | epoch100 | epoch200 | final | last loss_main | last cd_l1 | last cd_l2 |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| variant | pretext | epoch0 | epoch50 | epoch100 | epoch200 | final | last loss_main | last cd_l1 | last cd_l2 | note |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for r in rows:
         lines.append(
             f"| `{r['variant']}` | `{r['pretext']}` | `{fmt(r['epoch0_loss'], 4)}` | `{fmt(r['epoch50_loss'], 4)}` | "
             f"`{fmt(r['epoch100_loss'], 4)}` | `{fmt(r['epoch200_loss'], 4)}` | `{fmt(r['final_loss'], 4)}` | "
-            f"`{fmt(r['loss_main_last_logged'], 5)}` | `{fmt(r['recon_cd_l1_last_logged'], 5)}` | `{fmt(r['recon_cd_l2_last_logged'], 5)}` |"
+            f"`{fmt(r['loss_main_last_logged'], 5)}` | `{fmt(r['recon_cd_l1_last_logged'], 5)}` | `{fmt(r['recon_cd_l2_last_logged'], 5)}` | {r.get('note', '')} |"
         )
     lines.extend(
         [
             "",
             "## Interpretation",
             "",
+            "- The official masked PointGPT-S row uses the public checkpoint; its original pretraining log is unavailable in this rebuilt environment, so it should not be used for pretext-side trajectory claims.",
             "- Both no-mask and no-mask order-randomized pretrains are non-null optimization runs: loss drops sharply from epoch 0 to the final checkpoint.",
             "- The order-randomized row optimizes less well than the no-mask row, so causal order is more binding than mask removal alone, but it does not collapse downstream utility on ScanObjectNN.",
             "- Older pointNEPA mask-off / vit-shift raw logs referenced in the active ledger are not present in this rebuilt local environment; keep those as sidecar-ledger rows unless the original log archive is restored.",
@@ -343,9 +628,13 @@ def build_object_pretext_summary() -> None:
 def main() -> None:
     build_six_dataset_table()
     build_binding_profile()
+    build_binding_profile_figure()
+    build_recoverability_table()
     build_object_pretext_summary()
     print("[write] tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md")
     print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary.md")
+    print("[write] tools/concerto_projection_shortcut/results_binding_profile_summary.png")
+    print("[write] tools/concerto_projection_shortcut/results_recoverability_rrec_max.md")
     print("[write] 3D-NEPA/results/pointgpt_object_pretext_summary.md")
 
 

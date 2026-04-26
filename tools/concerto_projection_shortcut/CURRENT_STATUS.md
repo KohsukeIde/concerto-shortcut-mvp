@@ -1557,6 +1557,89 @@ Expected next stage:
 
 ## Immediate Next Step
 
+## 2026-04-26 Object-Level / Binding-Profile Gap Closure
+
+Generated paper-facing framework artifacts:
+
+- `results_recoverability_rrec_max.md` / `.csv`: `R_rec^max` table for
+  Concerto, Sonata, Utonia, and PTv3. The table intentionally marks missing
+  external-model adaptation suites as not run rather than treating them as zero.
+  Concerto frozen/cached-feature recovery remains essentially zero, while full
+  FT recovers only a small fraction of oracle headroom.
+- `results_binding_profile_summary.png` / `.pdf`: central binding-profile
+  heatmap generated from `results_binding_profile_summary.csv`.
+- `3D-NEPA/results/pointgpt_object_pretext_summary.md` / `.csv`: object pretext
+  summary now includes the official masked checkpoint as a checkpoint-only row
+  with no local pretraining log, plus no-mask and no-mask order-random loss
+  trajectories.
+
+New long-running object jobs submitted:
+
+- `135471.qjcm`: PointGPT-S `mask_ratio=0.7` + random token order pretraining
+  (`cfgs/PointGPT-S/pretrain_orderrandom.yaml`, 24h QF). This is the missing
+  mask-on order-random row needed to separate masking and causal-order effects.
+- `135482.qjcm`: dependent PointGPT-S `mask_ratio=0.7` + random token order
+  ScanObjectNN `obj_bg` fine-tune, queued with `afterok:135471.qjcm`.
+- `135483.qjcm`: dependent readout/support-stress audit for the same row,
+  queued with `afterok:135482.qjcm`.
+- `135472.qjcm`, `135474.qjcm`, `135476.qjcm`, `135478.qjcm`, `135480.qjcm`,
+  `135481.qjcm`: ScanObjectNN `obj_bg` seed repeats for official masked,
+  no-mask, and no-mask order-random rows, seeds 1/2.
+- `135473.qjcm`, `135475.qjcm`, `135477.qjcm`, `135479.qjcm`: ShapeNetPart
+  seed repeats for official masked and no-mask rows, seeds 1/2.
+- `135484.qjcm`: ShapeNetPart support-stress audit first attempt failed
+  immediately because the eval script lacked the PointGPT root on
+  `PYTHONPATH` for `pointnet2_ops`.
+- `135485.qjcm`: ShapeNetPart support-stress audit rerun after adding
+  `PYTHONPATH=${POINTGPT_DIR}`. It then failed at checkpoint loading because
+  PyTorch 2.6+ defaults to `weights_only=True`.
+- `135486.qjcm`: ShapeNetPart support-stress audit rerun after setting
+  `torch.load(..., weights_only=False)` for trusted local ShapeNetPart
+  checkpoints. It then failed because the eval script read `[B, 50, N]` logits
+  as `[B, N, 50]`.
+- `135487.qjcm`: ShapeNetPart support-stress audit rerun after adding an output
+  shape guard/transposition. It still failed due to NumPy advanced-indexing axis
+  behavior when selecting category-specific part logits.
+- `135488.qjcm`: ShapeNetPart support-stress audit rerun after replacing
+  advanced indexing with `np.take(..., axis=1)`. This adds
+  random/structured keep20, `xyz_zero`, and two part-aware stress variants:
+  `part_drop_largest` and
+  `part_keep20_per_part`.
+
+Completed ShapeNetPart support-stress result:
+
+- Official PointGPT-S ShapeNetPart: clean class-avg IoU `0.8335`, random
+  keep20 `0.6924`, structured keep20 `0.6413`, part-drop-largest `0.4949`,
+  part-keep20-per-part `0.6925`, xyz-zero `0.2585`.
+- No-mask PointGPT-S ShapeNetPart: clean class-avg IoU `0.8287`, random keep20
+  `0.6986`, structured keep20 `0.6605`, part-drop-largest `0.4799`,
+  part-keep20-per-part `0.7014`, xyz-zero `0.2323`.
+- Interpretation: dense part transfer is not classification-only. No-mask stays
+  close to official on clean ShapeNetPart, and both rows show that part-aware
+  removal (`part_drop_largest`) is a much stronger stress than random keep20 /
+  per-part keep20.
+
+Initial log check:
+
+- The pretrain job loads `pretrain_orderrandom.yaml` with `mask_ratio: 0.7` and
+  `order_mode: random`; data and DDP initialization are healthy.
+- ScanObjectNN seed jobs load the intended checkpoints and set the requested
+  seeds.
+- ShapeNetPart seed jobs start training with the intended checkpoints and seed
+  argument. `segmentation/main.py` now accepts `--seed`, and
+  `scripts/local/pointgpt_s_shapenetpart_ft.sh` forwards it.
+
+Remaining after these complete:
+
+- Run readout/support audits for the new `mask_ratio=0.7` order-random
+  fine-tuned checkpoint after its pretraining and downstream fine-tuning finish.
+- Summarize seed variance. If any seed repeats fail or exceed walltime, label
+  the corresponding row as a single-run controlled audit rather than making a
+  seed-variance claim.
+- Summarize `ptgpt_shapenetpart_official_support_stress.md` and
+  `ptgpt_shapenetpart_nomask_support_stress.md` into the object-level results
+  section.
+
 1. Treat the current pair-emphasis decoder-family pilots (CoDA/CIDA) as no-go.
    The useful signal is diagnostic: moving `picture` away from `wall` is
    possible, but the current losses damage the full weak-class decision surface.

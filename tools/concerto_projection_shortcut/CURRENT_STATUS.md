@@ -541,6 +541,38 @@ investigation.
     be interpreted as a diagnostic raw-protocol gain, not as an official SOTA
     number. Details are in
     `tools/concerto_projection_shortcut/results_fusion_protocol_alignment.md`.
+  - The 5-expert `avgprob_all` row was exported as scene-wise Pointcept-style
+    `pred/*.npy` / `submit/*.txt` predictions and re-scored from the saved
+    raw-point predictions. This confirms the save/eval path reproduces the
+    raw-aligned fusion protocol rather than the Pointcept fragment/voting test
+    path: `fullft_single_saved=0.7969`, `avgprob_all_saved=0.8064`.
+    Therefore the simple average is a strong raw-protocol baseline but still
+    not an official SOTA row by itself. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_fusion_export_scannet20_avgprob5_fullft_ptv3.md`.
+  - Region-level expert-choice coherence was tested with Concerto full-FT as
+    the default expert. Label-oracle expert choice is spatially coherent at
+    fine granularity: point oracle is `0.9004`, region oracle remains high at
+    `s4=0.8890`, `s8=0.8842`, `s16=0.8785`, and target-expert region purity is
+    `0.9104/0.8724/0.8305` for `s4/s8/s16`. FullFT-default region-defer
+    oracles are also well above fullFT single, with the best `s4::Utonia`
+    reaching `0.8496`. Reading: complementarity is not purely pointwise noise;
+    region-smoothed expert correction is plausible. This is an oracle
+    diagnostic only because labels choose region experts. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_region_coherence_scannet20_fullft_default_ptv3.md`.
+  - A FullFT-centered residual fusion diagnostic was run after the probability
+    and shallow deferral no-gos. This is still a two-fold scene-level
+    validation pilot, not a publishable train-split result. A single
+    `kl=0.03, safe=2` pilot reaches `0.8097`, and the minimal full-val
+    diagnostic with two settings reaches `0.8164` for `kl=0, safe=4`, above
+    both `avgprob_all=0.8065` and fullFT single `0.7969` in the same raw
+    protocol. The gain comes with weak-class tradeoffs (`picture` drops to
+    `0.3999`, `picture->wall` rises to `0.4808`), so this is not a final
+    method yet. Reading: unlike hard/selective deferral, residual fusion has
+    real SOTA-route signal; the next proper step is a train-split version with
+    final val-only evaluation and official-path export. Details are in
+    `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_fullft_default_with_ptv3_kl003_safe2.md`
+    and
+    `tools/concerto_projection_shortcut/results_cross_model_residual_fusion_scannet20_fullft_default_with_ptv3_minimal.md`.
   - PTv3 supervised compatibility fix completed. The earlier invalid PTv3 rows
     were not due to missing checkpoint keys (`missing=0/unexpected=0`) but due
     to released Pointcept v1.5.1 protocol differences. Two concrete mismatches

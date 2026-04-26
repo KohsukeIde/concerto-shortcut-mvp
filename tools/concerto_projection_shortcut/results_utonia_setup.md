@@ -189,10 +189,12 @@ Interpretation:
 - This means Utonia's cleaner fixed readout does not remove the
   support-redundancy phenomenon. It remains a model/data/protocol property,
   not a Concerto-only artifact.
-- The Utonia `feature_zero` row is not directly comparable to color-dependent
-  Concerto/Sonata/PTv3 rows. The public Utonia inference path is largely
-  raw-feature agnostic, so zeroing `feat` is a weak intervention for this
-  released artifact.
+- The Utonia `feature_zero` row should be treated as an audited low-sensitivity
+  result, not as evidence that the input path omits raw features. The default
+  Utonia transform explicitly constructs `feat=(coord,color,normal)`, while the
+  model also receives `coord` and `grid_coord` as structural keys. A follow-up
+  channel-wise audit separates all-`feat` zeroing from color/normal-only,
+  coord-only, and raw `--wo_color/--wo_normal`-style ablations.
 
 ## Current Status
 

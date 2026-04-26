@@ -170,7 +170,22 @@ def build_variants(args: argparse.Namespace) -> list[Variant]:
     for count in parse_int_list(args.fixed_point_counts):
         out.append(Variant(f"fixed_points_{count}", "fixed", fixed_count=count))
     if args.feature_zero:
-        out.append(Variant("feature_zero", "feature_zero"))
+        # Utonia's default Collect builds feat=(coord,color,normal), while the
+        # model also receives coord/grid_coord as separate structural keys.
+        # Keep the legacy all-feat zero row, but also separate the official
+        # --wo_color/--wo_normal style raw ablations from feature-channel
+        # ablations so a low all-feat-zero damage cannot be misread as a
+        # transform bug.
+        out.extend(
+            [
+                Variant("feature_zero", "feature_zero"),
+                Variant("feat_zero_color_normal", "feat_zero_color_normal"),
+                Variant("feat_zero_coord", "feat_zero_coord"),
+                Variant("raw_wo_color", "raw_wo_color"),
+                Variant("raw_wo_normal", "raw_wo_normal"),
+                Variant("raw_wo_color_normal", "raw_wo_color_normal"),
+            ]
+        )
     return out
 
 
@@ -239,7 +254,7 @@ def forward_raw_logits(model, seg_head, batch: dict) -> tuple[torch.Tensor, torc
 
 
 def apply_variant(scene: dict, variant: Variant, seed: int) -> tuple[dict, float]:
-    if variant.kind in {"clean", "feature_zero"}:
+    if variant.kind in {"clean", "feature_zero", "feat_zero_color_normal", "feat_zero_coord"}:
         return {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in scene.items()}, 1.0
 
     rng = np.random.default_rng(seed)
@@ -287,10 +302,27 @@ def apply_variant(scene: dict, variant: Variant, seed: int) -> tuple[dict, float
     return out, float(keep.mean())
 
 
-def maybe_zero_feature(batch: dict) -> dict:
+def apply_feature_variant(batch: dict, kind: str) -> dict:
     out = {k: (v.clone() if isinstance(v, torch.Tensor) else v) for k, v in batch.items()}
-    if "feat" in out:
+    if "feat" not in out:
+        return out
+    if kind == "feature_zero":
         out["feat"] = torch.zeros_like(out["feat"])
+    elif kind == "feat_zero_color_normal":
+        # feat layout follows Utonia default Collect: coord(0:3), color(3:6),
+        # normal(6:9).
+        out["feat"][:, 3:] = 0
+    elif kind == "feat_zero_coord":
+        out["feat"][:, :3] = 0
+    return out
+
+
+def apply_raw_feature_variant(scene: dict, kind: str) -> dict:
+    out = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in scene.items()}
+    if kind in {"raw_wo_color", "raw_wo_color_normal"} and "color" in out:
+        out["color"] = np.zeros_like(out["coord"])
+    if kind in {"raw_wo_normal", "raw_wo_color_normal"} and "normal" in out:
+        out["normal"] = np.zeros_like(out["coord"])
     return out
 
 
@@ -353,12 +385,15 @@ def main() -> None:
             seed = args.seed + scene_idx * 1009 + v_idx
             if variant.kind == "clean":
                 support_batch = loader.dataset.transform_scene(raw_scene)
+            elif variant.kind in {"raw_wo_color", "raw_wo_normal", "raw_wo_color_normal"}:
+                support_batch = loader.dataset.transform_scene(apply_raw_feature_variant(raw_scene, variant.kind))
+                keep_fracs[variant.name].append(1.0)
             else:
                 masked_scene, keep_frac = apply_variant(raw_scene, variant, seed)
                 keep_fracs[variant.name].append(keep_frac)
                 support_batch = loader.dataset.transform_scene(masked_scene)
-            if variant.kind == "feature_zero":
-                support_batch = maybe_zero_feature(support_batch)
+            if variant.kind in {"feature_zero", "feat_zero_color_normal", "feat_zero_coord"}:
+                support_batch = apply_feature_variant(support_batch, variant.kind)
                 keep_fracs[variant.name].append(1.0)
             if variant.kind == "clean":
                 keep_fracs[variant.name].append(1.0)

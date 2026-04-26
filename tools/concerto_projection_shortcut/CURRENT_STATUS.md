@@ -394,10 +394,20 @@ investigation.
     feature-zero `0.7466` (`-0.0120`). Reading: Utonia's cleaner fixed
     readout does not eliminate support redundancy; random keep `0.2` remains a
     weak stress, while structured/object-style missing-support is severe. The
-    feature-zero row should not be compared directly to color-dependent rows
-    because the public Utonia inference path is largely raw-feature agnostic.
+    earlier note that the public Utonia path is "raw-feature agnostic" was too
+    strong: Utonia's default transform explicitly constructs
+    `feat=(coord,color,normal)`, while the model also receives `coord` and
+    `grid_coord` as structural keys. The low `feature_zero` damage should be
+    treated as an audited low-sensitivity finding under this released stack,
+    not as evidence that raw features are omitted from the input path.
     Details are in
     `tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.md`.
+  - Follow-up Utonia feature-channel audit submitted as `135554.qjcm`.
+    It separates the legacy all-`feat` zero row from `feat_zero_color_normal`,
+    `feat_zero_coord`, and raw `--wo_color/--wo_normal`-style ablations.
+    A 5-scene smoke (`135553.qjcm`) passed and showed the same qualitative
+    low-damage pattern for raw color/normal removal, but only the full 312-scene
+    rerun should be used in paper tables.
   - Paper-facing award-level consolidation tables are now generated. The
     completed six-dataset main-variant causal battery is reformatted as
     `tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md`,

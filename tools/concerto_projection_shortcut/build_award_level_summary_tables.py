@@ -594,7 +594,7 @@ def build_binding_profile() -> None:
             "",
             "- Scene readout rows use `picture_vs_wall` from the cross-model downstream audit.",
             "- Scene-support rows use full-scene nearest-neighbor scoring from the masking battery.",
-            "- Utonia support stress uses the released Utonia inference/head path; its feature-zero row is not directly comparable to color-dependent rows because the public Utonia path is largely raw-feature agnostic.",
+            "- Utonia support stress uses the released Utonia inference/head path. The default Utonia transform explicitly builds feat=(coord,color,normal); its low feature-zero damage should therefore be treated as an audited robustness/anomaly, not as evidence that the input path omits raw features.",
             "- Object rows use ScanObjectNN `obj_bg` readout and support-stress audits.",
         ]
     )

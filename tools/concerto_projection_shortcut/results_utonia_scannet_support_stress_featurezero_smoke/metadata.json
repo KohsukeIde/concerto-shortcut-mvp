@@ -1,0 +1,104 @@
+{
+  "args": {
+    "repo_root": "/groups/qgah50055/ide/concerto-shortcut-mvp",
+    "data_root": "data/scannet",
+    "utonia_weight": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/weights/utonia/utonia.pth",
+    "seg_head_weight": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/weights/utonia/utonia_linear_prob_head_sc.pth",
+    "output_dir": "/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_utonia_scannet_support_stress_featurezero_smoke",
+    "val_split": "val",
+    "batch_size": 1,
+    "num_worker": 2,
+    "max_val_scenes": 5,
+    "random_keep_ratios": "0.2",
+    "structured_keep_ratios": "0.2",
+    "masked_model_keep_ratios": "0.2",
+    "fixed_point_counts": "4000",
+    "feature_zero": true,
+    "structured_block_m": 1.28,
+    "full_scene_chunk_size": 2048,
+    "weak_classes": "picture,counter,desk,sink,cabinet,shower curtain,door",
+    "seed": 20260425,
+    "disable_flash": true,
+    "dry_run": false
+  },
+  "seen_scenes": 5,
+  "variants": [
+    {
+      "name": "clean",
+      "kind": "clean",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "random_keep0p2",
+      "kind": "random",
+      "keep_ratio": 0.2,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "structured_b1p28m_keep0p2",
+      "kind": "structured",
+      "keep_ratio": 0.2,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "masked_model_keep0p2",
+      "kind": "masked_model",
+      "keep_ratio": 0.2,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "fixed_points_4000",
+      "kind": "fixed",
+      "keep_ratio": 1.0,
+      "fixed_count": 4000,
+      "block_m": 1.28
+    },
+    {
+      "name": "feature_zero",
+      "kind": "feature_zero",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "feat_zero_color_normal",
+      "kind": "feat_zero_color_normal",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "feat_zero_coord",
+      "kind": "feat_zero_coord",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "raw_wo_color",
+      "kind": "raw_wo_color",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "raw_wo_normal",
+      "kind": "raw_wo_normal",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    },
+    {
+      "name": "raw_wo_color_normal",
+      "kind": "raw_wo_color_normal",
+      "keep_ratio": 1.0,
+      "fixed_count": 0,
+      "block_m": 1.28
+    }
+  ]
+}

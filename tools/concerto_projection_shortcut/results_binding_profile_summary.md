@@ -8,18 +8,19 @@ This is a paper-facing consolidation table. It does not replace the source resul
 | `scene` | `Sonata` | `ScanNet20 picture_vs_wall` | `0.3582` | `0.7102` | `0.8926` | `picture->wall (0.4783)` | `0.7501` | `` | `` | `` |
 | `scene` | `PTv3 supervised` | `ScanNet20 picture_vs_wall` | `0.4908` | `0.8791` | `0.9952` | `picture->wall (0.2326)` | `0.9626` | `` | `` | `` |
 | `scene` | `Utonia` | `ScanNet20 picture_vs_wall` | `0.2952` | `0.9994` | `1.0000` | `picture->wall (0.1284)` | `0.8847` | `` | `` | `` |
-| `scene-support` | `Concerto decoder` | `ScanNet/S3DIS full-scene support stress` | `0.7863` | `` | `` | `` | `` | `0.0336` | `0.4851` | `0.7180` |
-| `scene-support` | `Concerto linear` | `ScanNet/S3DIS full-scene support stress` | `0.7696` | `` | `` | `` | `` | `0.0177` | `0.4789` | `0.7308` |
-| `scene-support` | `Sonata linear` | `ScanNet/S3DIS full-scene support stress` | `0.7170` | `` | `` | `` | `` | `0.0305` | `0.4508` | `0.6563` |
-| `scene-support` | `PTv3 ScanNet20` | `ScanNet/S3DIS full-scene support stress` | `0.7697` | `` | `` | `` | `` | `0.0702` | `0.5206` | `0.7429` |
-| `scene-support` | `PTv3 ScanNet200` | `ScanNet/S3DIS full-scene support stress` | `0.3458` | `` | `` | `` | `` | `0.0879` | `0.2686` | `0.3440` |
-| `scene-support` | `PTv3 S3DIS` | `ScanNet/S3DIS full-scene support stress` | `0.7052` | `` | `` | `` | `` | `0.2607` | `0.4170` | `0.5914` |
-| `scene-support` | `Utonia` | `ScanNet20 full-scene support stress` | `0.7586` | `` | `` | `` | `` | `0.0122` | `0.4748` | `0.0120` |
-| `object` | `PointGPT-S official` | `ScanObjectNN obj_bg` | `0.9105` | `0.9776` | `0.9948` | `bag->box (0.2353)` | `0.8466` | `` | `` | `` |
-| `object` | `PointGPT-S no-mask` | `ScanObjectNN obj_bg` | `0.8726` | `0.9466` | `0.9914` | `pillow->bag (0.2381)` | `0.8754` | `0.3528` | `0.6558` | `0.7814` |
-| `object` | `PointGPT-S no-mask order-random` | `ScanObjectNN obj_bg` | `0.8726` | `0.9587` | `0.9931` | `pillow->bag (0.2857)` | `0.8221` | `0.4423` | `0.6506` | `0.8210` |
-| `object-support` | `PointGPT-S official` | `ShapeNetPart support stress` | `0.8335` | `` | `` | `` | `` | `0.1412` | `0.1922` | `0.5751` |
-| `object-support` | `PointGPT-S no-mask` | `ShapeNetPart support stress` | `0.8287` | `` | `` | `` | `` | `0.1301` | `0.1682` | `0.5964` |
+| `scene-support` | `Concerto decoder` | `ScanNet20 support-stress severity` | `0.7864` | `` | `` | `` | `` | `0.0342` | `0.4920` | `0.7183` |
+| `scene-support` | `Concerto linear` | `ScanNet20 support-stress severity` | `0.7696` | `` | `` | `` | `` | `0.0180` | `0.4688` | `0.7305` |
+| `scene-support` | `Sonata linear` | `ScanNet20 support-stress severity` | `0.7164` | `` | `` | `` | `` | `0.0297` | `0.4403` | `0.6558` |
+| `scene-support` | `PTv3 ScanNet20` | `ScanNet20 support-stress severity` | `0.7713` | `` | `` | `` | `` | `0.0750` | `0.5212` | `0.7442` |
+| `scene-support` | `PTv3 ScanNet200` | `ScanNet200 support-stress severity` | `0.3420` | `` | `` | `` | `` | `0.0829` | `0.2562` | `0.3401` |
+| `scene-support` | `PTv3 S3DIS` | `S3DIS Area-5 support-stress severity` | `0.7112` | `` | `` | `` | `` | `0.2661` | `0.4486` | `0.5966` |
+| `scene-support` | `Utonia` | `ScanNet20 full-scene support stress` | `0.7580` | `` | `` | `` | `` | `0.0111` | `0.4680` | `0.0103` |
+| `object` | `PointGPT-S official` | `ScanObjectNN obj_bg` | `0.9105` | `0.9776` | `0.9948` | `bag->box (0.2353)` | `0.8466` | `0.4768` | `0.7005` | `0.8176` |
+| `object` | `PointGPT-S no-mask` | `ScanObjectNN obj_bg` | `0.8726` | `0.9466` | `0.9914` | `pillow->bag (0.2381)` | `0.8754` | `0.3804` | `0.6609` | `0.7986` |
+| `object` | `PointGPT-S no-mask order-random` | `ScanObjectNN obj_bg` | `0.8726` | `0.9587` | `0.9931` | `pillow->bag (0.2857)` | `0.8221` | `0.4509` | `0.6592` | `0.8021` |
+| `object` | `PointGPT-S mask-on order-random` | `ScanObjectNN obj_bg` | `0.8795` | `0.9552` | `0.9983` | `bed->sofa (0.1818)` | `0.8972` | `0.3046` | `0.6334` | `0.8124` |
+| `object-support` | `PointGPT-S official` | `ShapeNetPart support stress` | `0.8335` | `` | `` | `` | `` | `0.1407` | `0.1882` | `0.5747` |
+| `object-support` | `PointGPT-S no-mask` | `ShapeNetPart support stress` | `0.8287` | `` | `` | `` | `` | `0.1271` | `0.1741` | `0.5960` |
 
 ## Notes
 

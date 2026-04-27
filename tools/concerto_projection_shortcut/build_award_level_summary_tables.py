@@ -327,9 +327,26 @@ def load_json(path: Path) -> dict:
 def object_rows() -> list[dict]:
     rows = []
     specs = [
-        ("PointGPT-S official", NEPA_ROOT / "results/ptgpt_readout_official_objbg_full.json", None),
-        ("PointGPT-S no-mask", NEPA_ROOT / "results/ptgpt_readout_nomask_objbg_full.json", NEPA_ROOT / "results/ptgpt_stress_nomask_objbg_full.json"),
-        ("PointGPT-S no-mask order-random", NEPA_ROOT / "results/ptgpt_nomask_ordrand_objbg_readout_full.json", NEPA_ROOT / "results/ptgpt_nomask_ordrand_objbg_stress_full.json"),
+        (
+            "PointGPT-S official",
+            NEPA_ROOT / "results/ptgpt_readout_official_objbg_full.json",
+            NEPA_ROOT / "results/ptgpt_stress_official_objbg_severity.json",
+        ),
+        (
+            "PointGPT-S no-mask",
+            NEPA_ROOT / "results/ptgpt_readout_nomask_objbg_full.json",
+            NEPA_ROOT / "results/ptgpt_stress_nomask_objbg_severity.json",
+        ),
+        (
+            "PointGPT-S no-mask order-random",
+            NEPA_ROOT / "results/ptgpt_nomask_ordrand_objbg_readout_full.json",
+            NEPA_ROOT / "results/ptgpt_stress_nomask_ordrand_objbg_severity.json",
+        ),
+        (
+            "PointGPT-S mask-on order-random",
+            NEPA_ROOT / "results/ptgpt_masked_ordrand_objbg_readout_full.json",
+            NEPA_ROOT / "results/ptgpt_stress_masked_ordrand_objbg_severity.json",
+        ),
     ]
     for name, readout_path, stress_path in specs:
         if not readout_path.exists():
@@ -507,6 +524,45 @@ def scene_readout_rows() -> list[dict]:
 
 
 def support_rows_from_scene() -> list[dict]:
+    severity_specs = [
+        ("Concerto decoder", "ScanNet20 support-stress severity", OUT_DIR / "results_support_severity_concerto_decoder.csv"),
+        ("Concerto linear", "ScanNet20 support-stress severity", OUT_DIR / "results_support_severity_concerto_linear.csv"),
+        ("Sonata linear", "ScanNet20 support-stress severity", OUT_DIR / "results_support_severity_sonata_linear.csv"),
+        ("PTv3 ScanNet20", "ScanNet20 support-stress severity", OUT_DIR / "results_support_severity_ptv3_scannet20.csv"),
+        ("PTv3 ScanNet200", "ScanNet200 support-stress severity", OUT_DIR / "results_support_severity_ptv3_scannet200.csv"),
+        ("PTv3 S3DIS", "S3DIS Area-5 support-stress severity", OUT_DIR / "results_support_severity_ptv3_s3dis.csv"),
+    ]
+    severity_rows = []
+    for model, task, path in severity_specs:
+        if not path.exists():
+            continue
+        vals = {}
+        for row in read_csv(path):
+            if row.get("score_space") != "full_nn":
+                continue
+            vals[row["variant"]] = float(row["mIoU"])
+        clean = vals.get("clean_voxel")
+        if clean is None:
+            continue
+        severity_rows.append(
+            {
+                "domain": "scene-support",
+                "model": model,
+                "task": task,
+                "top1_or_miou": clean,
+                "top2_oracle_proxy": "",
+                "top5_oracle_proxy": "",
+                "hardest_pair": "",
+                "hardest_pair_confusion": "",
+                "pair_probe_bal_acc": "",
+                "random_keep20_down": clean - vals["random_keep0p2"] if "random_keep0p2" in vals else "",
+                "structured_keep20_down": clean - vals["structured_b64_keep0p2"] if "structured_b64_keep0p2" in vals else "",
+                "feature_zero_down": clean - vals["feature_zero1p0"] if "feature_zero1p0" in vals else "",
+            }
+        )
+    if severity_rows:
+        return severity_rows
+
     src = OUT_DIR / "results_masking_fullscene_scoring.csv"
     if not src.exists():
         return []
@@ -541,7 +597,11 @@ def support_rows_from_scene() -> list[dict]:
 
 
 def support_rows_from_utonia() -> list[dict]:
-    src = OUT_DIR / "results_utonia_scannet_support_stress/utonia_scannet_support_stress.csv"
+    src = OUT_DIR / "results_support_severity_utonia/utonia_scannet_support_stress.csv"
+    if not src.exists():
+        src = OUT_DIR / "results_utonia_scannet_support_stress_featurezero_audit/utonia_scannet_support_stress.csv"
+    if not src.exists():
+        src = OUT_DIR / "results_utonia_scannet_support_stress/utonia_scannet_support_stress.csv"
     if not src.exists():
         return []
     vals = {row["condition"]: float(row["miou"]) for row in read_csv(src)}

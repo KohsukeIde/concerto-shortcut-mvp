@@ -388,10 +388,10 @@ investigation.
     `tools/concerto_projection_shortcut/results_cross_model_downstream_audit_scannet20.md`.
   - Utonia ScanNet20 support-stress battery is now complete. With full-scene
     nearest-neighbor scoring from retained support logits, Utonia gives clean
-    `mIoU=0.7586`, random keep `0.2` `0.7464` (`-0.0122`), structured block
-    keep `0.2` `0.2837` (`-0.4748`), object-style masked-model keep `0.2`
-    `0.2340` (`-0.5246`), fixed `4000` points `0.4163` (`-0.3423`), and
-    feature-zero `0.7466` (`-0.0120`). Reading: Utonia's cleaner fixed
+    `mIoU=0.7576`, random keep `0.2` `0.7469` (`-0.0107`), structured block
+    keep `0.2` `0.2834` (`-0.4742`), object-style masked-model keep `0.2`
+    `0.2360` (`-0.5216`), fixed `4000` points `0.4190` (`-0.3386`), and
+    feature-zero `0.7472` (`-0.0104`). Reading: Utonia's cleaner fixed
     readout does not eliminate support redundancy; random keep `0.2` remains a
     weak stress, while structured/object-style missing-support is severe. The
     earlier note that the public Utonia path is "raw-feature agnostic" was too
@@ -401,13 +401,19 @@ investigation.
     treated as an audited low-sensitivity finding under this released stack,
     not as evidence that raw features are omitted from the input path.
     Details are in
-    `tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.md`.
-  - Follow-up Utonia feature-channel audit submitted as `135554.qjcm`.
+    `tools/concerto_projection_shortcut/results_utonia_scannet_support_stress/utonia_scannet_support_stress.md`
+    and the full channel audit in
+    `tools/concerto_projection_shortcut/results_utonia_scannet_support_stress_featurezero_audit/utonia_scannet_support_stress.md`.
+  - The follow-up Utonia feature-channel audit (`135554.qjcm`) is complete.
     It separates the legacy all-`feat` zero row from `feat_zero_color_normal`,
     `feat_zero_coord`, and raw `--wo_color/--wo_normal`-style ablations.
-    A 5-scene smoke (`135553.qjcm`) passed and showed the same qualitative
-    low-damage pattern for raw color/normal removal, but only the full 312-scene
-    rerun should be used in paper tables.
+    Full 312-scene values: `feat_zero_color_normal=0.7475` (`-0.0101`),
+    `feat_zero_coord=0.7586` (`+0.0010`), `raw_wo_color=0.7557`
+    (`-0.0019`), `raw_wo_normal=0.7526` (`-0.0050`), and
+    `raw_wo_color_normal=0.7477` (`-0.0099`). The correct reading is not that
+    Utonia omits raw features; the released stack explicitly accepts
+    `feat=(coord,color,normal)`, but its ScanNet prediction is only weakly
+    sensitive to these channel-zero / raw-missing ablations.
   - Paper-facing award-level consolidation tables are now generated. The
     completed six-dataset main-variant causal battery is reformatted as
     `tools/concerto_projection_shortcut/results_main_variant_causal_battery_paper_table.md`,
@@ -420,6 +426,34 @@ investigation.
     `3D-NEPA/results/pointgpt_object_pretext_summary.md`. This closes the
     "results exist but are not paper-readable" gap for the main causal table,
     unified binding profile, and object pretext summary.
+  - Scene support-stress severity curves are now complete for Concerto decoder,
+    Concerto linear, Sonata linear, PTv3 ScanNet20, PTv3 ScanNet200, and PTv3
+    S3DIS. The central pattern is stable: random keep20 is materially weaker
+    than structured/object-style missing support, especially under full-scene
+    scoring. Full-scene random keep20 damage / structured keep20 damage:
+    Concerto-D `0.0342 / 0.4920`, Concerto-L `0.0180 / 0.4688`, Sonata-L
+    `0.0297 / 0.4403`, PTv3 ScanNet20 `0.0750 / 0.5212`, PTv3 ScanNet200
+    `0.0829 / 0.2562`, PTv3 S3DIS `0.2661 / 0.4486`. Object-style keep20 is
+    also severe: Concerto-D `0.5973`, Concerto-L `0.5735`, Sonata-L `0.5376`,
+    PTv3 ScanNet20 `0.6325`, PTv3 ScanNet200 `0.2995`, PTv3 S3DIS `0.5902`.
+    The outputs are
+    `results_support_severity_concerto_decoder.md`,
+    `results_support_severity_concerto_linear.md`,
+    `results_support_severity_sonata_linear.md`,
+    `results_support_severity_ptv3_scannet20.md`,
+    `results_support_severity_ptv3_scannet200.md`, and
+    `results_support_severity_ptv3_s3dis.md`.
+  - Utonia full severity-curve rerun (`135562.qjcm`) is complete. Clean mIoU is
+    `0.7580`; random keep80/50/20/10 gives
+    `0.7579 / 0.7581 / 0.7469 / 0.7230`; structured keep80/50/20/10 gives
+    `0.6854 / 0.5272 / 0.2900 / 0.1912`; object-style masked-model keep50/20/10
+    gives `0.3935 / 0.2241 / 0.1480`; fixed 16k/8k/4k gives
+    `0.7122 / 0.6230 / 0.4243`; feature-zero gives `0.7477`.
+    This confirms the same qualitative pattern as the rest of the scene-side
+    battery: random point sparsity is a weak stress, while structured and
+    object-style missing support are severe. The low feature/channel-zero
+    sensitivity remains a released-stack Utonia finding rather than evidence
+    that raw features are omitted.
   - Representation-readout actionability gap tables are now generated. The
     cross-model, multi-pair table
     `tools/concerto_projection_shortcut/results_actionability_gap_cross_model_pairs.md`
@@ -1764,15 +1798,46 @@ New long-running object jobs submitted:
 Completed ShapeNetPart support-stress result:
 
 - Official PointGPT-S ShapeNetPart: clean class-avg IoU `0.8335`, random
-  keep20 `0.6924`, structured keep20 `0.6413`, part-drop-largest `0.4949`,
-  part-keep20-per-part `0.6925`, xyz-zero `0.2585`.
-- No-mask PointGPT-S ShapeNetPart: clean class-avg IoU `0.8287`, random keep20
-  `0.6986`, structured keep20 `0.6605`, part-drop-largest `0.4799`,
-  part-keep20-per-part `0.7014`, xyz-zero `0.2323`.
+  keep80/50/20/10 `0.8226 / 0.8184 / 0.6929 / 0.5443`, structured
+  keep80/50/20/10 `0.8200 / 0.7674 / 0.6454 / 0.6093`,
+  part-drop-largest `0.4844`, part-keep20-per-part `0.6927`, xyz-zero
+  `0.2588`.
+- No-mask PointGPT-S ShapeNetPart: clean class-avg IoU `0.8287`, random
+  keep80/50/20/10 `0.8204 / 0.8131 / 0.7016 / 0.5518`, structured
+  keep80/50/20/10 `0.8126 / 0.7673 / 0.6546 / 0.6471`,
+  part-drop-largest `0.4711`, part-keep20-per-part `0.6992`, xyz-zero
+  `0.2327`.
 - Interpretation: dense part transfer is not classification-only. No-mask stays
   close to official on clean ShapeNetPart, and both rows show that part-aware
   removal (`part_drop_largest`) is a much stronger stress than random keep20 /
   per-part keep20.
+
+Completed PointGPT-S ScanObjectNN support-stress severity curves:
+
+- Official `obj_bg`: clean `0.9105`, random keep80/50/20/10
+  `0.9139 / 0.8812 / 0.4337 / 0.2616`, structured keep80/50/20/10
+  `0.8881 / 0.7453 / 0.2100 / 0.1239`, xyz-zero `0.0929`.
+- No-mask `obj_bg`: clean `0.8916`, random keep80/50/20/10
+  `0.8726 / 0.8726 / 0.5112 / 0.2392`, structured keep80/50/20/10
+  `0.8606 / 0.6936 / 0.2306 / 0.1205`, xyz-zero `0.0929`.
+- No-mask + order-random `obj_bg`: clean `0.8744`, random keep80/50/20/10
+  `0.8881 / 0.8640 / 0.4234 / 0.1997`, structured keep80/50/20/10
+  `0.8537 / 0.6781 / 0.2151 / 0.1687`, xyz-zero `0.0723`.
+- Mask-on + order-random `obj_bg`: clean `0.8847`, random keep80/50/20/10
+  `0.8744 / 0.8589 / 0.5800 / 0.2719`, structured keep80/50/20/10
+  `0.8537 / 0.7005 / 0.2513 / 0.1652`, xyz-zero `0.0723`.
+
+Completed mask-on order-random readout/support audit:
+
+- Readout top-1/top-2/top-5: `0.8795 / 0.9552 / 0.9983`.
+- Hardest pair: `bed -> sofa`; direct pair top-1 `0.9219`; binary-probe
+  balanced accuracy `0.8972`.
+- Support-stress clean/random keep20/structured keep20/xyz-zero:
+  `0.8916 / 0.6007 / 0.2754 / 0.0723`.
+- Interpretation: mask-on random token order is not collapse-inducing, but it
+  remains a meaningful perturbation relative to mask removal alone. This
+  supports the scoped 2x2 claim that masking is weakly binding while causal
+  order is more binding but not catastrophic.
 
 Initial log check:
 
@@ -1786,8 +1851,6 @@ Initial log check:
 
 Remaining after these complete:
 
-- Run readout/support audits for the new `mask_ratio=0.7` order-random
-  fine-tuned checkpoint after its pretraining and downstream fine-tuning finish.
 - Summarize seed variance if the repeat jobs complete. If repeats fail or
   exceed walltime, report only the available point estimate and avoid
   seed-variance claims.

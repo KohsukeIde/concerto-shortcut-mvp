@@ -19,14 +19,14 @@ Exploratory CoDA/CIDA/region/proposal/subgroup attempts are intentionally not in
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | `Concerto decoder` | `0.7778` | `0.9197` | `0.9775` | `0.0002` | `0.2%` | `0.0187` | `13.2%` | `0.4034` | `0.8579` | `0.0013` | `0.3%` | `0.0198` | `4.4%` | `6-family suite; decoder-compatible families used here: class-prior, prototype/kNN, constrained Top-K, decoder-matched LoRA, full FT. LP-FT is tracked separately for the linear-head base.` |
 | `Concerto linear` | `0.7615` | `0.9171` | `0.9839` | `` | `` | `0.0166` | `10.7%` | `0.4014` | `0.8013` | `` | `` | `0.0289` | `7.2%` | `6-family suite; linear-head-compatible adaptation families used here: fixed-rank LoRA and LP-FT. Frozen suite pending for this base row.` |
-| `Sonata linear` | `0.7086` | `0.8747` | `0.9670` | `0.0017` | `1.0%` | `0.0684` | `41.2%` | `0.3582` | `0.6972` | `0.0006` | `0.2%` | `-0.0074` | `0.0%` | `6-family suite partially run: class-prior and constrained Top-K frozen rows complete, prototype/kNN pending, full-FT adaptation integrated. LoRA/LP-FT not run.` |
-| `Utonia released stack` | `0.7574` | `0.9367` | `0.9908` | `` | `` | `` | `` | `0.2952` | `0.9747` | `` | `` | `` | `` | `6-family recovery suite not run in a protocol-matched way; oracle/actionability diagnostics only` |
-| `PTv3 supervised` | `0.7745` | `0.9038` | `0.9690` | `` | `` | `` | `` | `0.4908` | `0.8785` | `` | `` | `` | `` | `6-family recovery suite not run in a protocol-matched way; oracle/actionability diagnostics only` |
+| `Sonata linear` | `0.7086` | `0.8747` | `0.9670` | `0.0017` | `1.0%` | `0.0684` | `41.2%` | `0.3582` | `0.6972` | `0.0006` | `0.2%` | `-0.0074` | `0.0%` | `6-family suite partially run: frozen class-prior, prototype/kNN, and constrained Top-K rows complete; full-FT adaptation integrated. LoRA/LP-FT not run.` |
+| `Utonia released stack` | `0.7573` | `0.9116` | `0.9821` | `0.0001` | `0.1%` | `` | `` | `0.3749` | `0.8043` | `0.0021` | `0.5%` | `` | `` | `protocol-matched frozen recovery suite complete: class-prior, prototype/multiprototype, and candidate-set pair rerank. Adaptation suite not interpreted for this row.` |
+| `PTv3 supervised` | `0.7716` | `0.8889` | `0.9647` | `0.0013` | `1.1%` | `` | `` | `0.3910` | `0.6763` | `0.0081` | `2.8%` | `` | `` | `protocol-matched frozen recovery suite complete: class-prior, prototype/multiprototype, and candidate-set pair rerank. Adaptation suite not interpreted for this row.` |
 
 ## Interpretation
 
 - Concerto has large top-2/top-5 oracle headroom, but the fixed frozen suite recovers essentially none of it.
 - Full fine-tuning recovers a nonzero but still small fraction of the oracle headroom; it improves aggregate accuracy but does not close the actionability gap.
 - LP-FT is a linear-head-family adaptation row. It should be reported as protocol-matched to the Concerto linear base, not as recovery for the decoder-probe oracle denominator.
-- Sonata now has partial protocol-matched recovery coverage: class-prior and constrained Top-K frozen rows are complete, prototype/kNN is pending, and full fine-tuning provides the high-budget adaptation row. Aggregate recovery is possible under full FT, but picture recovery remains poor.
-- For Utonia and PTv3, the six-family recovery suite has not been run in a protocol-matched way. Keep their recovery interpretation limited to oracle/actionability comparisons unless custom recovery paths are added.
+- Sonata now has protocol-matched frozen recovery coverage for class-prior, prototype/kNN, and constrained Top-K families, plus full fine-tuning as a high-budget adaptation row. Aggregate recovery is possible under full FT, but picture recovery remains poor.
+- Utonia/PTv3 recovery rows are included only when the protocol-matched frozen recovery output exists. Otherwise the row remains explicitly scoped as oracle/actionability-only.

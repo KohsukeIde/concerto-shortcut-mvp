@@ -1,0 +1,160 @@
+{
+  "args": {
+    "bias_lr": 0.05,
+    "bias_steps": 1000,
+    "bias_weight_decay": 0.001,
+    "class_names": "",
+    "class_pairs": "picture:wall,counter:cabinet,door:wall",
+    "config": "configs/scannet/semseg-pt-v3m1-0-base.py",
+    "data_root": "/groups/qgah50055/ide/3d-sans-3dscans/scannet",
+    "dry_run": false,
+    "graph_top_ks": "1,2,3,5",
+    "kmeans_iters": 10,
+    "max_geometry_per_class": 60000,
+    "max_per_class": 60000,
+    "max_proto_points_per_class": 20000,
+    "max_train_points": 600000,
+    "max_train_scenes": 256,
+    "max_val_scenes": -1,
+    "num_classes": 20,
+    "official_root": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/tmp/Pointcept-v1.5.1",
+    "oracle_top_ks": "2,3,5,10",
+    "output_dir": "/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_ptv3_scannet20_frozen_recovery",
+    "pair_probe_lr": 0.05,
+    "pair_probe_steps": 800,
+    "pair_probe_weight_decay": 0.001,
+    "prior_alphas": "0.25,0.5,0.75,1.0",
+    "prototype_counts": "1,4",
+    "prototype_lambdas": "0.05,0.1,0.2",
+    "prototype_taus": "0.05,0.1,0.2",
+    "repo_root": "/groups/qgah50055/ide/concerto-shortcut-mvp",
+    "seed": 20260421,
+    "segment_key": "segment20",
+    "summary_prefix": "/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_ptv3_scannet20_frozen_recovery",
+    "top_ks": "1,2,3,5,10,20",
+    "train_split": "train",
+    "val_split": "val",
+    "weak_classes": "picture,counter,desk,sink,cabinet,shower curtain,door",
+    "weight": "/groups/qgah50055/ide/concerto-shortcut-mvp/data/weights/ptv3/scannet-semseg-pt-v3m1-0-base/model/model_best.pth"
+  },
+  "bias_history_balanced": [
+    {
+      "acc": 0.9621750116348267,
+      "loss": 0.1843705028295517,
+      "step": 1
+    },
+    {
+      "acc": 0.9629849791526794,
+      "loss": 0.10393989831209183,
+      "step": 200
+    },
+    {
+      "acc": 0.962981641292572,
+      "loss": 0.10393734276294708,
+      "step": 400
+    },
+    {
+      "acc": 0.962981641292572,
+      "loss": 0.10393669456243515,
+      "step": 600
+    },
+    {
+      "acc": 0.962981641292572,
+      "loss": 0.10393641144037247,
+      "step": 800
+    },
+    {
+      "acc": 0.962981641292572,
+      "loss": 0.10393627732992172,
+      "step": 1000
+    }
+  ],
+  "bias_history_unweighted": [
+    {
+      "acc": 0.962173342704773,
+      "loss": 0.1420360505580902,
+      "step": 1
+    },
+    {
+      "acc": 0.9643433094024658,
+      "loss": 0.12485025823116302,
+      "step": 200
+    },
+    {
+      "acc": 0.9643433094024658,
+      "loss": 0.12484842538833618,
+      "step": 400
+    },
+    {
+      "acc": 0.9643449783325195,
+      "loss": 0.12484791874885559,
+      "step": 600
+    },
+    {
+      "acc": 0.9643449783325195,
+      "loss": 0.12484772503376007,
+      "step": 800
+    },
+    {
+      "acc": 0.9643449783325195,
+      "loss": 0.12484762817621231,
+      "step": 1000
+    }
+  ],
+  "pairs": [
+    "picture_vs_wall",
+    "counter_vs_cabinet",
+    "door_vs_wall"
+  ],
+  "train": {
+    "class_counts": {
+      "bathtub": 0,
+      "bed": 25910,
+      "bookshelf": 0,
+      "cabinet": 60000,
+      "chair": 60000,
+      "counter": 5324,
+      "curtain": 25041,
+      "desk": 11201,
+      "door": 60000,
+      "floor": 60000,
+      "otherfurniture": 56274,
+      "picture": 5014,
+      "refridgerator": 18666,
+      "shower curtain": 0,
+      "sink": 2573,
+      "sofa": 55798,
+      "table": 46930,
+      "toilet": 1358,
+      "wall": 60000,
+      "window": 45911
+    },
+    "num_points": 600000,
+    "prototype_counts": [
+      1,
+      4
+    ],
+    "seen_batches": 14
+  },
+  "val": {
+    "seen_batches": 312,
+    "target_counts": {
+      "cabinet": 999311,
+      "counter": 158167,
+      "desk": 466678,
+      "door": 1086635,
+      "picture": 149608,
+      "shower curtain": 101035,
+      "sink": 67259
+    }
+  },
+  "weak_classes": [
+    "picture",
+    "counter",
+    "desk",
+    "sink",
+    "cabinet",
+    "shower curtain",
+    "door"
+  ]
+}

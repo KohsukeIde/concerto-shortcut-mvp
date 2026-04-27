@@ -704,6 +704,112 @@ def build_recoverability_table() -> None:
     keep missing external-model suites explicit instead of inventing numbers.
     """
 
+    def _f(row: dict[str, str], key: str) -> float:
+        return float(row[key])
+
+    def _best_family_delta(rows: list[dict[str, str]], pred, key: str) -> tuple[float | str, str]:
+        base = next(r for r in rows if r["variant"] == "base")
+        candidates = [r for r in rows if pred(r["variant"])]
+        if not candidates:
+            return "", ""
+        best = max(candidates, key=lambda r: _f(r, key))
+        return _f(best, key) - _f(base, key), best["variant"]
+
+    def _external_recovery(
+        model: str,
+        base_row: str,
+        csv_path: Path,
+        source: str,
+        missing_note: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if not csv_path.exists():
+            return (
+                [
+                    {
+                        "model": model,
+                        "base_row": base_row,
+                        "suite": "frozen",
+                        "family": "frozen recovery suite",
+                        "best_delta_miou": "",
+                        "best_delta_picture": "",
+                        "source": "",
+                        "notes": missing_note,
+                    }
+                ],
+                {
+                    "model": model,
+                    "source": source,
+                    "base_miou": "",
+                    "oracle2_miou": "",
+                    "oracle5_miou": "",
+                    "base_picture": "",
+                    "oracle2_picture": "",
+                    "oracle5_picture": "",
+                    "frozen_delta_miou": "",
+                    "frozen_delta_picture": "",
+                    "adapt_delta_miou": "",
+                    "adapt_delta_picture": "",
+                    "recovery_suite": missing_note,
+                },
+            )
+        rows = read_csv(csv_path)
+        by_name = {r["variant"]: r for r in rows}
+        base = by_name["base"]
+        oracle2 = by_name["oracle_top2"]
+        oracle5 = by_name["oracle_top5"]
+        families = [
+            (
+                "class-prior correction / decoupled classifier",
+                lambda v: v.startswith("bias_") or v.startswith("prior_alpha"),
+            ),
+            (
+                "nonparametric feature readout: prototype or kNN",
+                lambda v: v.startswith("proto") or v.startswith("multiproto"),
+            ),
+            (
+                "candidate-set reranking: constrained Top-K / pair rerank",
+                lambda v: v == "pair_probe_top2",
+            ),
+        ]
+        detail_rows: list[dict[str, Any]] = []
+        miou_deltas: list[float] = [0.0]
+        picture_deltas: list[float] = [0.0]
+        for family_name, pred in families:
+            delta_miou, best_miou_variant = _best_family_delta(rows, pred, "mIoU")
+            delta_picture, best_picture_variant = _best_family_delta(rows, pred, "picture_iou")
+            if delta_miou != "":
+                miou_deltas.append(float(delta_miou))
+            if delta_picture != "":
+                picture_deltas.append(float(delta_picture))
+            detail_rows.append(
+                {
+                    "model": model,
+                    "base_row": base_row,
+                    "suite": "frozen",
+                    "family": family_name,
+                    "best_delta_miou": delta_miou,
+                    "best_delta_picture": delta_picture,
+                    "source": source,
+                    "notes": f"best mIoU variant: {best_miou_variant}; best picture variant: {best_picture_variant}",
+                }
+            )
+        spec = {
+            "model": model,
+            "source": source,
+            "base_miou": _f(base, "mIoU"),
+            "oracle2_miou": _f(oracle2, "mIoU"),
+            "oracle5_miou": _f(oracle5, "mIoU"),
+            "base_picture": _f(base, "picture_iou"),
+            "oracle2_picture": _f(oracle2, "picture_iou"),
+            "oracle5_picture": _f(oracle5, "picture_iou"),
+            "frozen_delta_miou": max(miou_deltas),
+            "frozen_delta_picture": max(picture_deltas),
+            "adapt_delta_miou": "",
+            "adapt_delta_picture": "",
+            "recovery_suite": "protocol-matched frozen recovery suite complete: class-prior, prototype/multiprototype, and candidate-set pair rerank. Adaptation suite not interpreted for this row.",
+        }
+        return detail_rows, spec
+
     fixed_suite_rows = [
         {
             "model": "Concerto decoder",
@@ -789,6 +895,16 @@ def build_recoverability_table() -> None:
             "model": "Sonata linear",
             "base_row": "released backbone + linear head",
             "suite": "frozen",
+            "family": "nonparametric feature readout: prototype or kNN",
+            "best_delta_miou": 0.0,
+            "best_delta_picture": 0.00012,
+            "source": "results_sonata_recovery_retrieval_prototype.md",
+            "notes": "protocol-matched prototype/kNN family complete; no aggregate recovery",
+        },
+        {
+            "model": "Sonata linear",
+            "base_row": "released backbone + linear head",
+            "suite": "frozen",
             "family": "candidate-set reranking: constrained Top-K",
             "best_delta_miou": 0.0,
             "best_delta_picture": 0.00064,
@@ -806,19 +922,27 @@ def build_recoverability_table() -> None:
             "notes": "full-FT improves aggregate relative to Sonata linear under the oracle evaluator, but does not improve picture",
         },
     ]
-    for model in ("Utonia released stack", "PTv3 supervised"):
-        fixed_suite_rows.append(
-            {
-                "model": model,
-                "base_row": "released stack / protocol-specific head",
-                "suite": "frozen/adaptation",
-                "family": "6-family recovery suite",
-                "best_delta_miou": "",
-                "best_delta_picture": "",
-                "source": "",
-                "notes": "not run in a protocol-matched way yet; external rows report oracle/actionability diagnostics only",
-            }
-        )
+    external_detail_rows: list[dict[str, Any]] = []
+    external_oracle_specs: list[dict[str, Any]] = []
+    for detail_rows, spec in [
+        _external_recovery(
+            "Utonia released stack",
+            "released backbone + released ScanNet linear head",
+            OUT_DIR / "results_utonia_scannet_frozen_recovery/oracle_variants.csv",
+            "results_utonia_scannet_frozen_recovery/oracle_actionability_analysis.md",
+            "protocol-matched frozen recovery suite not completed yet; external row reports oracle/actionability diagnostics only",
+        ),
+        _external_recovery(
+            "PTv3 supervised",
+            "supervised backbone + released ScanNet head",
+            OUT_DIR / "results_ptv3_scannet20_frozen_recovery.csv",
+            "results_ptv3_scannet20_frozen_recovery.md",
+            "protocol-matched frozen recovery suite not completed yet; external row reports oracle/actionability diagnostics only",
+        ),
+    ]:
+        external_detail_rows.extend(detail_rows)
+        external_oracle_specs.append(spec)
+    fixed_suite_rows.extend(external_detail_rows)
     write_csv(OUT_DIR / "results_recoverability_fixed_suite_methods.csv", fixed_suite_rows)
 
     oracle_specs = [
@@ -865,39 +989,10 @@ def build_recoverability_table() -> None:
             "frozen_delta_picture": 0.00064,
             "adapt_delta_miou": 0.0684,
             "adapt_delta_picture": -0.0074,
-            "recovery_suite": "6-family suite partially run: class-prior and constrained Top-K frozen rows complete, prototype/kNN pending, full-FT adaptation integrated. LoRA/LP-FT not run.",
-        },
-        {
-            "model": "Utonia released stack",
-            "source": "results_utonia_scannet_oracle_actionability/oracle_actionability_analysis.md",
-            "base_miou": 0.7574,
-            "oracle2_miou": 0.9367,
-            "oracle5_miou": 0.9908,
-            "base_picture": 0.2952,
-            "oracle2_picture": 0.9747,
-            "oracle5_picture": 1.0000,
-            "frozen_delta_miou": "",
-            "frozen_delta_picture": "",
-            "adapt_delta_miou": "",
-            "adapt_delta_picture": "",
-            "recovery_suite": "6-family recovery suite not run in a protocol-matched way; oracle/actionability diagnostics only",
-        },
-        {
-            "model": "PTv3 supervised",
-            "source": "results_ptv3_scannet20_oracle_actionability.md",
-            "base_miou": 0.7745,
-            "oracle2_miou": 0.9038,
-            "oracle5_miou": 0.9690,
-            "base_picture": 0.4908,
-            "oracle2_picture": 0.8785,
-            "oracle5_picture": 0.9952,
-            "frozen_delta_miou": "",
-            "frozen_delta_picture": "",
-            "adapt_delta_miou": "",
-            "adapt_delta_picture": "",
-            "recovery_suite": "6-family recovery suite not run in a protocol-matched way; oracle/actionability diagnostics only",
+            "recovery_suite": "6-family suite partially run: frozen class-prior, prototype/kNN, and constrained Top-K rows complete; full-FT adaptation integrated. LoRA/LP-FT not run.",
         },
     ]
+    oracle_specs.extend(external_oracle_specs)
 
     rows = []
     for spec in oracle_specs:
@@ -965,8 +1060,8 @@ def build_recoverability_table() -> None:
             "- Concerto has large top-2/top-5 oracle headroom, but the fixed frozen suite recovers essentially none of it.",
             "- Full fine-tuning recovers a nonzero but still small fraction of the oracle headroom; it improves aggregate accuracy but does not close the actionability gap.",
             "- LP-FT is a linear-head-family adaptation row. It should be reported as protocol-matched to the Concerto linear base, not as recovery for the decoder-probe oracle denominator.",
-            "- Sonata now has partial protocol-matched recovery coverage: class-prior and constrained Top-K frozen rows are complete, prototype/kNN is pending, and full fine-tuning provides the high-budget adaptation row. Aggregate recovery is possible under full FT, but picture recovery remains poor.",
-            "- For Utonia and PTv3, the six-family recovery suite has not been run in a protocol-matched way. Keep their recovery interpretation limited to oracle/actionability comparisons unless custom recovery paths are added.",
+            "- Sonata now has protocol-matched frozen recovery coverage for class-prior, prototype/kNN, and constrained Top-K families, plus full fine-tuning as a high-budget adaptation row. Aggregate recovery is possible under full FT, but picture recovery remains poor.",
+            "- Utonia/PTv3 recovery rows are included only when the protocol-matched frozen recovery output exists. Otherwise the row remains explicitly scoped as oracle/actionability-only.",
         ]
     )
     (OUT_DIR / "results_recoverability_rrec_max.md").write_text("\n".join(lines) + "\n")

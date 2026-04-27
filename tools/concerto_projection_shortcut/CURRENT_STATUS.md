@@ -1713,9 +1713,12 @@ Generated paper-facing framework artifacts:
   variants are appendix exploratory rows rather than part of the main
   `R_rec^max` suite.
   `results_recoverability_fixed_suite_methods.md` / `.csv` records the
-  family-level rows. The external-model fixed recovery suites are still mostly
-  pending, so the recovery-suite claim remains Concerto-centric while external
-  models support oracle/actionability comparisons.
+  family-level rows. Protocol-matched frozen recovery rows are now complete
+  for Sonata, Utonia, and PTv3. The cross-model frozen-suite claim can
+  therefore be made for the canonical frozen families (class-prior correction,
+  prototype/kNN, constrained Top-K / pair rerank). Adaptation recovery remains
+  model/path-specific and is only interpreted where the base representation,
+  readout, and training protocol are matched.
 - Follow-up protocol-matched recovery jobs submitted on `abciq`:
   - `135520.qjcm`: Concerto linear-head oracle/actionability denominator for
     the LP-FT/linear-head recovery row.
@@ -1745,7 +1748,29 @@ Generated paper-facing framework artifacts:
     (`0.7091`); best picture row gives only `+0.0006` picture and slightly
     lower mIoU. This mirrors the Concerto result: candidate-set reranking
     does not recover the oracle headroom.
-  - Sonata prototype/kNN (`135522.qjcm`) is still running.
+  - Sonata prototype/kNN (`135522.qjcm`): complete; best aggregate movement is
+    effectively flat (`+0.0000` mIoU), and best picture movement is `+0.0001`.
+  - Utonia protocol-specific frozen recovery (`135722.qjcm`): base mIoU
+    `0.7573`, oracle top-2 `0.9116`, oracle top-5 `0.9821`; best frozen
+    recovery is prototype/multiprototype with only `+0.0001` mIoU
+    (`R_rec@2 = 0.1%`). Picture moves from `0.3749` to at best `0.3770`
+    (`+0.0021`, `R_rec@2 = 0.5%`). Class-prior correction and pair reranking
+    worsen aggregate performance.
+  - PTv3 v1.5.1 protocol-specific frozen recovery (`135723.qjcm`): base mIoU
+    `0.7716`, oracle top-2 `0.8889`, oracle top-5 `0.9647`; best frozen
+    recovery is class-prior correction with `+0.0013` mIoU
+    (`R_rec@2 = 1.1%`). Picture improves by at most `+0.0081`
+    (`R_rec@2 = 2.8%`). Prototype/multiprototype is flat and pair reranking
+    worsens the row.
+  - Recovery positive control: `results_recovery_positive_controls.md` adds a
+    synthetic prior-direction sanity check over cached PTv3 probabilities. A
+    known induced logit-prior bias drops mIoU from `0.7574` to `0.4341`, and
+    applying the known reverse direction recovers most of the induced damage
+    (`0.7036` at alpha `0.5`, `0.7481` at alpha `0.75`, exact recovery at
+    alpha `1.0`). This verifies that the recovery machinery can move the
+    metric when the injected failure mode matches the recovery family. The
+    generic CE-fitted bias variants worsen and should not be described as
+    positive controls.
 - `results_binding_profile_summary.png` / `.pdf`: central binding-profile
   heatmap generated from `results_binding_profile_summary.csv`.
 - `results_binding_profile_summary_panels.png` / `.pdf`: paper-facing panel

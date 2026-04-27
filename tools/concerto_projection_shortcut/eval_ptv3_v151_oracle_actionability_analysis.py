@@ -35,6 +35,13 @@ from tools.concerto_projection_shortcut.eval_oracle_actionability_analysis impor
     update_confusion,
     write_csv,
 )
+from tools.concerto_projection_shortcut.eval_retrieval_prototype_readout import (
+    class_score_from_prototypes,
+    entropy_lambda,
+    make_multi_prototypes,
+    make_single_prototypes,
+    normalize_feature,
+)
 from tools.concerto_projection_shortcut.ptv3_v151_compat_utils import (
     build_official_model,
     class_names_from_cfg,
@@ -119,6 +126,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--oracle-top-ks", default="2,3,5,10")
     parser.add_argument("--graph-top-ks", default="1,2,3,5")
     parser.add_argument("--prior-alphas", default="0.25,0.5,0.75,1.0")
+    parser.add_argument("--prototype-counts", default="1,4")
+    parser.add_argument("--prototype-lambdas", default="0.05,0.1,0.2")
+    parser.add_argument("--prototype-taus", default="0.05,0.1,0.2")
+    parser.add_argument("--max-proto-points-per-class", type=int, default=20000)
+    parser.add_argument("--kmeans-iters", type=int, default=10)
     parser.add_argument("--max-train-scenes", type=int, default=256)
     parser.add_argument("--max-val-scenes", type=int, default=128)
     parser.add_argument("--max-train-points", type=int, default=600000)
@@ -143,6 +155,21 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def prototype_variant_names(
+    prototype_counts: list[int],
+    prototype_lambdas: list[float],
+    prototype_taus: list[float],
+) -> list[str]:
+    names: list[str] = []
+    for n_proto in prototype_counts:
+        prefix = "proto" if n_proto == 1 else f"multiproto{n_proto}"
+        for tau in prototype_taus:
+            for lam in prototype_lambdas:
+                names.append(f"{prefix}_tau{tau:g}_lam{lam:g}".replace(".", "p"))
+                names.append(f"{prefix}_adapt_tau{tau:g}_lam{lam:g}".replace(".", "p"))
+    return names
 
 
 def collect_train_cache(args: argparse.Namespace, model, point_cls, transform, num_classes: int) -> TrainCache:
@@ -221,6 +248,9 @@ def main() -> int:
     oracle_top_ks = parse_int_list(args.oracle_top_ks)
     graph_top_ks = parse_int_list(args.graph_top_ks)
     prior_alphas = parse_float_list(args.prior_alphas)
+    prototype_counts = parse_int_list(args.prototype_counts)
+    prototype_lambdas = parse_float_list(args.prototype_lambdas)
+    prototype_taus = parse_float_list(args.prototype_taus)
     num_classes = int(args.num_classes)
     transform = compose_cls(cfg.data.val.transform)
     if args.dry_run:
@@ -239,6 +269,22 @@ def main() -> int:
     train_counts = torch.bincount(train_cache.labels, minlength=num_classes).float().clamp_min(1.0)
     log_prior = (train_counts / train_counts.sum()).log()
     neighbor_mask = build_neighbor_mask(pairs, num_classes).cuda()
+    proto_sets: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+    if 1 in prototype_counts:
+        proto_sets[1] = make_single_prototypes(train_cache, num_classes)
+    for n_proto in prototype_counts:
+        if n_proto == 1:
+            continue
+        proto_sets[n_proto] = make_multi_prototypes(
+            train_cache,
+            num_classes,
+            n_proto=n_proto,
+            max_per_class=args.max_proto_points_per_class,
+            iters=args.kmeans_iters,
+            seed=args.seed,
+        )
+        print(f"[proto] n={n_proto} total_prototypes={proto_sets[n_proto][0].shape[0]}", flush=True)
+    proto_sets = {k: (v[0].cuda(), v[1].cuda()) for k, v in proto_sets.items()}
 
     variants: dict[str, torch.Tensor] = {
         "base": torch.zeros((num_classes, num_classes), dtype=torch.int64, device="cuda"),
@@ -252,6 +298,8 @@ def main() -> int:
         variants[f"oracle_graph_top{k}"] = torch.zeros((num_classes, num_classes), dtype=torch.int64, device="cuda")
     for alpha in prior_alphas:
         variants[f"prior_alpha{str(alpha).replace('.', 'p')}"] = torch.zeros((num_classes, num_classes), dtype=torch.int64, device="cuda")
+    for name in prototype_variant_names(prototype_counts, prototype_lambdas, prototype_taus):
+        variants[name] = torch.zeros((num_classes, num_classes), dtype=torch.int64, device="cuda")
 
     hit_counts = {(cls, k): 0 for cls in weak_classes for k in top_ks}
     graph_hit_counts = {(cls, k): 0 for cls in weak_classes for k in graph_top_ks}
@@ -275,6 +323,7 @@ def main() -> int:
             labels_e = labels_e[valid]
             base_pred = logits_e.argmax(dim=1)
             update_confusion(variants["base"], base_pred, labels_e, num_classes, -1)
+            base_prob = logits_e.softmax(dim=1).clamp_min(1e-12)
             update_confusion(
                 variants["pair_probe_top2"],
                 eval_pair_probe_predictions(feat_e, logits_e, pair_probes),
@@ -287,6 +336,20 @@ def main() -> int:
             for alpha in prior_alphas:
                 pred = (logits_e - alpha * log_prior.to(logits_e.device)).argmax(dim=1)
                 update_confusion(variants[f"prior_alpha{str(alpha).replace('.', 'p')}"], pred, labels_e, num_classes, -1)
+            feat_norm = normalize_feature(feat_e)
+            for n_proto in prototype_counts:
+                proto_feat, proto_labels = proto_sets[n_proto]
+                prefix = "proto" if n_proto == 1 else f"multiproto{n_proto}"
+                for tau in prototype_taus:
+                    p_proto = class_score_from_prototypes(feat_norm, proto_feat, proto_labels, num_classes, tau)
+                    for lam in prototype_lambdas:
+                        fixed = (1.0 - lam) * base_prob + lam * p_proto
+                        name = f"{prefix}_tau{tau:g}_lam{lam:g}".replace(".", "p")
+                        update_confusion(variants[name], fixed.argmax(dim=1), labels_e, num_classes, -1)
+                        lam_i = entropy_lambda(base_prob, lam)
+                        adapt = (1.0 - lam_i) * base_prob + lam_i * p_proto
+                        name = f"{prefix}_adapt_tau{tau:g}_lam{lam:g}".replace(".", "p")
+                        update_confusion(variants[name], adapt.argmax(dim=1), labels_e, num_classes, -1)
             for k in oracle_top_ks:
                 cand = candidate_mask(logits_e, k)
                 pred = torch.where(cand.gather(1, labels_e[:, None]).squeeze(1), labels_e, base_pred)
@@ -518,6 +581,7 @@ def main() -> int:
             "seen_batches": train_cache.seen_batches,
             "class_counts": train_cache.class_counts,
             "num_points": int(train_cache.labels.numel()),
+            "prototype_counts": prototype_counts,
         },
         "val": {"seen_batches": seen_val_scenes, "target_counts": {ACTIVE_CLASS_NAMES[k]: int(v) for k, v in target_counts.items()}},
         "bias_history_unweighted": bias_hist_unweighted,

@@ -458,6 +458,40 @@ investigation.
     `results_support_severity_ptv3_scannet20.md`,
     `results_support_severity_ptv3_scannet200.md`, and
     `results_support_severity_ptv3_s3dis.md`.
+  - PointGPT-S ScanObjectNN grouping / patchization ablation is complete as an
+    object-side inference-time diagnostic. The fixed checkpoint and classifier
+    head are kept unchanged while the PointGPT `Group` module is swapped among
+    `fps_knn`, `random_center_knn`, `voxel_center_knn`, `radius_fps`, and
+    `random_group`. For the official `obj_bg` row, clean accuracy is
+    `0.9002` under default `fps_knn`, `0.8950` with random centers + kNN,
+    `0.9036` with voxel-distributed centers + kNN, `0.9139` with FPS + radius
+    neighborhoods, and `0.0757` when local neighborhoods are destroyed by
+    random grouping. For the no-mask row, the corresponding clean accuracies
+    are `0.8709`, `0.8382`, `0.8657`, `0.8795`, and `0.0878`. Structured
+    keep20 remains much harsher than random keep20 for all non-destructive
+    grouping modes. The scoped reading is: local grouping is essential, but the
+    observed random-drop robustness is not explained by FPS center selection
+    alone. This does not yet support a broad architecture-level causality
+    claim, because the ablation is inference-time only and does not retrain
+    alternative grouping architectures. Results are in
+    `tools/concerto_projection_shortcut/results_pointgpt_grouping_ablation.md`.
+  - ShapeNetPart grouping / patchization ablation is also complete for the
+    official and no-mask PointGPT-S part-segmentation rows. This is the dense
+    task companion to the ScanObjectNN grouping diagnostic, again with fixed
+    checkpoint/head and inference-time grouping swaps. Official class-avg IoU:
+    `fps_knn=0.8335`, `radius_fps=0.8314`, `random_center_knn=0.8049`,
+    `voxel_center_knn=0.8257`, and `random_group=0.4261`. No-mask class-avg
+    IoU: `fps_knn=0.8287`, `radius_fps=0.8308`,
+    `random_center_knn=0.8027`, `voxel_center_knn=0.8186`, and
+    `random_group=0.4435`. Thus, across object classification and dense part
+    segmentation, changing the center-selection rule while preserving local
+    neighborhoods has modest effect, but destroying local neighborhoods causes
+    a large drop. This supports a stronger scoped claim: PointGPT-style
+    performance depends on local patch neighborhoods, while random point-drop
+    robustness is not explained by FPS center selection alone. It still does
+    not establish a fully retrained architecture-causality claim. Results are
+    in
+    `tools/concerto_projection_shortcut/results_shapenetpart_grouping_ablation.md`.
   - Utonia full severity-curve rerun (`135562.qjcm`) is complete. Clean mIoU is
     `0.7580`; random keep80/50/20/10 gives
     `0.7579 / 0.7581 / 0.7469 / 0.7230`; structured keep80/50/20/10 gives

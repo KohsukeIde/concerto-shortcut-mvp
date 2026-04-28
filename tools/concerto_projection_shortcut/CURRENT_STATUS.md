@@ -426,16 +426,31 @@ investigation.
     `3D-NEPA/results/pointgpt_object_pretext_summary.md`. This closes the
     "results exist but are not paper-readable" gap for the main causal table,
     unified binding profile, and object pretext summary.
-  - Scene support-stress severity curves are now complete for Concerto decoder,
-    Concerto linear, Sonata linear, PTv3 ScanNet20, PTv3 ScanNet200, and PTv3
-    S3DIS. The central pattern is stable: random keep20 is materially weaker
-    than structured/object-style missing support, especially under full-scene
-    scoring. Full-scene random keep20 damage / structured keep20 damage:
+  - Scene/object support-stress severity curves are now paper-facing. The
+    unified CSV/figure outputs are
+    `tools/concerto_projection_shortcut/results_support_stress_curves.csv`,
+    `tools/concerto_projection_shortcut/results_support_stress_keep20_ratios.csv`,
+    `tools/concerto_projection_shortcut/results_support_stress_curves.png`,
+    and `tools/concerto_projection_shortcut/results_support_stress_curves.md`.
+    They consolidate Concerto-D, Concerto-L, Sonata-L, Utonia, PTv3
+    ScanNet20/ScanNet200/S3DIS, PointGPT-S ScanObjectNN rows, and
+    PointGPT-S ShapeNetPart rows into the same `B_down` schema.
+  - Scene support-stress severity curves are complete for Concerto decoder,
+    Concerto linear, Sonata linear, Utonia, PTv3 ScanNet20, PTv3 ScanNet200,
+    and PTv3 S3DIS. The central pattern is stable: random keep20 is materially
+    weaker than structured/object-style missing support, especially under
+    full-scene scoring. Full-scene random keep20 damage / structured keep20 damage:
     Concerto-D `0.0342 / 0.4920`, Concerto-L `0.0180 / 0.4688`, Sonata-L
     `0.0297 / 0.4403`, PTv3 ScanNet20 `0.0750 / 0.5212`, PTv3 ScanNet200
-    `0.0829 / 0.2562`, PTv3 S3DIS `0.2661 / 0.4486`. Object-style keep20 is
-    also severe: Concerto-D `0.5973`, Concerto-L `0.5735`, Sonata-L `0.5376`,
-    PTv3 ScanNet20 `0.6325`, PTv3 ScanNet200 `0.2995`, PTv3 S3DIS `0.5902`.
+    `0.0829 / 0.2562`, PTv3 S3DIS `0.2661 / 0.4486`, and Utonia
+    `0.0111 / 0.4680`. Object-style keep20 is also severe: Concerto-D
+    `0.5973`, Concerto-L `0.5735`, Sonata-L `0.5376`, PTv3 ScanNet20
+    `0.6325`, PTv3 ScanNet200 `0.2995`, PTv3 S3DIS `0.5902`, and Utonia
+    `0.5339`. The keep20 damage ratio table makes the paper-safe conclusion
+    explicit: random point-drop robustness is a weak stress protocol, not a
+    certificate of target-relevant robustness. It does not by itself support an
+    architecture-level causality claim; grouping/patchization ablations would
+    be needed for that stronger statement.
     The outputs are
     `results_support_severity_concerto_decoder.md`,
     `results_support_severity_concerto_linear.md`,
@@ -454,6 +469,19 @@ investigation.
     object-style missing support are severe. The low feature/channel-zero
     sensitivity remains a released-stack Utonia finding rather than evidence
     that raw features are omitted.
+  - Extended visualization exports are complete for five scenes each from
+    ScanNet, ScanNet200, and S3DIS with `clean`, `random_keep0p2`,
+    `random_keep0p1`, `fixed_points_8000`, `fixed_points_4000`,
+    `structured_b64_keep0p2`, and `masked_model_keep0p2`. The exported
+    `.npz` and preview `.ply` files live under
+    `data/runs/masking_examples_extended/<dataset>/<scene>/<condition>/`.
+    Summary tables are
+    `results_masking_examples_extended_scannet.md`,
+    `results_masking_examples_extended_scannet200.md`, and
+    `results_masking_examples_extended_s3dis.md`. These examples support the
+    interpretation that random keep20 often preserves a human-readable scene
+    topology, while fixed-budget and structured/object-style variants remove
+    much more semantic support.
   - Representation-readout actionability gap tables are now generated. The
     cross-model, multi-pair table
     `tools/concerto_projection_shortcut/results_actionability_gap_cross_model_pairs.md`

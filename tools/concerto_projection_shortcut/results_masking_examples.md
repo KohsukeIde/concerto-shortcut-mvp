@@ -7,6 +7,8 @@ This document records the concrete input sparsity regimes behind the masking bat
 - ScanNet: `/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/masking_examples/scannet`
 - ScanNet200: `/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/masking_examples/scannet200`
 - S3DIS: `/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/masking_examples/s3dis`
+- Extended exports with `structured_b64_keep0p2` and `fixed_points_8000`:
+  `/groups/qgah50055/ide/concerto-shortcut-mvp/data/runs/masking_examples_extended`
 
 Each dataset is organized as:
 
@@ -19,6 +21,11 @@ The exported conditions are:
 - `random_keep0p1`
 - `fixed_points_4000`
 - `masked_model_keep0p2`
+
+The extended export additionally includes:
+
+- `fixed_points_8000`
+- `structured_b64_keep0p2`
 
 The masked-model condition drops whole object instances when available and randomly subsamples stuff/background points at the same keep ratio, so the original object silhouette is not preserved by sparse point leftovers alone.
 
@@ -66,3 +73,6 @@ The masked-model condition drops whole object instances when available and rando
 - `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples_scannet.csv`
 - `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples_scannet200.csv`
 - `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples_s3dis.csv`
+- `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples_extended_scannet.csv`
+- `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples_extended_scannet200.csv`
+- `/groups/qgah50055/ide/concerto-shortcut-mvp/tools/concerto_projection_shortcut/results_masking_examples_extended_s3dis.csv`

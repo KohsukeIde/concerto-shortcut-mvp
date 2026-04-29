@@ -458,6 +458,21 @@ investigation.
     `results_support_severity_ptv3_scannet20.md`,
     `results_support_severity_ptv3_scannet200.md`, and
     `results_support_severity_ptv3_s3dis.md`.
+  - Scene-level 2D recognizability calibration is now complete with
+    `facebook/dinov2-with-registers-giant`. DINO sees actual ScanNet RGB
+    frames; support conditions only change which 3D-retained points are allowed
+    to label/evaluate each image patch. This keeps the calibration aligned with
+    Concerto's DINO target while avoiding a separate rendered-view artifact.
+    DINO macro accuracy is `0.5364` clean, `0.5466 / 0.5359 / 0.5084 / 0.5412`
+    for random keep80/50/20/10, `0.5635 / 0.4945 / 0.4195 / 0.4665` for
+    structured keep80/50/20/10, and `0.4467` for instance_keep20. The scoped
+    reading is that random retained support, especially keep50/20, still
+    contains substantial 2D semantic evidence, while structured/instance
+    removal is a genuinely harder missing-support condition. Therefore
+    structured_keep20/10 should not be described as an obviously solvable
+    2D-evidence condition. Results and paper-facing wording are in
+    `results_scene_dino_support_recognizability.md` and
+    `results_scene_dino_paper_claim_line.md`.
   - PointGPT-S ScanObjectNN grouping / patchization ablation is complete as an
     object-side inference-time diagnostic. The fixed checkpoint and classifier
     head are kept unchanged while the PointGPT `Group` module is swapped among

@@ -1,0 +1,7 @@
+log,val_miou_last,val_macc_last,val_allacc_last,best_metric_name,best_metric_value,val_eval_count
+exp/concerto/scannet-proxy-coord-mlp-continue-lin-seed0/train.log,0.4102,0.5588,0.7420,mIoU,0.3851,11
+exp/concerto/scannet-proxy-coord-mlp-continue-lin-seed1/train.log,0.4069,0.5522,0.7414,mIoU,0.3835,11
+exp/concerto/scannet-proxy-coord-mlp-continue-lin-seed2/train.log,0.4090,0.5430,0.7420,mIoU,0.3850,11
+exp/concerto/scannet-proxy-no-enc2d-continue-lin-seed0/train.log,0.4036,0.5600,0.7371,mIoU,0.3778,11
+exp/concerto/scannet-proxy-no-enc2d-continue-lin-seed1/train.log,0.4038,0.5451,0.7321,mIoU,0.3779,11
+exp/concerto/scannet-proxy-no-enc2d-continue-lin-seed2/train.log,0.4088,0.5456,0.7374,mIoU,0.3823,11

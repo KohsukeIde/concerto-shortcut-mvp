@@ -53,18 +53,44 @@ run_one() {
     > "${log_path}" 2>&1
 }
 
-declare -a PIDS=()
-for i in "${!SEEDS[@]}"; do
-  gpu="${GPU_IDS[$((i % ${#GPU_IDS[@]}))]}"
-  run_one "${SEEDS[$i]}" "${gpu}" &
-  PIDS+=("$!")
-  sleep 5
-done
-
 status=0
-for pid in "${PIDS[@]}"; do
-  if ! wait "${pid}"; then
-    status=1
+declare -a SLOT_PID=()
+declare -a SLOT_LABEL=()
+next_idx=0
+active=0
+
+while [ "${next_idx}" -lt "${#SEEDS[@]}" ] || [ "${active}" -gt 0 ]; do
+  for slot in "${!GPU_IDS[@]}"; do
+    pid="${SLOT_PID[$slot]:-}"
+    if [ -n "${pid}" ] && ! kill -0 "${pid}" 2>/dev/null; then
+      if ! wait "${pid}"; then
+        status=1
+        echo "[warn] ${SLOT_LABEL[$slot]} exited non-zero" >> "${LOG}"
+      fi
+      SLOT_PID[$slot]=""
+      SLOT_LABEL[$slot]=""
+    fi
+
+    if [ -z "${SLOT_PID[$slot]:-}" ] && [ "${next_idx}" -lt "${#SEEDS[@]}" ]; then
+      seed="${SEEDS[$next_idx]}"
+      next_idx=$((next_idx + 1))
+      gpu="${GPU_IDS[$slot]}"
+      label="${EXP_PREFIX}${seed}"
+      run_one "${seed}" "${gpu}" &
+      SLOT_PID[$slot]="$!"
+      SLOT_LABEL[$slot]="${label}"
+      sleep 5
+    fi
+  done
+
+  active=0
+  for slot in "${!GPU_IDS[@]}"; do
+    if [ -n "${SLOT_PID[$slot]:-}" ]; then
+      active=$((active + 1))
+    fi
+  done
+  if [ "${active}" -gt 0 ]; then
+    sleep 30
   fi
 done
 
